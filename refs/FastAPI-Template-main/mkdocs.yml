@@ -1,0 +1,174 @@
+site_name: FastAPI Backend Template
+site_description: 企业级FastAPI后端模板 - 开箱即用的三层架构，内置RBAC权限管理
+site_author: EvoAI Team
+site_url: http://fastapi.infyai.cn/
+copyright: Copyright &copy; 2024 EvoAI Team
+
+# Repository
+repo_name: JiayuXu0/FastAPI-Template
+repo_url: https://github.com/JiayuXu0/FastAPI-Template
+edit_uri: edit/main/docs/
+
+# Configuration
+theme:
+  name: material
+  language: zh
+  palette:
+    # Light mode
+    - scheme: default
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/weather-night
+        name: 切换至夜间模式
+    # Dark mode
+    - scheme: slate
+      primary: blue
+      accent: blue
+      toggle:
+        icon: material/weather-sunny
+        name: 切换至日间模式
+  font:
+    text: Roboto
+    code: Roboto Mono
+  icon:
+    logo: material/api
+    repo: fontawesome/brands/github
+  features:
+    - content.code.annotate
+    - content.code.copy
+    - content.tabs.link
+    - content.tooltips
+    - header.autohide
+    - navigation.expand
+    - navigation.indexes
+    - navigation.instant
+    - navigation.prune
+    - navigation.sections
+    - navigation.tabs
+    - navigation.tabs.sticky
+    - navigation.top
+    - navigation.tracking
+    - search.highlight
+    - search.share
+    - search.suggest
+    - toc.follow
+    - toc.integrate
+
+# Plugins
+plugins:
+  - search:
+      separator: '[\s\-,:!=\[\]()"`/]+|\.(?!\d)|&[lg]t;|(?!\b)(?=[A-Z][a-z])'
+  - minify:
+      minify_html: true
+  - git-revision-date-localized:
+      type: date
+      timezone: Asia/Shanghai
+      locale: zh
+      enable_creation_date: true
+  - gen-files:
+      scripts:
+        - docs/gen_pages.py
+  - redirects:
+      redirect_maps:
+        'old-guide.md': 'guide/index.md'
+  - swagger-ui-tag
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [src]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_full_path: false
+            show_object_full_path: false
+            show_category_heading: true
+            show_if_no_docstring: true
+            members_order: source
+            group_by_category: true
+            show_signature_annotations: true
+            separate_signature: true
+            line_length: 88
+            merge_init_into_class: true
+            docstring_section_style: table
+            filters:
+              - "!^_"
+              - "!^__"
+
+# Extensions
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - toc:
+      permalink: true
+      title: 目录
+  - tables
+  - pymdownx.arithmatex:
+      generic: true
+  - pymdownx.betterem:
+      smart_enable: all
+  - pymdownx.caret
+  - pymdownx.details
+  - pymdownx.emoji:
+      emoji_generator: material.extensions.emoji.to_svg
+      emoji_index: material.extensions.emoji.twemoji
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.keys
+  - pymdownx.magiclink:
+      repo_url_shorthand: true
+      user: JiayuXu0
+      repo: FastAPI-Template
+  - pymdownx.mark
+  - pymdownx.smartsymbols
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.tasklist:
+      custom_checkbox: true
+  - pymdownx.tilde
+
+# Navigation
+nav:
+  - 首页: index.md
+  - 快速开始: guide/index.md
+  - 架构设计: architecture/index.md
+  - API 文档:
+    - api/index.md
+    - 认证授权: api/base.md
+    - 用户管理: api/users.md
+    - 角色管理: api/role.md
+    - 文件管理: api/files.md
+    - API权限: api/api.md
+  - 更新日志: changelog.md
+  - 常见问题: faq.md
+
+# Extra
+extra:
+  social:
+    - icon: fontawesome/solid/globe
+      link: http://fastapi.infyai.cn/
+    - icon: fontawesome/brands/github
+      link: https://github.com/JiayuXu0/FastAPI-Template
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/evoai_team
+
+# JavaScript (for MathJax support)
+extra_javascript:
+  - https://polyfill.io/v3/polyfill.min.js?features=es6
+  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+
+# Validation
+strict: false

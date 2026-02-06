@@ -1,0 +1,514 @@
+{
+  "schema_version": "v2",
+  "script_id": "禁区物业",
+  "episode_id": "ALL",
+  "extraction_metadata": {
+    "world_setting": "现代异能都市",
+    "method": "director_completion",
+    "total_assets": 21,
+    "completion_ratio": 0.7
+  },
+  "character_assets": [
+    {
+      "asset_id": "CHAR001",
+      "asset_type": "character",
+      "asset_call_name": "@纪不休_常态",
+      "name": "纪不休",
+      "variant": "常态",
+      "parent_id": null,
+      "narrative_role": "主角",
+      "appearance": {
+        "hair": {
+          "color": "黑色",
+          "style": "乱发",
+          "source": "script_mentioned"
+        },
+        "eyes": {
+          "color": "棕色",
+          "shape": "普通",
+          "source": "ai_completion"
+        },
+        "face": {
+          "shape": "普通",
+          "special_marks": "疲惫感",
+          "source": "ai_completion"
+        },
+        "body": {
+          "height": 175,
+          "type": "瘦削",
+          "source": "ai_completion"
+        }
+      },
+      "costume": {
+        "base": "发黄海绵宝宝T恤，大裤衩，绿色塑料拖鞋",
+        "wearing_style": "邋遢随意",
+        "accessories": "无",
+        "source": "script_mentioned"
+      },
+      "personality_visualization": {
+        "trait": "社畜废柴，表面贫穷实际拥有贫穷领域",
+        "posture_tags": [
+          "A-pose",
+          "中性姿态"
+        ],
+        "expression": "中性表情",
+        "gaze_direction": "正视"
+      },
+      "visual_prompt": "Anime Style, Character Design, 24-year-old male, Messy black hair, Tired brown eyes, Yellowed SpongeBob t-shirt, Baggy shorts, Green plastic slippers, Slouching posture, A-pose, Casual lighting, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.9,
+      "completion_notes": "基于剧本描述和角色定位补全视觉细节"
+    },
+    {
+      "asset_id": "CHAR002",
+      "asset_type": "character",
+      "asset_call_name": "@苏清_常态",
+      "name": "苏清",
+      "variant": "常态",
+      "parent_id": null,
+      "narrative_role": "女主",
+      "appearance": {
+        "hair": {
+          "color": "黑色",
+          "style": "马尾",
+          "source": "ai_completion"
+        },
+        "eyes": {
+          "color": "黑色",
+          "shape": "明亮",
+          "source": "ai_completion"
+        },
+        "body": {
+          "height": 165,
+          "type": "匀称",
+          "source": "ai_completion"
+        }
+      },
+      "costume": {
+        "base": "现代休闲装/特案局装备",
+        "wearing_style": "干练",
+        "accessories": "无",
+        "source": "ai_completion"
+      },
+      "personality_visualization": {
+        "trait": "天才管家，迪化流狂信徒",
+        "posture_tags": [
+          "A-pose",
+          "中性姿态"
+        ],
+        "expression": "中性表情",
+        "gaze_direction": "正视"
+      },
+      "visual_prompt": "Anime Style, Character Design, 22-year-old female, Black ponytail, Bright black eyes, Modern casual outfit, Capable posture, A-pose, Natural lighting, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.9,
+      "completion_notes": "基于剧本描述和角色定位补全视觉细节"
+    },
+    {
+      "asset_id": "CHAR003",
+      "asset_type": "character",
+      "asset_call_name": "@王大爷_常态",
+      "name": "王大爷",
+      "variant": "常态",
+      "parent_id": null,
+      "narrative_role": "配角",
+      "appearance": {
+        "hair": {
+          "color": "秃顶",
+          "style": "无",
+          "source": "script_mentioned"
+        },
+        "eyes": {
+          "color": "浑浊",
+          "shape": "恐怖",
+          "source": "script_mentioned"
+        },
+        "body": {
+          "height": 170,
+          "type": "腐烂",
+          "source": "script_mentioned"
+        }
+      },
+      "costume": {
+        "base": "破洞背心，油腻",
+        "wearing_style": "邋遢",
+        "accessories": "无",
+        "source": "script_mentioned"
+      },
+      "personality_visualization": {
+        "trait": "S级古神腐烂之主，被纪不休压制",
+        "posture_tags": [
+          "A-pose",
+          "中性姿态"
+        ],
+        "expression": "中性表情",
+        "gaze_direction": "正视"
+      },
+      "visual_prompt": "Anime Style, Character Design, Elderly male, Bald, Rotting flesh, Half-face pus, Torn tank top, Greasy appearance, Horror aesthetic, A-pose, Dark lighting, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.9,
+      "completion_notes": "基于剧本描述和角色定位补全视觉细节"
+    },
+    {
+      "asset_id": "CHAR004",
+      "asset_type": "character",
+      "asset_call_name": "@深渊魔眼_常态",
+      "name": "深渊魔眼",
+      "variant": "常态",
+      "parent_id": null,
+      "narrative_role": "配角",
+      "appearance": {
+        "hair": {
+          "color": "无",
+          "style": "眼球状",
+          "source": "script_mentioned"
+        },
+        "eyes": {
+          "color": "紫色",
+          "style": "巨大眼球",
+          "source": "script_mentioned"
+        },
+        "body": {
+          "height": 200,
+          "type": "球体",
+          "source": "script_mentioned"
+        }
+      },
+      "costume": {
+        "base": "无",
+        "wearing_style": "无",
+        "accessories": "无",
+        "source": "script_mentioned"
+      },
+      "personality_visualization": {
+        "trait": "S级怪物，被纪不休用拖鞋威胁",
+        "posture_tags": [
+          "A-pose",
+          "中性姿态"
+        ],
+        "expression": "中性表情",
+        "gaze_direction": "正视"
+      },
+      "visual_prompt": "Anime Style, Monster Design, Giant floating eyeball, 2-meter diameter, Purple iris, Bloodshot, S-class creature, A-pose, Eerie lighting, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.9,
+      "completion_notes": "基于剧本描述和角色定位补全视觉细节"
+    },
+    {
+      "asset_id": "CHAR005",
+      "asset_type": "character",
+      "asset_call_name": "@深红新娘_常态",
+      "name": "深红新娘",
+      "variant": "常态",
+      "parent_id": null,
+      "narrative_role": "配角",
+      "appearance": {
+        "hair": {
+          "color": "黑色",
+          "style": "长发遮脸",
+          "source": "ai_completion"
+        },
+        "eyes": {
+          "color": "无",
+          "style": "空洞",
+          "source": "script_mentioned"
+        },
+        "body": {
+          "height": 160,
+          "type": "瘦长",
+          "source": "ai_completion"
+        }
+      },
+      "costume": {
+        "base": "血红嫁衣，破烂红裙子",
+        "wearing_style": "破损",
+        "accessories": "红盖头",
+        "source": "script_mentioned"
+      },
+      "personality_visualization": {
+        "trait": "S级怪谈，灵魂尖啸",
+        "posture_tags": [
+          "A-pose",
+          "中性姿态"
+        ],
+        "expression": "中性表情",
+        "gaze_direction": "正视"
+      },
+      "visual_prompt": "Anime Style, Character Design, Female ghost, Long black hair covering face, Bloody red wedding dress, Torn fabric, No facial features visible, Horror aesthetic, A-pose, Red lighting, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.9,
+      "completion_notes": "基于剧本描述和角色定位补全视觉细节"
+    },
+    {
+      "asset_id": "CHAR006",
+      "asset_type": "character",
+      "asset_call_name": "@收款员_常态",
+      "name": "收款员",
+      "variant": "常态",
+      "parent_id": null,
+      "narrative_role": "配角",
+      "appearance": {
+        "hair": {
+          "color": "无",
+          "style": "投影",
+          "source": "script_mentioned"
+        },
+        "eyes": {
+          "color": "无",
+          "style": "条形码扫描",
+          "source": "script_mentioned"
+        },
+        "body": {
+          "height": 180,
+          "type": "人形投影",
+          "source": "script_mentioned"
+        }
+      },
+      "costume": {
+        "base": "笔挺西装",
+        "wearing_style": "正式",
+        "accessories": "无",
+        "source": "script_mentioned"
+      },
+      "personality_visualization": {
+        "trait": "宇宙银行催债专员，无感情",
+        "posture_tags": [
+          "A-pose",
+          "中性姿态"
+        ],
+        "expression": "中性表情",
+        "gaze_direction": "正视"
+      },
+      "visual_prompt": "Anime Style, Character Design, Holographic projection, Faceless with barcode scanner, Black business suit, White shirt, No facial features, Digital glitch effect, A-pose, Cold blue lighting, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.9,
+      "completion_notes": "基于剧本描述和角色定位补全视觉细节"
+    }
+  ],
+  "scene_assets": [
+    {
+      "asset_id": "SCENE001",
+      "asset_type": "scene",
+      "asset_call_name": "@外_内景",
+      "name": "外",
+      "scene_id": "EP001_SC001",
+      "variants": [
+        "内景",
+        "日"
+      ],
+      "z_depth": {
+        "foreground": "细节元素",
+        "midground": "主要场景结构",
+        "background": "环境氛围"
+      },
+      "lighting": "自然光",
+      "atmosphere": "剧本设定氛围",
+      "visual_prompt": "Anime Style, Background Design, 外, 内景, 日, Atmospheric lighting, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.88
+    },
+    {
+      "asset_id": "SCENE002",
+      "asset_type": "scene",
+      "asset_call_name": "@内_内景",
+      "name": "内",
+      "scene_id": "EP002_SC001",
+      "variants": [
+        "内景",
+        ""
+      ],
+      "z_depth": {
+        "foreground": "细节元素",
+        "midground": "主要场景结构",
+        "background": "环境氛围"
+      },
+      "lighting": "自然光",
+      "atmosphere": "剧本设定氛围",
+      "visual_prompt": "Anime Style, Background Design, 内, 内景, , Atmospheric lighting, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.88
+    },
+    {
+      "asset_id": "SCENE003",
+      "asset_type": "scene",
+      "asset_call_name": "@院子 - 结算_外景",
+      "name": "院子 - 结算",
+      "scene_id": "EP005_SC005",
+      "variants": [
+        "外景",
+        "夜"
+      ],
+      "z_depth": {
+        "foreground": "细节元素",
+        "midground": "主要场景结构",
+        "background": "环境氛围"
+      },
+      "lighting": "暗光/月光",
+      "atmosphere": "剧本设定氛围",
+      "visual_prompt": "Anime Style, Background Design, 院子 - 结算, 外景, 夜, Atmospheric lighting, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.88
+    }
+  ],
+  "prop_assets": [
+    {
+      "asset_id": "PROP001",
+      "asset_type": "prop",
+      "asset_call_name": "@绿色塑料拖鞋",
+      "name": "绿色塑料拖鞋",
+      "owner_character": "纪不休",
+      "description": "9.9元塑料拖鞋，纪不休的武器",
+      "material": "剧本设定材质",
+      "visual_prompt": "Prop Design, 绿色塑料拖鞋, 9.9元塑料拖鞋，纪不休的武器, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.85
+    },
+    {
+      "asset_id": "PROP002",
+      "asset_type": "prop",
+      "asset_call_name": "@房产证",
+      "name": "房产证",
+      "owner_character": "纪不休",
+      "description": "鲜红的房产证",
+      "material": "剧本设定材质",
+      "visual_prompt": "Prop Design, 房产证, 鲜红的房产证, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.85
+    },
+    {
+      "asset_id": "PROP003",
+      "asset_type": "prop",
+      "asset_call_name": "@全息警告框",
+      "name": "全息警告框",
+      "owner_character": "系统",
+      "description": "血红色全息界面",
+      "material": "剧本设定材质",
+      "visual_prompt": "Prop Design, 全息警告框, 血红色全息界面, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.85
+    },
+    {
+      "asset_id": "PROP004",
+      "asset_type": "prop",
+      "asset_call_name": "@一百万支票",
+      "name": "一百万支票",
+      "owner_character": "苏清",
+      "description": "皱巴巴的支票",
+      "material": "剧本设定材质",
+      "visual_prompt": "Prop Design, 一百万支票, 皱巴巴的支票, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.85
+    },
+    {
+      "asset_id": "PROP005",
+      "asset_type": "prop",
+      "asset_call_name": "@虚空之泪",
+      "name": "虚空之泪",
+      "owner_character": "深渊魔眼",
+      "description": "S级素材，璀璨蓝宝石",
+      "material": "剧本设定材质",
+      "visual_prompt": "Prop Design, 虚空之泪, S级素材，璀璨蓝宝石, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.85
+    },
+    {
+      "asset_id": "PROP006",
+      "asset_type": "prop",
+      "asset_call_name": "@死灵之书残页",
+      "name": "死灵之书残页",
+      "owner_character": "王大爷",
+      "description": "散发着黑色死气的羊皮纸",
+      "material": "剧本设定材质",
+      "visual_prompt": "Prop Design, 死灵之书残页, 散发着黑色死气的羊皮纸, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.85
+    },
+    {
+      "asset_id": "PROP007",
+      "asset_type": "prop",
+      "asset_call_name": "@驱魔蒜",
+      "name": "驱魔蒜",
+      "owner_character": "王大爷",
+      "description": "S级圣物，散发神圣白光",
+      "material": "剧本设定材质",
+      "visual_prompt": "Prop Design, 驱魔蒜, S级圣物，散发神圣白光, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.85
+    },
+    {
+      "asset_id": "PROP008",
+      "asset_type": "prop",
+      "asset_call_name": "@黑色垃圾袋",
+      "name": "黑色垃圾袋",
+      "owner_character": "苏清",
+      "description": "装着现金的垃圾袋",
+      "material": "剧本设定材质",
+      "visual_prompt": "Prop Design, 黑色垃圾袋, 装着现金的垃圾袋, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.85
+    }
+  ],
+  "vfx_assets": [
+    {
+      "asset_id": "VFX001",
+      "asset_type": "vfx",
+      "asset_call_name": "@贫穷金光",
+      "name": "贫穷金光",
+      "associated_character": null,
+      "description": "纪不休身无分文时的金色护盾",
+      "color": "金色",
+      "motion": "剧本描述运动方式",
+      "trigger_condition": "剧本触发条件",
+      "visual_prompt": "VFX Design, 贫穷金光, 金色 effect, 纪不休身无分文时的金色护盾, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.8,
+      "completion_notes": "基于剧本特效描述"
+    },
+    {
+      "asset_id": "VFX002",
+      "asset_type": "vfx",
+      "asset_call_name": "@紫色死光",
+      "name": "紫色死光",
+      "associated_character": null,
+      "description": "深渊魔眼的攻击特效",
+      "color": "紫色",
+      "motion": "剧本描述运动方式",
+      "trigger_condition": "剧本触发条件",
+      "visual_prompt": "VFX Design, 紫色死光, 紫色 effect, 深渊魔眼的攻击特效, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.8,
+      "completion_notes": "基于剧本特效描述"
+    },
+    {
+      "asset_id": "VFX003",
+      "asset_type": "vfx",
+      "asset_call_name": "@灵魂尖啸",
+      "name": "灵魂尖啸",
+      "associated_character": null,
+      "description": "深红新娘的声波攻击",
+      "color": "黑色",
+      "motion": "剧本描述运动方式",
+      "trigger_condition": "剧本触发条件",
+      "visual_prompt": "VFX Design, 灵魂尖啸, 黑色 effect, 深红新娘的声波攻击, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.8,
+      "completion_notes": "基于剧本特效描述"
+    },
+    {
+      "asset_id": "VFX004",
+      "asset_type": "vfx",
+      "asset_call_name": "@宇宙银行黑洞",
+      "name": "宇宙银行黑洞",
+      "associated_character": null,
+      "description": "收款员手掌的黑洞特效",
+      "color": "黑色",
+      "motion": "剧本描述运动方式",
+      "trigger_condition": "剧本触发条件",
+      "visual_prompt": "VFX Design, 宇宙银行黑洞, 黑色 effect, 收款员手掌的黑洞特效, 8k",
+      "source": "script_mentioned",
+      "confidence": 0.8,
+      "completion_notes": "基于剧本特效描述"
+    }
+  ],
+  "uncertainties": []
+}

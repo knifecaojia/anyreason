@@ -1,0 +1,86 @@
+services:
+  db-init:
+    profiles:
+      - app
+    image: docker-backend
+    container_name: anyreason-db-init
+    restart: "no"
+    working_dir: /app
+    env_file:
+      - ${ANYREASON_ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-anyreason}
+      ACCESS_SECRET_KEY: ${ACCESS_SECRET_KEY:-dev-access-secret-change-me}
+      RESET_PASSWORD_SECRET_KEY: ${RESET_PASSWORD_SECRET_KEY:-dev-reset-password-secret-change-me}
+      VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
+    volumes:
+      - ../fastapi_backend:/app
+      - fastapi-venv:/app/.venv
+      - ./db_init.py:/app/db_init.py:ro
+    command: ["python", "db_init.py"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  backend:
+    profiles:
+      - app
+    build:
+      context: ../fastapi_backend
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.12-bookworm}
+    container_name: anyreason-backend
+    restart: unless-stopped
+    env_file:
+      - ${ANYREASON_ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-anyreason}
+      ACCESS_SECRET_KEY: ${ACCESS_SECRET_KEY:-dev-access-secret-change-me}
+      RESET_PASSWORD_SECRET_KEY: ${RESET_PASSWORD_SECRET_KEY:-dev-reset-password-secret-change-me}
+      VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
+      OPENAPI_OUTPUT_FILE: /app/shared-data/openapi.json
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ../fastapi_backend:/app
+      - fastapi-venv:/app/.venv
+      - ../local-shared-data:/app/shared-data
+    command: ["bash", "./start.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  frontend:
+    profiles:
+      - app
+    build:
+      context: ../nextjs-frontend
+      args:
+        NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-node:20-bookworm}
+    container_name: anyreason-frontend
+    restart: unless-stopped
+    env_file:
+      - ${ANYREASON_ENV_FILE:-.env}
+    environment:
+      NODE_ENV: development
+      INTERNAL_API_BASE_URL: http://backend:8000
+      API_BASE_URL: http://backend:8000
+      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+      OPENAPI_OUTPUT_FILE: ./shared-data/openapi.json
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    volumes:
+      - ../nextjs-frontend:/app
+      - nextjs-node-modules:/app/node_modules
+      - ../local-shared-data:/app/shared-data
+    depends_on:
+      backend:
+        condition: service_started
+
+volumes:
+  nextjs-node-modules:
+  fastapi-venv:

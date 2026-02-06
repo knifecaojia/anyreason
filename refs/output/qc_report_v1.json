@@ -1,0 +1,19 @@
+{
+  "schema_version": "v2",
+  "qc_version": "v1",
+  "summary": {
+    "total_checked": {
+      "episodes": 5,
+      "scenes": 27,
+      "shots": 210,
+      "assets": 21,
+      "video_prompts": 210
+    },
+    "critical_issues": 0,
+    "auto_fixable": 0,
+    "rerun_required": 0
+  },
+  "critical_issues": [],
+  "auto_fixable": [],
+  "rerun_required": []
+}

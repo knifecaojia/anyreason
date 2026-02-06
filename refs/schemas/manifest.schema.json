@@ -1,0 +1,66 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Manifest Schema",
+  "description": "AI漫剧项目汇总清单数据结构",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "project_name": {
+      "type": "string"
+    },
+    "total_episodes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total_scenes": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total_shots": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total_assets": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "files": {
+      "type": "object",
+      "properties": {
+        "episodes": {
+          "type": "string",
+          "const": "episodes.json"
+        },
+        "scenes": {
+          "type": "string",
+          "const": "scenes.json"
+        },
+        "shots": {
+          "type": "string",
+          "const": "shots.json"
+        },
+        "assets": {
+          "type": "string",
+          "const": "assets.json"
+        },
+        "video_prompts": {
+          "type": "string",
+          "const": "video_prompts.json"
+        },
+        "qc": {
+          "type": "string",
+          "const": "qc.json"
+        }
+      },
+      "required": ["episodes", "scenes", "shots", "assets", "video_prompts", "qc"]
+    },
+    "generated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "required": ["version", "project_name", "total_episodes", "total_scenes", "total_shots", "files", "generated_at"]
+}

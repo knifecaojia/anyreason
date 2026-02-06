@@ -1,0 +1,207 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "QC Schema",
+  "description": "AI漫剧质检报告数据结构",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "check_time": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "iteration": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "total_checks": {
+      "type": "integer"
+    },
+    "passed_checks": {
+      "type": "integer"
+    },
+    "failed_checks": {
+      "type": "integer"
+    },
+    "total_issues": {
+      "type": "integer"
+    },
+    "critical_issues": {
+      "type": "integer"
+    },
+    "warnings": {
+      "type": "integer"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["passed", "failed", "needs_fix"]
+    },
+    "checks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/check"
+      }
+    },
+    "issues": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/issue"
+      }
+    },
+    "statistics": {
+      "$ref": "#/definitions/statistics"
+    },
+    "iterations": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/iteration"
+      }
+    }
+  },
+  "required": ["version", "check_time", "iteration", "status"],
+  "definitions": {
+    "check": {
+      "type": "object",
+      "properties": {
+        "check_name": {
+          "type": "string"
+        },
+        "check_type": {
+          "type": "string",
+          "enum": ["schema", "completeness", "consistency", "reference", "logic"]
+        },
+        "status": {
+          "type": "string",
+          "enum": ["passed", "failed", "warning"]
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "$ref": "#/definitions/checkIssue"
+          }
+        }
+      }
+    },
+    "checkIssue": {
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["missing", "invalid", "duplicate", "orphan", "mismatch", "error"]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low"]
+        },
+        "location": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "suggestion": {
+          "type": "string"
+        },
+        "auto_fixable": {
+          "type": "boolean"
+        }
+      }
+    },
+    "issue": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "string"
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "missing_episode",
+            "missing_scene",
+            "missing_shot",
+            "missing_asset",
+            "invalid_reference",
+            "data_mismatch",
+            "schema_error",
+            "duplicate_id",
+            "orphan_record"
+          ]
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low"]
+        },
+        "category": {
+          "type": "string",
+          "enum": ["episodes", "scenes", "shots", "assets", "prompts", "cross_reference"]
+        },
+        "location": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        },
+        "suggestion": {
+          "type": "string"
+        },
+        "auto_fixable": {
+          "type": "boolean"
+        },
+        "fixed_in_iteration": {
+          "type": "integer"
+        }
+      }
+    },
+    "statistics": {
+      "type": "object",
+      "properties": {
+        "total_episodes": {
+          "type": "integer"
+        },
+        "total_scenes": {
+          "type": "integer"
+        },
+        "total_shots": {
+          "type": "integer"
+        },
+        "total_assets": {
+          "type": "integer"
+        },
+        "total_prompts": {
+          "type": "integer"
+        },
+        "episodes_with_issues": {
+          "type": "integer"
+        },
+        "scenes_with_issues": {
+          "type": "integer"
+        },
+        "shots_with_issues": {
+          "type": "integer"
+        }
+      }
+    },
+    "iteration": {
+      "type": "object",
+      "properties": {
+        "iteration": {
+          "type": "integer"
+        },
+        "timestamp": {
+          "type": "string"
+        },
+        "issues_found": {
+          "type": "integer"
+        },
+        "issues_fixed": {
+          "type": "integer"
+        },
+        "status": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,99 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Shots Schema",
+  "description": "AI漫剧镜头数据结构",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0"
+    },
+    "total_shots": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "shots": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/shot"
+      }
+    }
+  },
+  "required": ["version", "total_shots", "shots"],
+  "definitions": {
+    "shot": {
+      "type": "object",
+      "properties": {
+        "shot_id": {
+          "type": "string",
+          "pattern": "^EP[0-9]{3}_SC[0-9]{2}_SH[0-9]{2}$"
+        },
+        "scene_id": {
+          "type": "string",
+          "pattern": "^EP[0-9]{3}_SC[0-9]{2}$"
+        },
+        "episode_id": {
+          "type": "string",
+          "pattern": "^EP[0-9]{3}$"
+        },
+        "shot_number": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "shot_type": {
+          "type": "string",
+          "enum": ["大远景", "远景", "全景", "中景", "近景", "特写", "大特写", "空镜"]
+        },
+        "camera_angle": {
+          "type": "string",
+          "enum": ["平视", "俯视", "仰视", "侧拍", "主观", "过肩"]
+        },
+        "camera_move": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "characters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "assets": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "dialogue": {
+          "type": "string"
+        },
+        "dialogue_speaker": {
+          "type": "string"
+        },
+        "sound": {
+          "type": "string"
+        },
+        "special_effect": {
+          "type": "string"
+        },
+        "duration_estimate": {
+          "type": "number",
+          "minimum": 0
+        },
+        "narrative_function": {
+          "type": "string",
+          "enum": ["建立", "发展", "高潮", "转折", "收尾"]
+        },
+        "pov_character": {
+          "type": "string"
+        },
+        "filter": {
+          "type": "string"
+        }
+      },
+      "required": ["shot_id", "scene_id", "episode_id", "shot_number", "description"]
+    }
+  }
+}

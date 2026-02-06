@@ -1,0 +1,78 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+build
+develop-eggs
+dist
+downloads
+eggs
+.eggs
+lib
+lib64
+parts
+sdist
+var
+wheels
+*.egg-info
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv
+env
+ENV
+.venv
+.env
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs
+logs
+*.log
+
+# Testing
+.coverage
+.pytest_cache
+.tox
+.nox
+
+# Documentation
+docs
+*.md
+README*
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Migrations (可选，根据需要调整)
+# migrations
+# 注释掉migrations，因为容器需要访问迁移文件
+# Static files (如果在容器中生成)
+# static
+
+# Temporary files
+tmp
+temp

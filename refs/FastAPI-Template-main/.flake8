@@ -1,0 +1,4 @@
+[flake8]
+ignore = E501, W503, E203
+# 或者使用 extend-ignore，如果你想在默认忽略列表基础上添加
+# extend-ignore = E203

@@ -1,0 +1,23 @@
+[MASTER]
+disable=
+    C0111, # missing-docstring
+    C0103, # invalid-name
+    C0303, # trailing-whitespace
+    W0311, # bad-indentation
+    W0603, # global-statement
+    R0903, # too-few-public-methods
+    R0913, # too-many-arguments
+
+init-hook='import sys; sys.path.append("src")'
+
+[FORMAT]
+max-line-length=120
+
+[BASIC]
+good-names=i,j,k,ex,Run,_,fd,fp
+
+[SIMILARITIES]
+min-similarity-lines=7
+ignore-comments=yes
+ignore-docstrings=yes
+ignore-imports=yes

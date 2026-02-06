@@ -1,0 +1,74 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Episodes Schema",
+  "description": "AI漫剧剧集数据结构",
+  "type": "object",
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0",
+      "description": "数据版本"
+    },
+    "total_episodes": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "剧集总数"
+    },
+    "episodes": {
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/episode"
+      }
+    }
+  },
+  "required": ["version", "total_episodes", "episodes"],
+  "definitions": {
+    "episode": {
+      "type": "object",
+      "properties": {
+        "episode_id": {
+          "type": "string",
+          "pattern": "^EP[0-9]{3}$",
+          "description": "剧集唯一标识符"
+        },
+        "episode_number": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "剧集序号"
+        },
+        "title": {
+          "type": "string",
+          "description": "剧集标题"
+        },
+        "summary": {
+          "type": "string",
+          "description": "剧集内容摘要"
+        },
+        "scene_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "场景数量"
+        },
+        "word_count": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "字数统计"
+        },
+        "status": {
+          "type": "string",
+          "enum": ["pending", "parsing", "parsed", "error"],
+          "description": "处理状态"
+        },
+        "start_line": {
+          "type": "integer",
+          "description": "起始行号"
+        },
+        "end_line": {
+          "type": "integer",
+          "description": "结束行号"
+        }
+      },
+      "required": ["episode_id", "episode_number", "title", "status"]
+    }
+  }
+}

@@ -1,0 +1,15 @@
+# LiteLLM Proxy Configuration
+
+model_list:
+  - model_name: deepseek
+    litellm_params:
+      model: deepseek/deepseek-chat
+      api_key: sk-38888f23e56f4966a0112a6e4904e490
+
+litellm_settings:
+  drop_params: true
+  set_verbose: true
+
+general_settings:
+  master_key: litellm123
+  store_model_in_db: true

@@ -1,0 +1,2107 @@
+{
+  "schema_version": "v2",
+  "chunk_id": "chunk_001",
+  "total_prompts": 210,
+  "prompts": [
+    {
+      "prompt_id": "PROMPT00001",
+      "shot_id": "EP001_SC001_SH001",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：大远景，固定镜头]\n[场景：外，日，背景环境]\n[核心事件：外，广角镜头：天空呈现病态的紫红色。荒野中矗立着一栋破旧的六层公寓，楼体表面像呼吸一样微微起伏，缠绕着巨]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00002",
+      "shot_id": "EP001_SC001_SH002",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，推镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，镜头拉近：大门口，纪不休穿着发黄的海绵宝宝T恤、大裤衩，脚踩一双绿色塑料拖鞋。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00003",
+      "shot_id": "EP001_SC001_SH003",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP001_SC001_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00004",
+      "shot_id": "EP001_SC001_SH004",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，日，前景遮挡]\n[核心事件：系统音，系统音倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00005",
+      "shot_id": "EP001_SC001_SH005",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：系统音，系统音台词镜头，[字幕：EP001_SC001_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00006",
+      "shot_id": "EP001_SC001_SH006",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，日，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00007",
+      "shot_id": "EP001_SC001_SH007",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP001_SC001_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00008",
+      "shot_id": "EP001_SC002_SH001",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：外，日，背景环境]\n[核心事件：外，一辆严重变形的特案局装甲车撞破迷雾，侧翻在纪不休脚边，车轮还在空转。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00009",
+      "shot_id": "EP001_SC002_SH002",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，一辆严重变形的特案局装甲车撞破迷雾，侧翻在纪不休脚边，车轮还在空转。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00010",
+      "shot_id": "EP001_SC002_SH003",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：苏清，苏清满脸是血，艰难地从车底爬出。她的一只脚踝被一根断裂的、还在抽搐的紫色触手死死缠住。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00011",
+      "shot_id": "EP001_SC002_SH004",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP001_SC002_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00012",
+      "shot_id": "EP001_SC002_SH005",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，日，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00013",
+      "shot_id": "EP001_SC002_SH006",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP001_SC002_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00014",
+      "shot_id": "EP001_SC002_SH007",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，日，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00015",
+      "shot_id": "EP001_SC002_SH008",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP001_SC002_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00016",
+      "shot_id": "EP001_SC002_SH009",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，日，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00017",
+      "shot_id": "EP001_SC002_SH010",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP001_SC002_D004]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00018",
+      "shot_id": "EP001_SC002_SH011",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：外，日，多层纵深]\n[核心事件：动作主体，一辆严重变形的特案局装甲车撞破迷雾，侧翻在纪不休脚边，车轮还在空转。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00019",
+      "shot_id": "EP001_SC002_SH012",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：外，日，多层纵深]\n[核心事件：动作主体，纪不休随意地抬脚一踢，就像踢开一只想在电线杆撒尿的野狗。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00020",
+      "shot_id": "EP001_SC003_SH001",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：外，日，背景环境]\n[核心事件：外，苏清颤抖着从怀里掏出一张皱巴巴的支票，双手递上。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00021",
+      "shot_id": "EP001_SC003_SH002",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，特写：纪不休的眼睛瞬间变成了“￥”形状。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00022",
+      "shot_id": "EP001_SC003_SH003",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：苏清，苏清颤抖着从怀里掏出一张皱巴巴的支票，双手递上。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00023",
+      "shot_id": "EP001_SC003_SH004",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP001_SC003_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00024",
+      "shot_id": "EP001_SC003_SH005",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，日，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00025",
+      "shot_id": "EP001_SC003_SH006",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP001_SC003_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00026",
+      "shot_id": "EP001_SC003_SH007",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，日，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00027",
+      "shot_id": "EP001_SC003_SH008",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP001_SC003_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00028",
+      "shot_id": "EP001_SC003_SH009",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：外，日，多层纵深]\n[核心事件：动作主体，此时，缠在苏清脚上的紫色触手突然膨胀变大，感应到了“弱者”的气息，猛地弹起，死死勒住了纪不休的脖子。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00029",
+      "shot_id": "EP001_SC004_SH001",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：外，日，背景环境]\n[核心事件：外，纪不休被勒得翻白眼，舌头伸出，双手无力地抓着那张支票。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00030",
+      "shot_id": "EP001_SC004_SH002",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，纪不休被勒得翻白眼，舌头伸出，双手无力地抓着那张支票。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00031",
+      "shot_id": "EP001_SC004_SH003",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP001_SC004_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00032",
+      "shot_id": "EP001_SC004_SH004",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：外，日，多层纵深]\n[核心事件：动作主体，纪不休被勒得翻白眼，舌头伸出，双手无力地抓着那张支票。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00033",
+      "shot_id": "EP001_SC004_SH005",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：外，日，多层纵深]\n[核心事件：动作主体，一百万的支票被撕成粉碎，纪不休用力将其抛向空中。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00034",
+      "shot_id": "EP001_SC005_SH001",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：外，日，背景环境]\n[核心事件：外，漫天碎纸片飘落。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00035",
+      "shot_id": "EP001_SC005_SH002",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，纪不休头顶UI条瞬间变绿：【当前资产：¥2.50】。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00036",
+      "shot_id": "EP001_SC005_SH003",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP001_SC005_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00037",
+      "shot_id": "EP001_SC005_SH004",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，日，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00038",
+      "shot_id": "EP001_SC005_SH005",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，日，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP001_SC005_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00039",
+      "shot_id": "EP001_SC005_SH006",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：外，日，多层纵深]\n[核心事件：动作主体，一道璀璨的金光从纪不休体内爆发，那是“一无所有”的霸气。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00040",
+      "shot_id": "EP001_SC005_SH007",
+      "episode_id": "EP001",
+      "scene_id": "EP001_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：外，日，多层纵深]\n[核心事件：动作主体，勒住他的触手瞬间被金光震成粉末。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00041",
+      "shot_id": "EP002_SC001_SH001",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，公寓大厅内阴森恐怖，墙角堆满白骨，天花板上挂着巨大的蜘蛛网。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00042",
+      "shot_id": "EP002_SC001_SH002",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休头顶悬浮着一个血红色的倒计时：【还款剩余时间：23:15:00】。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00043",
+      "shot_id": "EP002_SC001_SH003",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC001_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00044",
+      "shot_id": "EP002_SC001_SH004",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00045",
+      "shot_id": "EP002_SC001_SH005",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC001_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00046",
+      "shot_id": "EP002_SC001_SH006",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00047",
+      "shot_id": "EP002_SC001_SH007",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP002_SC001_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00048",
+      "shot_id": "EP002_SC001_SH008",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00049",
+      "shot_id": "EP002_SC001_SH009",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC001_D004]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00050",
+      "shot_id": "EP002_SC002_SH001",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，走廊尽头，原本应该是灯泡的位置，悬挂着一颗直径两米的巨大眼球——【S级·深渊魔眼】。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00051",
+      "shot_id": "EP002_SC002_SH002",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，眼球布满血丝，正死死盯着纪不休，瞳孔中正在积蓄紫色的毁灭光束。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00052",
+      "shot_id": "EP002_SC002_SH003",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP002_SC002_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00053",
+      "shot_id": "EP002_SC002_SH004",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00054",
+      "shot_id": "EP002_SC002_SH005",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC002_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00055",
+      "shot_id": "EP002_SC002_SH006",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：魔眼，魔眼倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00056",
+      "shot_id": "EP002_SC002_SH007",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：魔眼，魔眼台词镜头，[字幕：EP002_SC002_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00057",
+      "shot_id": "EP002_SC002_SH008",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00058",
+      "shot_id": "EP002_SC002_SH009",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC002_D004]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00059",
+      "shot_id": "EP002_SC003_SH001",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，魔眼吐出一颗散发着璀璨蓝光的宝石——【S级素材·虚空之泪】。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00060",
+      "shot_id": "EP002_SC003_SH002",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，宝石缓缓飘落到纪不休手中。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00061",
+      "shot_id": "EP002_SC003_SH003",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：魔眼，魔眼台词镜头，[字幕：EP002_SC003_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00062",
+      "shot_id": "EP002_SC003_SH004",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00063",
+      "shot_id": "EP002_SC003_SH005",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC003_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00064",
+      "shot_id": "EP002_SC003_SH006",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：魔眼，魔眼倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00065",
+      "shot_id": "EP002_SC003_SH007",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：魔眼，魔眼台词镜头，[字幕：EP002_SC003_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00066",
+      "shot_id": "EP002_SC003_SH008",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，魔眼瞳孔瞬间射出一道粗大的紫色死光，直冲梯子上的纪不休。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00067",
+      "shot_id": "EP002_SC004_SH001",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，千钧一发之际，纪不休没有躲避，而是将手里价值连城的宝石狠狠砸向地面。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00068",
+      "shot_id": "EP002_SC004_SH002",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，千钧一发之际，纪不休没有躲避，而是将手里价值连城的宝石狠狠砸向地面。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00069",
+      "shot_id": "EP002_SC004_SH003",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP002_SC004_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00070",
+      "shot_id": "EP002_SC004_SH004",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00071",
+      "shot_id": "EP002_SC004_SH005",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC004_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00072",
+      "shot_id": "EP002_SC004_SH006",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00073",
+      "shot_id": "EP002_SC004_SH007",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC004_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00074",
+      "shot_id": "EP002_SC004_SH008",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，千钧一发之际，纪不休没有躲避，而是将手里价值连城的宝石狠狠砸向地面。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00075",
+      "shot_id": "EP002_SC005_SH001",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，一层金色的“贫穷护盾”在纪不休面前瞬间张开。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00076",
+      "shot_id": "EP002_SC005_SH002",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，一层金色的“贫穷护盾”在纪不休面前瞬间张开。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00077",
+      "shot_id": "EP002_SC005_SH003",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC005_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00078",
+      "shot_id": "EP002_SC005_SH004",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：魔眼，魔眼倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00079",
+      "shot_id": "EP002_SC005_SH005",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：魔眼，魔眼台词镜头，[字幕：EP002_SC005_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00080",
+      "shot_id": "EP002_SC005_SH006",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，紫色死光打在护盾上，直接被折射回去，烧焦了旁边的墙壁。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00081",
+      "shot_id": "EP002_SC005_SH007",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，纪不休骑在梯子上，用拖鞋疯狂抽打魔眼。魔眼被打得流出眼泪，拼命晃动求饶。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00082",
+      "shot_id": "EP002_SC006_SH001",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，纪不休气喘吁吁地坐在梯子上，看着满地的宝石粉末，心痛得脸部抽搐。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00083",
+      "shot_id": "EP002_SC006_SH002",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休气喘吁吁地坐在梯子上，看着满地的宝石粉末，心痛得脸部抽搐。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00084",
+      "shot_id": "EP002_SC006_SH003",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP002_SC006_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00085",
+      "shot_id": "EP002_SC006_SH004",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00086",
+      "shot_id": "EP002_SC006_SH005",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC006_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00087",
+      "shot_id": "EP002_SC006_SH006",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00088",
+      "shot_id": "EP002_SC006_SH007",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP002_SC006_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00089",
+      "shot_id": "EP002_SC006_SH008",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00090",
+      "shot_id": "EP002_SC006_SH009",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC006_D004]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00091",
+      "shot_id": "EP002_SC006_SH010",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00092",
+      "shot_id": "EP002_SC006_SH011",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC006_D005]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00093",
+      "shot_id": "EP002_SC006_SH012",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00094",
+      "shot_id": "EP002_SC006_SH013",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP002_SC006_D006]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00095",
+      "shot_id": "EP002_SC006_SH014",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00096",
+      "shot_id": "EP002_SC006_SH015",
+      "episode_id": "EP002",
+      "scene_id": "EP002_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP002_SC006_D007]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00097",
+      "shot_id": "EP003_SC001_SH001",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，特写（UI界面）： 纪不休头顶悬浮着血红色的倒计时：【宇宙银行还款倒计时：00:09:59】。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00098",
+      "shot_id": "EP003_SC001_SH002",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，特写（UI界面）： 纪不休头顶悬浮着血红色的倒计时：【宇宙银行还款倒计时：00:09:59】。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00099",
+      "shot_id": "EP003_SC001_SH003",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，大门被猛地撞开。苏清披头散发，手里提着一个沉甸甸的黑色垃圾袋冲了进来。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00100",
+      "shot_id": "EP003_SC001_SH004",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP003_SC001_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00101",
+      "shot_id": "EP003_SC001_SH005",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00102",
+      "shot_id": "EP003_SC001_SH006",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP003_SC001_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00103",
+      "shot_id": "EP003_SC001_SH007",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00104",
+      "shot_id": "EP003_SC001_SH008",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP003_SC001_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00105",
+      "shot_id": "EP003_SC001_SH009",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，大门被猛地撞开。苏清披头散发，手里提着一个沉甸甸的黑色垃圾袋冲了进来。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00106",
+      "shot_id": "EP003_SC002_SH001",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，大厅中央的空间突然像玻璃一样裂开，一道漆黑的缝隙中，缓缓浮现出一个穿着笔挺西装的人形投影。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00107",
+      "shot_id": "EP003_SC002_SH002",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：收款员，收款员抬起右手，手掌瞬间变成一个旋转的小型黑洞。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00108",
+      "shot_id": "EP003_SC002_SH003",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：收款员，收款员台词镜头，[字幕：EP003_SC002_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00109",
+      "shot_id": "EP003_SC002_SH004",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00110",
+      "shot_id": "EP003_SC002_SH005",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP003_SC002_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00111",
+      "shot_id": "EP003_SC003_SH001",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，分镜（三等分画面）：]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00112",
+      "shot_id": "EP003_SC003_SH002",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休并没有躲开，而是算准了轨迹，猛地跳起！]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00113",
+      "shot_id": "EP003_SC003_SH003",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清用尽全力将钱袋抛出。黑色垃圾袋在空中划出一道抛物线，飞向收款员。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00114",
+      "shot_id": "EP003_SC003_SH004",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP003_SC003_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00115",
+      "shot_id": "EP003_SC004_SH001",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，慢镜头特效（核心爽点）：]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00116",
+      "shot_id": "EP003_SC004_SH002",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休头顶UI条瞬间变回绿色（¥2.50）。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00117",
+      "shot_id": "EP003_SC004_SH003",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP003_SC004_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00118",
+      "shot_id": "EP003_SC004_SH004",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，钱袋在被触手刺中前的一刹那，被拍进了收款员的黑洞手掌中。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00119",
+      "shot_id": "EP003_SC004_SH005",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，死光和触手狠狠撞在刚刚恢复的护盾上，被震得粉碎。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00120",
+      "shot_id": "EP003_SC005_SH001",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，空间缝隙合拢，收款员消失。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00121",
+      "shot_id": "EP003_SC005_SH002",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休呈“大”字形瘫在地上，胸口剧烈起伏，像一条缺氧的鱼。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00122",
+      "shot_id": "EP003_SC005_SH003",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP003_SC005_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00123",
+      "shot_id": "EP003_SC005_SH004",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00124",
+      "shot_id": "EP003_SC005_SH005",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP003_SC005_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00125",
+      "shot_id": "EP003_SC005_SH006",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00126",
+      "shot_id": "EP003_SC005_SH007",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP003_SC005_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00127",
+      "shot_id": "EP003_SC005_SH008",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00128",
+      "shot_id": "EP003_SC005_SH009",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP003_SC005_D004]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00129",
+      "shot_id": "EP003_SC005_SH010",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00130",
+      "shot_id": "EP003_SC005_SH011",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP003_SC005_D005]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00131",
+      "shot_id": "EP003_SC005_SH012",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00132",
+      "shot_id": "EP003_SC005_SH013",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP003_SC005_D006]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00133",
+      "shot_id": "EP003_SC005_SH014",
+      "episode_id": "EP003",
+      "scene_id": "EP003_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，画面拉远：夕阳下，公寓里传出纪不休撕心裂肺的哭声，比刚才面对死亡时还要绝望。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00134",
+      "shot_id": "EP004_SC001_SH001",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，日，背景环境]\n[核心事件：内，画面（环境）： 二楼走廊弥漫着绿色的浓雾。墙壁上挂着粘稠的黄褐色液体，时不时滴落，腐蚀地面发出“滋滋]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00135",
+      "shot_id": "EP004_SC001_SH002",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，日，中景主体]\n[核心事件：纪不休，镜头平移：旁边的纪不休穿着海绵宝宝睡衣，左手捏着鼻子，右手拿着一瓶“威猛先生”空气清新剂，对着空气狂]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00136",
+      "shot_id": "EP004_SC001_SH003",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，日，中景主体]\n[核心事件：苏清，苏清全副武装：穿着重型生化防护服，防毒面具，手里拿着盖革计数器，红灯狂闪，警报声刺耳。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00137",
+      "shot_id": "EP004_SC001_SH004",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，日，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP004_SC001_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00138",
+      "shot_id": "EP004_SC001_SH005",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，日，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00139",
+      "shot_id": "EP004_SC001_SH006",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，日，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP004_SC001_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00140",
+      "shot_id": "EP004_SC002_SH001",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，纪不休一脚踹在满是油污的防盗门上。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00141",
+      "shot_id": "EP004_SC002_SH002",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休一脚踹在满是油污的防盗门上。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00142",
+      "shot_id": "EP004_SC002_SH003",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：王大爷，王大爷台词镜头，[字幕：EP004_SC002_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00143",
+      "shot_id": "EP004_SC002_SH004",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00144",
+      "shot_id": "EP004_SC002_SH005",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP004_SC002_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00145",
+      "shot_id": "EP004_SC003_SH001",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，主观镜头（纪不休视角/贫穷滤镜）：]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00146",
+      "shot_id": "EP004_SC003_SH002",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，主观镜头（纪不休视角/贫穷滤镜）：]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00147",
+      "shot_id": "EP004_SC003_SH003",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP004_SC003_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00148",
+      "shot_id": "EP004_SC003_SH004",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：王大爷，王大爷倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00149",
+      "shot_id": "EP004_SC003_SH005",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：王大爷，王大爷台词镜头，[字幕：EP004_SC003_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00150",
+      "shot_id": "EP004_SC003_SH006",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00151",
+      "shot_id": "EP004_SC003_SH007",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP004_SC003_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00152",
+      "shot_id": "EP004_SC003_SH008",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，纪不休一脚踢飞一个易拉罐（苏清眼里是踢飞了一颗骷髅头）。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00153",
+      "shot_id": "EP004_SC004_SH001",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，王大爷哆哆嗦嗦地从身后的烂肉堆里掏出一张散发着黑色死气、写满血咒的羊皮纸——【死灵之书残页（S级神器]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00154",
+      "shot_id": "EP004_SC004_SH002",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，特效： 羊皮纸在纪不休眼里就是一张擦过屁股的脏报纸。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00155",
+      "shot_id": "EP004_SC004_SH003",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，特效： 羊皮纸在苏清眼里散发着耀眼的橙色传说光芒。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00156",
+      "shot_id": "EP004_SC004_SH004",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：王大爷，王大爷台词镜头，[字幕：EP004_SC004_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00157",
+      "shot_id": "EP004_SC004_SH005",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00158",
+      "shot_id": "EP004_SC004_SH006",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP004_SC004_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00159",
+      "shot_id": "EP004_SC005_SH001",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，画面： 恐怖的S级古神像个受气包一样，一边哭一边大口吞咽着绿色的粘液。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00160",
+      "shot_id": "EP004_SC005_SH002",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP004_SC005_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00161",
+      "shot_id": "EP004_SC005_SH003",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00162",
+      "shot_id": "EP004_SC005_SH004",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP004_SC005_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00163",
+      "shot_id": "EP004_SC005_SH005",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：王大爷，王大爷倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00164",
+      "shot_id": "EP004_SC005_SH006",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：王大爷，王大爷台词镜头，[字幕：EP004_SC005_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00165",
+      "shot_id": "EP004_SC005_SH007",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00166",
+      "shot_id": "EP004_SC005_SH008",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP004_SC005_D004]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00167",
+      "shot_id": "EP004_SC005_SH009",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：王大爷，王大爷倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00168",
+      "shot_id": "EP004_SC005_SH010",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：王大爷，王大爷台词镜头，[字幕：EP004_SC005_D005]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00169",
+      "shot_id": "EP004_SC006_SH001",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，两人走出202室。纪不休还在骂骂咧咧地用湿巾擦手。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00170",
+      "shot_id": "EP004_SC006_SH002",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，两人走出202室。纪不休还在骂骂咧咧地用湿巾擦手。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00171",
+      "shot_id": "EP004_SC006_SH003",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，镜头下移：苏清手里偷偷攥着刚才被纪不休拍飞的那张【死灵书残页】。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00172",
+      "shot_id": "EP004_SC006_SH004",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP004_SC006_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00173",
+      "shot_id": "EP004_SC006_SH005",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00174",
+      "shot_id": "EP004_SC006_SH006",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP004_SC006_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00175",
+      "shot_id": "EP004_SC006_SH007",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00176",
+      "shot_id": "EP004_SC006_SH008",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP004_SC006_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00177",
+      "shot_id": "EP004_SC006_SH009",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00178",
+      "shot_id": "EP004_SC006_SH010",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP004_SC006_D004]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00179",
+      "shot_id": "EP004_SC006_SH011",
+      "episode_id": "EP004",
+      "scene_id": "EP004_SC006",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：内，，多层纵深]\n[核心事件：动作主体，镜头下移：苏清手里偷偷攥着刚才被纪不休拍飞的那张【死灵书残页】。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00180",
+      "shot_id": "EP005_SC001_SH001",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，夜，背景环境]\n[核心事件：内，特写（动态）： 桌上的水杯，水面剧烈震颤，激起一圈圈波纹。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00181",
+      "shot_id": "EP005_SC001_SH002",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，夜，中景主体]\n[核心事件：纪不休，纪不休穿着海绵宝宝睡衣，戴着工业级降噪耳罩，整个人裹在被子里像条蛆一样痛苦蠕动。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00182",
+      "shot_id": "EP005_SC001_SH003",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC001",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，夜，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP005_SC001_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00183",
+      "shot_id": "EP005_SC002_SH001",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，夜，背景环境]\n[核心事件：内，全景（苏清视角/恐怖滤镜）： 走廊弥漫着血色浓雾。半空中悬浮着一个身穿血红嫁衣、没有五官的女鬼——S]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00184",
+      "shot_id": "EP005_SC002_SH002",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，夜，中景主体]\n[核心事件：纪不休，切换镜头（纪不休视角/贫穷滤镜）：]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00185",
+      "shot_id": "EP005_SC002_SH003",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，夜，中景主体]\n[核心事件：苏清，全景（苏清视角/恐怖滤镜）： 走廊弥漫着血色浓雾。半空中悬浮着一个身穿血红嫁衣、没有五官的女鬼——S]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00186",
+      "shot_id": "EP005_SC002_SH004",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，夜，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP005_SC002_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00187",
+      "shot_id": "EP005_SC002_SH005",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，夜，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00188",
+      "shot_id": "EP005_SC002_SH006",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，夜，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP005_SC002_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00189",
+      "shot_id": "EP005_SC002_SH007",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，夜，前景遮挡]\n[核心事件：深红新娘，深红新娘倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00190",
+      "shot_id": "EP005_SC002_SH008",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC002",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，夜，中景主体]\n[核心事件：深红新娘，深红新娘台词镜头，[字幕：EP005_SC002_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00191",
+      "shot_id": "EP005_SC003_SH001",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：内，，背景环境]\n[核心事件：内，UI特效： 纪不休头顶UI瞬间闪烁黄灯：【警告：潜在高额收入风险！预计收益：10,000,000！】]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00192",
+      "shot_id": "EP005_SC003_SH002",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，UI特效： 纪不休头顶UI瞬间闪烁黄灯：【警告：潜在高额收入风险！预计收益：10,000,000！】]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00193",
+      "shot_id": "EP005_SC003_SH003",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP005_SC003_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00194",
+      "shot_id": "EP005_SC003_SH004",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00195",
+      "shot_id": "EP005_SC003_SH005",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP005_SC003_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00196",
+      "shot_id": "EP005_SC003_SH006",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00197",
+      "shot_id": "EP005_SC003_SH007",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP005_SC003_D003]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00198",
+      "shot_id": "EP005_SC003_SH008",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：内，，前景遮挡]\n[核心事件：纪不休，纪不休倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00199",
+      "shot_id": "EP005_SC003_SH009",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC003",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：内，，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP005_SC003_D004]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00200",
+      "shot_id": "EP005_SC004_SH001",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：外，夜，背景环境]\n[核心事件：外，院子里聚集了密密麻麻的低阶游魂、骷髅和史莱姆。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00201",
+      "shot_id": "EP005_SC004_SH002",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，夜，中景主体]\n[核心事件：纪不休，画面重点： 纪不休站在台边，手里拿着一叠冥币（苏清刚换来的）和一筐鸡蛋，像发传单一样疯狂塞给怪物们。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00202",
+      "shot_id": "EP005_SC004_SH003",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，夜，中景主体]\n[核心事件：苏清，画面重点： 纪不休站在台边，手里拿着一叠冥币（苏清刚换来的）和一筐鸡蛋，像发传单一样疯狂塞给怪物们。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00203",
+      "shot_id": "EP005_SC004_SH004",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，夜，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP005_SC004_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00204",
+      "shot_id": "EP005_SC004_SH005",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，固定镜头]\n[场景：外，夜，前景遮挡]\n[核心事件：苏清，苏清倾听反应]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00205",
+      "shot_id": "EP005_SC004_SH006",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：外，夜，中景主体]\n[核心事件：苏清，苏清台词镜头，[字幕：EP005_SC004_D002]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00206",
+      "shot_id": "EP005_SC004_SH007",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：外，夜，多层纵深]\n[核心事件：动作主体，台上：深红新娘撕心裂肺地尖叫（唱歌）。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00207",
+      "shot_id": "EP005_SC004_SH008",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC004",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：特写，跟镜头]\n[场景：外，夜，多层纵深]\n[核心事件：动作主体，台下：怪物们痛苦万分，有的口吐白沫，有的把头撞墙，但没有一个肯走。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00208",
+      "shot_id": "EP005_SC005_SH001",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：全景，固定镜头]\n[场景：院子 - 结算，夜，背景环境]\n[核心事件：院子 - 结算，演唱会结束，人群散去。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00209",
+      "shot_id": "EP005_SC005_SH002",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：院子 - 结算，夜，中景主体]\n[核心事件：纪不休，纪不休看着空空如也的双手，又看了看头顶。]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    },
+    {
+      "prompt_id": "PROMPT00210",
+      "shot_id": "EP005_SC005_SH003",
+      "episode_id": "EP005",
+      "scene_id": "EP005_SC005",
+      "prompt": "[动漫，日漫风格，2D，杰作，最高画质]\n[镜头：近景，固定镜头]\n[场景：院子 - 结算，夜，中景主体]\n[核心事件：纪不休，纪不休台词镜头，[字幕：EP005_SC005_D001]]\n[其他细节：竖屏构图，前景遮挡，微表情特写]",
+      "negative_prompt": "3D, 写实, 真人, 低质量, 模糊",
+      "style": "anime",
+      "aspect_ratio": "9:16"
+    }
+  ]
+}
