@@ -42,6 +42,7 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
     avatar_data = Column(LargeBinary, nullable=True)
 
     items = relationship("Item", back_populates="user", cascade="all, delete-orphan")
+    scripts = relationship("Script", back_populates="owner", cascade="all, delete-orphan")
     projects = relationship(
         "Project",
         back_populates="owner",
@@ -60,6 +61,38 @@ class Item(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=False)
 
     user = relationship("User", back_populates="items")
+
+
+class Script(Base):
+    __tablename__ = "scripts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    owner_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+
+    minio_bucket = Column(String(255), nullable=False)
+    minio_key = Column(Text, nullable=False)
+    original_filename = Column(String(255), nullable=False)
+    content_type = Column(String(128), nullable=True)
+    size_bytes = Column(Integer, nullable=False, server_default=text("0"))
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    is_deleted = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
+
+    owner = relationship("User", back_populates="scripts")
+
+    __table_args__ = (
+        Index("idx_scripts_owner", "owner_id"),
+        Index("idx_scripts_owner_created_at", "owner_id", "created_at"),
+        Index("idx_scripts_owner_is_deleted_created_at", "owner_id", "is_deleted", "created_at"),
+    )
 
 
 class Project(Base):
@@ -119,6 +152,7 @@ class Asset(Base):
         passive_deletes=True,
     )
     shot_relations = relationship("ShotAssetRelation", back_populates="asset")
+    bindings = relationship("AssetBinding", back_populates="asset")
     tag_relations = relationship(
         "AssetTagRelation",
         back_populates="asset",
@@ -212,6 +246,7 @@ class Episode(Base):
 
     title = Column(String(255), nullable=True)
     summary = Column(Text, nullable=True)
+    script_full_text = Column(Text, nullable=True)
 
     word_count = Column(Integer, nullable=False, server_default=text("0"))
     start_line = Column(Integer, nullable=True)
@@ -228,6 +263,7 @@ class Episode(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    asset_bindings = relationship("AssetBinding", back_populates="episode")
 
     __table_args__ = (
         UniqueConstraint("project_id", "episode_code", name="uq_episodes_project_episode_code"),
@@ -266,6 +302,7 @@ class Scene(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    asset_bindings = relationship("AssetBinding", back_populates="scene")
 
     __table_args__ = (
         UniqueConstraint("episode_id", "scene_code", name="uq_scenes_episode_scene_code"),
@@ -306,6 +343,7 @@ class Shot(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    asset_bindings = relationship("AssetBinding", back_populates="shot")
     video_prompts = relationship(
         "VideoPrompt",
         back_populates="shot",
@@ -390,6 +428,48 @@ class ShotAssetRelation(Base):
         UniqueConstraint("shot_id", "asset_entity_id", name="uq_shot_asset_relations_shot_asset"),
         Index("idx_shot_asset_relations_asset", "asset_entity_id"),
         Index("idx_shot_asset_relations_shot", "shot_id"),
+    )
+
+
+class AssetBinding(Base):
+    __tablename__ = "asset_bindings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    asset_entity_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("assets.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    asset_variant_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("asset_variants.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    episode_id = Column(UUID(as_uuid=True), ForeignKey("episodes.id", ondelete="CASCADE"), nullable=True)
+    scene_id = Column(UUID(as_uuid=True), ForeignKey("scenes.id", ondelete="CASCADE"), nullable=True)
+    shot_id = Column(UUID(as_uuid=True), ForeignKey("shots.id", ondelete="CASCADE"), nullable=True)
+
+    state = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    asset = relationship("Asset", back_populates="bindings")
+    asset_variant = relationship("AssetVariant")
+    episode = relationship("Episode", back_populates="asset_bindings")
+    scene = relationship("Scene", back_populates="asset_bindings")
+    shot = relationship("Shot", back_populates="asset_bindings")
+
+    __table_args__ = (
+        CheckConstraint(
+            "((episode_id IS NOT NULL)::int + (scene_id IS NOT NULL)::int + (shot_id IS NOT NULL)::int) = 1",
+            name="ck_asset_bindings_single_target",
+        ),
+        UniqueConstraint("shot_id", "asset_entity_id", name="uq_asset_bindings_shot_asset"),
+        UniqueConstraint("scene_id", "asset_entity_id", name="uq_asset_bindings_scene_asset"),
+        UniqueConstraint("episode_id", "asset_entity_id", name="uq_asset_bindings_episode_asset"),
+        Index("idx_asset_bindings_asset", "asset_entity_id"),
+        Index("idx_asset_bindings_episode", "episode_id"),
+        Index("idx_asset_bindings_scene", "scene_id"),
+        Index("idx_asset_bindings_shot", "shot_id"),
     )
 
 

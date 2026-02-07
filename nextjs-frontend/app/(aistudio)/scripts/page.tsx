@@ -13,6 +13,7 @@ import {
   ChevronDown,
   ChevronRight,
   Clock,
+  Download,
   Edit3,
   Eye,
   FileJson,
@@ -85,7 +86,9 @@ interface Episode {
   number: number;
   title: string;
   logline: string;
+  scriptFullText?: string;
   scenes: Scene[];
+  assets?: AssetReference[];
 }
 
 interface ScriptSeries {
@@ -97,7 +100,10 @@ interface ScriptSeries {
   author: string;
   rawContent: string;
   episodes: Episode[];
+  originalFilename?: string;
 }
+
+const useMockApi = process.env.NEXT_PUBLIC_USE_MOCK_API !== "false" && process.env.USE_MOCK_API !== "false";
 
 const RAW_SCRIPT_CONTENT = `## EPISODE 1: 陨落的天才
 
@@ -213,7 +219,7 @@ export default function Page() {
     router.push(qs ? `${pathname}?${qs}` : pathname);
   };
 
-  const [seriesList, setSeriesList] = useState<ScriptSeries[]>(MOCK_SERIES);
+  const [seriesList, setSeriesList] = useState<ScriptSeries[]>(useMockApi ? MOCK_SERIES : []);
   const [activeSeries, setActiveSeries] = useState<ScriptSeries | null>(null);
   const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
   const [activeSceneId, setActiveSceneId] = useState<string | null>(null);
@@ -250,9 +256,40 @@ export default function Page() {
   const [seriesFormData, setSeriesFormData] = useState({ title: "", logline: "", author: "Current User" });
   const [episodeFormData, setEpisodeFormData] = useState({ title: "", logline: "", number: 1 });
   const [sceneFormData, setSceneFormData] = useState({ intExt: "EXT.", location: "", time: "DAY", content: "" });
+  const [uploadedScriptFile, setUploadedScriptFile] = useState<File | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultImportInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (useMockApi) return;
+    let cancelled = false;
+    (async () => {
+      const res = await fetch("/api/scripts?page=1&size=100", { cache: "no-store" });
+      if (!res.ok) return;
+      const json = (await res.json()) as {
+        data?: { items?: Array<{ id: string; title: string; description?: string | null; created_at: string; original_filename: string }> };
+      };
+      const items = json.data?.items || [];
+      if (cancelled) return;
+      setSeriesList(
+        items.map((s) => ({
+          id: s.id,
+          title: s.title,
+          logline: s.description ?? "",
+          status: "Draft",
+          updatedAt: new Date(s.created_at).toLocaleString(),
+          author: "Current User",
+          rawContent: "",
+          episodes: [],
+          originalFilename: s.original_filename,
+        })),
+      );
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (!seriesId) {
@@ -272,6 +309,142 @@ export default function Page() {
       }
     }
   }, [seriesId, seriesList]);
+
+  const mapApiEpisodes = (
+    apiEpisodes: Array<{
+      id: string;
+      episode_number: number;
+      title?: string | null;
+      script_full_text?: string | null;
+      scenes?: Array<{ id: string; scene_number: number; title?: string | null; content?: string | null; location?: string | null; time_of_day?: string | null }>;
+      assets?: Array<{ id: string; asset_id: string; name: string; type: string }>;
+    }>,
+  ): Episode[] => {
+    return apiEpisodes.map((ep) => {
+      const assets: AssetReference[] = (ep.assets || []).map((a) => ({
+        id: a.id,
+        type: a.type === "character" ? "CHARACTER" : a.type === "scene" ? "SCENE" : "PROP",
+        name: a.name,
+      }));
+      const scenes: Scene[] = (ep.scenes || []).map((sc) => ({
+        id: sc.id,
+        number: sc.scene_number,
+        title: sc.title || `SCENE ${sc.scene_number}`,
+        location: sc.location || "",
+        time: sc.time_of_day || "",
+        content: sc.content || "",
+        shots: [],
+        status: "BREAKDOWN",
+        assets: [],
+      }));
+      return {
+        id: ep.id,
+        number: ep.episode_number,
+        title: ep.title || `EP${String(ep.episode_number).padStart(2, "0")}`,
+        logline: "",
+        scriptFullText: ep.script_full_text || "",
+        scenes,
+        assets,
+      };
+    });
+  };
+
+  const refreshHierarchy = async (scriptIdValue: string) => {
+    const res = await fetch(`/api/scripts/${encodeURIComponent(scriptIdValue)}/hierarchy`, { cache: "no-store" });
+    if (!res.ok) throw new Error(await res.text());
+    const json = (await res.json()) as any;
+    const apiEpisodes = (json?.data?.episodes || []) as Array<{
+      id: string;
+      episode_number: number;
+      title?: string | null;
+      script_full_text?: string | null;
+      scenes?: Array<{ id: string; scene_number: number; title?: string | null; content?: string | null; location?: string | null; time_of_day?: string | null }>;
+      assets?: Array<{ id: string; asset_id: string; name: string; type: string }>;
+    }>;
+    const mappedEpisodes = mapApiEpisodes(apiEpisodes);
+    if (!activeSeries) return;
+    updateActiveSeries({ ...activeSeries, episodes: mappedEpisodes });
+    if (!activeEpisodeId && mappedEpisodes[0]) setActiveEpisodeId(mappedEpisodes[0].id);
+  };
+
+  useEffect(() => {
+    if (useMockApi) return;
+    if (mode !== "studio") return;
+    if (!activeSeries) return;
+    if (activeSeries.episodes.length > 0) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await refreshHierarchy(activeSeries.id);
+      } catch {
+        return;
+      }
+      if (cancelled) return;
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, activeSeries?.id]);
+
+  useEffect(() => {
+    if (useMockApi) return;
+    if (!seriesId) return;
+    let cancelled = false;
+    (async () => {
+      const [scriptRes, hierarchyRes] = await Promise.all([
+        fetch(`/api/scripts/${encodeURIComponent(seriesId)}/download`, { cache: "no-store" }),
+        fetch(`/api/scripts/${encodeURIComponent(seriesId)}/hierarchy`, { cache: "no-store" }),
+      ]);
+
+      const scriptText = scriptRes.ok ? await scriptRes.text() : "";
+      const hierarchyJson = hierarchyRes.ok ? await hierarchyRes.json() : null;
+      const apiEpisodes = (hierarchyJson?.data?.episodes || []) as Array<{
+        id: string;
+        episode_number: number;
+        title?: string | null;
+        script_full_text?: string | null;
+        scenes?: Array<{ id: string; scene_number: number; title?: string | null; content?: string | null }>;
+        assets?: Array<{ id: string; asset_id: string; name: string; type: string }>;
+      }>;
+
+      const mappedEpisodes: Episode[] = apiEpisodes.map((ep) => {
+        const assets: AssetReference[] = (ep.assets || []).map((a) => ({
+          id: a.id,
+          type: a.type === "character" ? "CHARACTER" : a.type === "scene" ? "SCENE" : "PROP",
+          name: a.name,
+        }));
+        const scenes: Scene[] = (ep.scenes || []).map((sc) => ({
+          id: sc.id,
+          number: sc.scene_number,
+          title: sc.title || `SCENE ${sc.scene_number}`,
+          location: "",
+          time: "",
+          content: sc.content || "",
+          shots: [],
+          status: "BREAKDOWN",
+          assets: [],
+        }));
+        return {
+          id: ep.id,
+          number: ep.episode_number,
+          title: ep.title || `EP${String(ep.episode_number).padStart(2, "0")}`,
+          logline: "",
+          scriptFullText: ep.script_full_text || "",
+          scenes,
+          assets,
+        };
+      });
+
+      if (cancelled) return;
+      setSeriesList((prev) =>
+        prev.map((s) => (s.id === seriesId ? { ...s, rawContent: scriptText, episodes: mappedEpisodes } : s)),
+      );
+      setScriptContent(scriptText);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [seriesId]);
 
   const activeEpisode = useMemo(
     () => activeSeries?.episodes.find((e) => e.id === activeEpisodeId),
@@ -329,6 +502,7 @@ export default function Page() {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setUploadedScriptFile(file);
     if (file.name.endsWith(".txt") || file.name.endsWith(".md")) {
       const reader = new FileReader();
       reader.onload = (event) => {
@@ -407,24 +581,57 @@ export default function Page() {
       setSeriesModal({ isOpen: true, mode: "create" });
       setSeriesFormData({ title: "", logline: "", author: "Current User" });
       setScriptContent("");
+      setUploadedScriptFile(null);
     }
   };
 
-  const handleSaveSeries = () => {
+  const handleSaveSeries = async () => {
     if (!seriesFormData.title) return;
     if (seriesModal.mode === "create") {
-      const newSeries: ScriptSeries = {
-        id: `series-${Date.now()}`,
-        title: seriesFormData.title,
-        logline: seriesFormData.logline,
-        status: "Draft",
-        updatedAt: new Date().toLocaleString(),
-        author: seriesFormData.author,
-        rawContent: scriptContent || "",
-        episodes: [],
-      };
-      setSeriesList((prev) => [newSeries, ...prev]);
-      setQuery({ mode: "studio", seriesId: newSeries.id });
+      if (useMockApi) {
+        const newSeries: ScriptSeries = {
+          id: `series-${Date.now()}`,
+          title: seriesFormData.title,
+          logline: seriesFormData.logline,
+          status: "Draft",
+          updatedAt: new Date().toLocaleString(),
+          author: seriesFormData.author,
+          rawContent: scriptContent || "",
+          episodes: [],
+          originalFilename: uploadedScriptFile?.name || `${seriesFormData.title}.txt`,
+        };
+        setSeriesList((prev) => [newSeries, ...prev]);
+        setQuery({ mode: "studio", seriesId: newSeries.id });
+      } else {
+        const form = new FormData();
+        form.set("title", seriesFormData.title);
+        if (seriesFormData.logline) form.set("description", seriesFormData.logline);
+        if (uploadedScriptFile) form.set("file", uploadedScriptFile);
+        else form.set("text", scriptContent || "");
+        const res = await fetch("/api/scripts", { method: "POST", body: form, cache: "no-store" });
+        if (!res.ok) {
+          alert(await res.text());
+          return;
+        }
+        const json = (await res.json()) as {
+          data?: { id: string; title: string; description?: string | null; created_at: string; original_filename: string };
+        };
+        const s = json.data;
+        if (!s) return;
+        const newSeries: ScriptSeries = {
+          id: s.id,
+          title: s.title,
+          logline: s.description ?? "",
+          status: "Draft",
+          updatedAt: new Date(s.created_at).toLocaleString(),
+          author: seriesFormData.author,
+          rawContent: scriptContent || "",
+          episodes: [],
+          originalFilename: s.original_filename,
+        };
+        setSeriesList((prev) => [newSeries, ...prev]);
+        setQuery({ mode: "studio", seriesId: newSeries.id });
+      }
     } else if (seriesModal.mode === "edit" && seriesModal.data && activeSeries) {
       const updatedSeries = {
         ...activeSeries,
@@ -436,6 +643,25 @@ export default function Page() {
       updateActiveSeries(updatedSeries);
     }
     setSeriesModal((prev) => ({ ...prev, isOpen: false }));
+  };
+
+  const handleDeleteSeries = async (series: ScriptSeries) => {
+    const ok = window.confirm(`确认删除「${series.title}」？（可在后台恢复前暂不支持恢复）`);
+    if (!ok) return;
+
+    if (useMockApi) {
+      setSeriesList((prev) => prev.filter((s) => s.id !== series.id));
+      if (seriesId === series.id) setQuery({ mode: "list", seriesId: null });
+      return;
+    }
+
+    const res = await fetch(`/api/scripts/${series.id}`, { method: "DELETE", cache: "no-store" });
+    if (!res.ok) {
+      alert(await res.text());
+      return;
+    }
+    setSeriesList((prev) => prev.filter((s) => s.id !== series.id));
+    if (seriesId === series.id) setQuery({ mode: "list", seriesId: null });
   };
 
   const openEpisodeModal = (episode?: Episode) => {
@@ -482,17 +708,44 @@ export default function Page() {
   const openSceneModal = (episodeId: string, scene?: Scene) => {
     if (scene) {
       setSceneModal({ isOpen: true, mode: "edit", episodeId, data: scene });
-      setSceneFormData({ intExt: "EXT.", location: scene.title, time: scene.time || "DAY", content: scene.content });
+      setSceneFormData({ intExt: "EXT.", location: scene.location || scene.title, time: scene.time || "DAY", content: scene.content });
     } else {
       setSceneModal({ isOpen: true, mode: "create", episodeId });
       setSceneFormData({ intExt: "EXT.", location: "", time: "DAY", content: "" });
     }
   };
 
-  const handleSaveScene = () => {
+  const handleSaveScene = async () => {
     if (!activeSeries || !sceneModal.episodeId) return;
     const fullTitle = `${sceneFormData.intExt} ${sceneFormData.location} - ${sceneFormData.time}`;
     const targetEpId = sceneModal.episodeId;
+
+    if (!useMockApi) {
+      try {
+        if (sceneModal.mode === "create") {
+          const res = await fetch(`/api/episodes/${encodeURIComponent(targetEpId)}/scenes`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ title: fullTitle, content: sceneFormData.content, location: sceneFormData.location, time_of_day: sceneFormData.time }),
+            cache: "no-store",
+          });
+          if (!res.ok) throw new Error(await res.text());
+        } else if (sceneModal.mode === "edit" && sceneModal.data) {
+          const res = await fetch(`/api/scenes/${encodeURIComponent(sceneModal.data.id!)}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ title: fullTitle, content: sceneFormData.content, location: sceneFormData.location, time_of_day: sceneFormData.time }),
+            cache: "no-store",
+          });
+          if (!res.ok) throw new Error(await res.text());
+        }
+        await refreshHierarchy(activeSeries.id);
+        setSceneModal((prev) => ({ ...prev, isOpen: false }));
+      } catch (err) {
+        alert(err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
 
     const updatedSeries = {
       ...activeSeries,
@@ -535,9 +788,23 @@ export default function Page() {
     setSceneModal((prev) => ({ ...prev, isOpen: false }));
   };
 
-  const handleDeleteScene = (epId: string, scId: string, e: React.MouseEvent) => {
+  const handleDeleteScene = async (epId: string, scId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!activeSeries) return;
+    if (!confirm("确定删除此场次吗？")) return;
+
+    if (!useMockApi) {
+      try {
+        const res = await fetch(`/api/scenes/${encodeURIComponent(scId)}`, { method: "DELETE", cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        await refreshHierarchy(activeSeries.id);
+        if (activeSceneId === scId) setActiveSceneId(null);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
+
     const updatedSeries = {
       ...activeSeries,
       episodes: activeSeries.episodes.map((ep) => (ep.id === epId ? { ...ep, scenes: ep.scenes.filter((sc) => sc.id !== scId) } : ep)),
@@ -611,12 +878,45 @@ export default function Page() {
     updateActiveSeries(updatedSeries);
   };
 
-  const handleBreakdown = () => {
+  const handleBreakdown = async () => {
+    if (!activeSeries) return;
     setIsBreakingDown(true);
-    setTimeout(() => {
+    try {
+      if (useMockApi) {
+        await new Promise((r) => setTimeout(r, 1500));
+        alert("结构化处理完成 (模拟)");
+        return;
+      }
+
+      const res = await fetch(`/api/scripts/${encodeURIComponent(activeSeries.id)}/structure`, {
+        method: "POST",
+        cache: "no-store",
+      });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      const json = (await res.json()) as any;
+      const apiEpisodes = (json?.data?.episodes || []) as Array<{
+        id: string;
+        episode_number: number;
+        title?: string | null;
+        script_full_text?: string | null;
+        scenes?: Array<{ id: string; scene_number: number; title?: string | null; content?: string | null; location?: string | null; time_of_day?: string | null }>;
+        assets?: Array<{ id: string; asset_id: string; name: string; type: string }>;
+      }>;
+
+      const mappedEpisodes = mapApiEpisodes(apiEpisodes);
+
+      const updatedSeries: ScriptSeries = { ...activeSeries, episodes: mappedEpisodes };
+      updateActiveSeries(updatedSeries);
+      setActiveEpisodeId(mappedEpisodes[0]?.id || null);
+      setActiveSceneId(null);
+      setWorkbenchMode("DIRECTOR");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
       setIsBreakingDown(false);
-      alert("AI拆解完成 (模拟)");
-    }, 1500);
+    }
   };
 
   const handleSaveScript = () => {
@@ -669,7 +969,7 @@ export default function Page() {
               <Bot size={32} className="text-textMuted" />
             </div>
             <p className="text-xs text-textMuted">
-              暂无剧集数据。<br />您可以手动添加或使用 AI 拆解。
+              暂无剧集数据。<br />您可以手动添加或使用剧本结构化处理。
             </p>
             <button
               onClick={handleBreakdown}
@@ -677,7 +977,7 @@ export default function Page() {
               className="w-full py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all disabled:opacity-50"
               type="button"
             >
-              {isBreakingDown ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} AI 智能拆解
+              {isBreakingDown ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} 剧本结构化处理
             </button>
           </div>
         ) : (
@@ -686,7 +986,12 @@ export default function Page() {
               <div key={ep.id} className="mb-1">
                 <div className="flex items-center group relative">
                   <button
-                    onClick={() => setActiveEpisodeId(ep.id === activeEpisodeId ? null : ep.id)}
+                    onClick={() => {
+                      const nextEpisodeId = ep.id === activeEpisodeId ? null : ep.id;
+                      setActiveEpisodeId(nextEpisodeId);
+                      setActiveSceneId(null);
+                      setWorkbenchMode("DIRECTOR");
+                    }}
                     className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
                       activeEpisodeId === ep.id ? "bg-surfaceHighlight text-textMain" : "text-textMuted hover:text-textMain"
                     }`}
@@ -917,147 +1222,244 @@ export default function Page() {
               </>
             ) : (
               <div className="flex-1 bg-background flex flex-col min-w-0 h-full">
-                <div className="h-12 border-b border-border bg-surface/50 backdrop-blur flex items-center justify-between px-4">
-                  <span className="font-bold text-sm">分镜表 (Shot List)</span>
-                  {activeScene && (
-                    <span className="text-xs text-textMuted font-mono">
-                      SCENE {activeScene.number} - {activeScene.shots.length} SHOTS
-                    </span>
-                  )}
-                </div>
-                <div className="flex-1 overflow-y-auto p-4 lg:p-8">
-                  <div className="max-w-4xl mx-auto space-y-4">
-                    {activeScene?.shots.map((shot) => (
-                      <div key={shot.id} className="flex gap-4 p-5 rounded-xl border border-border bg-surface hover:border-primary/30 transition-all group relative">
-                        <div className="w-10 flex-shrink-0 flex flex-col items-center">
-                          <span className="text-xl font-bold text-textMain font-mono">{shot.number}</span>
-                          <div className="h-full w-px bg-border/50 my-2"></div>
+                {!activeEpisode ? (
+                  <div className="flex-1 flex items-center justify-center text-sm text-textMuted">请选择一个剧集</div>
+                ) : !activeSceneId ? (
+                  <div className="flex-1 overflow-hidden flex flex-col">
+                    <div className="h-12 border-b border-border bg-surface/50 backdrop-blur flex items-center justify-between px-4">
+                      <span className="font-bold text-sm">
+                        EP{activeEpisode.number}: {activeEpisode.title}
+                      </span>
+                      <span className="text-xs text-textMuted font-mono">{activeEpisode.scenes.length} SCENES</span>
+                    </div>
+
+                    <div className="flex-1 overflow-y-auto p-4 lg:p-8">
+                      <div className="max-w-4xl mx-auto space-y-6">
+                        <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                          <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">剧集剧本</div>
+                          <div className="p-4 max-h-80 overflow-y-auto">
+                            <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeEpisode.scriptFullText || ""}</ReactMarkdown>
+                            </div>
+                          </div>
                         </div>
-                        <div className="flex-1 space-y-3">
-                          <div className="flex items-center justify-between">
-                            <div className="flex gap-2">
-                              <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-xs font-bold border border-purple-500/30">{shot.camera}</span>
-                              <span className="px-2 py-0.5 rounded bg-surfaceHighlight text-textMuted text-xs border border-border">{shot.duration}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <button
-                                onClick={() => handleDeleteShot(shot.id)}
-                                className="p-1.5 text-textMuted hover:text-red-400 hover:bg-surfaceHighlight rounded transition-colors"
-                                type="button"
-                              >
-                                <Trash2 size={14} />
-                              </button>
-                              <button
-                                onClick={() => navigateToDirectorFlow(shot.id)}
-                                className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-lg text-xs font-bold transition-all"
-                                type="button"
-                              >
-                                <Workflow size={14} /> 进入导演创作
-                              </button>
-                            </div>
-                          </div>
-                          <textarea
-                            value={shot.visual}
-                            onChange={(e) => handleUpdateShot(shot.id, "visual", e.target.value)}
-                            className="w-full bg-transparent text-base text-textMain leading-relaxed font-medium outline-none resize-none border-b border-transparent focus:border-primary/50 transition-colors"
-                            rows={2}
-                          />
-                          <div className="flex items-center gap-3 bg-surfaceHighlight/30 p-2 rounded-lg border border-border/50">
-                            <Mic size={16} className="text-textMuted flex-shrink-0" />
-                            <input
-                              value={shot.dialogue}
-                              onChange={(e) => handleUpdateShot(shot.id, "dialogue", e.target.value)}
-                              className="w-full bg-transparent text-sm text-textMuted outline-none"
-                              placeholder="输入对白..."
-                            />
-                          </div>
 
-                          <div className="pt-3 border-t border-border/30 mt-3">
-                            <div className="flex items-center justify-between mb-3">
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">关联资产</span>
-                                <span className="text-[10px] text-textMuted/50 bg-surfaceHighlight px-1.5 rounded">{shot.assets?.length || 0}</span>
-                              </div>
-                              <button
-                                onClick={() => handleOpenAssetBindModal(shot)}
-                                className="text-[10px] flex items-center gap-1 bg-surfaceHighlight hover:bg-primary/10 hover:text-primary border border-border hover:border-primary/30 px-2 py-1 rounded transition-colors"
-                                type="button"
-                              >
-                                <Plus size={10} /> 管理资产
-                              </button>
-                            </div>
-
-                            {!shot.assets || shot.assets.length === 0 ? (
-                              <div
-                                onClick={() => handleOpenAssetBindModal(shot)}
-                                className="border border-dashed border-border rounded-lg p-4 flex flex-col items-center justify-center gap-2 text-textMuted/40 hover:text-primary hover:border-primary/30 hover:bg-surfaceHighlight/30 cursor-pointer transition-all group/empty"
-                              >
-                                <Link size={16} className="group-hover/empty:scale-110 transition-transform" />
-                                <span className="text-xs">暂无绑定资产，点击添加</span>
-                              </div>
+                        <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                          <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm flex items-center justify-between">
+                            <span>场景</span>
+                            <button
+                              onClick={() => openSceneModal(activeEpisode.id)}
+                              className="p-1.5 rounded-md text-textMuted hover:text-primary hover:bg-surfaceHighlight/50 transition-colors"
+                              type="button"
+                              title="新增场景"
+                            >
+                              <Plus size={14} />
+                            </button>
+                          </div>
+                          <div className="p-4">
+                            {activeEpisode.scenes.length === 0 ? (
+                              <div className="text-sm text-textMuted">暂无场景</div>
                             ) : (
-                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                {shot.assets.map((asset) => (
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {activeEpisode.scenes.map((sc) => (
+                                  <button
+                                    key={sc.id}
+                                    onClick={() => {
+                                      setActiveSceneId(sc.id);
+                                      setWorkbenchMode("DIRECTOR");
+                                    }}
+                                    className="text-left p-4 rounded-xl border border-border bg-surfaceHighlight/20 hover:bg-surfaceHighlight/40 hover:border-primary/30 transition-all"
+                                    type="button"
+                                  >
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="font-bold text-textMain truncate">
+                                        SCENE {sc.number}: {sc.title}
+                                      </div>
+                                      <span className="text-[10px] text-textMuted font-mono">{sc.shots.length} SH</span>
+                                    </div>
+                                    <div className="mt-2 text-xs text-textMuted line-clamp-3">{sc.content}</div>
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+
+                        <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                          <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">关联资产</div>
+                          <div className="p-4">
+                            {!activeEpisode.assets || activeEpisode.assets.length === 0 ? (
+                              <div className="text-sm text-textMuted">暂无关联资产</div>
+                            ) : (
+                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                {activeEpisode.assets.map((asset) => (
                                   <div
                                     key={asset.id}
-                                    className="group/card relative flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-2 hover:border-primary/50 hover:bg-surfaceHighlight/50 transition-all cursor-default"
+                                    className="flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-3"
                                   >
-                                    <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border relative">
-                                      <img src={asset.thumbnail} className="w-full h-full object-cover" alt={asset.name} />
-                                      <div className="absolute inset-0 ring-1 ring-inset ring-border/30 rounded-md pointer-events-none"></div>
+                                    <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border flex items-center justify-center text-textMuted">
+                                      {asset.type === "CHARACTER" && <User size={16} />}
+                                      {asset.type === "SCENE" && <ImageIcon size={16} />}
+                                      {asset.type === "PROP" && <Box size={16} />}
                                     </div>
-                                    <div className="flex-1 min-w-0 flex flex-col pt-0.5">
-                                      <div className="text-sm font-bold text-textMain truncate leading-tight" title={asset.name}>
-                                        {asset.name}
-                                      </div>
-                                      <div className="flex items-center gap-1.5 mt-1.5">
-                                        <span className="text-[9px] text-textMuted uppercase tracking-wider bg-surface px-1.5 py-0.5 rounded border border-border flex items-center gap-1">
-                                          {asset.type === "CHARACTER" && <User size={8} />}
-                                          {asset.type === "SCENE" && <ImageIcon size={8} />}
-                                          {asset.type === "PROP" && <Box size={8} />}
-                                          {asset.type}
-                                        </span>
-                                      </div>
+                                    <div className="flex-1 min-w-0">
+                                      <div className="text-sm font-bold text-textMain truncate">{asset.name}</div>
+                                      <div className="mt-1 text-[10px] text-textMuted uppercase tracking-wider">{asset.type}</div>
                                     </div>
-                                    <button
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleUnbindAsset(shot.id, asset.id);
-                                      }}
-                                      className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-surface border border-border text-textMuted hover:text-red-400 hover:border-red-400/50 rounded-full opacity-0 group-hover/card:opacity-100 transition-all shadow-sm z-10"
-                                      title="解除绑定"
-                                      type="button"
-                                    >
-                                      <X size={10} />
-                                    </button>
                                   </div>
                                 ))}
-                                <button
-                                  onClick={() => handleOpenAssetBindModal(shot)}
-                                  className="flex flex-col items-center justify-center gap-1 border border-dashed border-border rounded-lg text-textMuted/30 hover:text-primary hover:border-primary/30 hover:bg-surfaceHighlight/30 transition-all h-full min-h-[60px]"
-                                  type="button"
-                                >
-                                  <Plus size={14} />
-                                  <span className="text-[10px]">Add</span>
-                                </button>
                               </div>
                             )}
                           </div>
                         </div>
                       </div>
-                    ))}
-
-                    {activeScene && (
-                      <button
-                        onClick={handleAddShot}
-                        className="w-full py-4 border-2 border-dashed border-border rounded-xl text-textMuted hover:text-primary hover:border-primary/50 transition-all flex items-center justify-center gap-2 font-medium bg-surface/30 hover:bg-surface/50"
-                        type="button"
-                      >
-                        <Plus size={20} /> 添加新分镜
-                      </button>
-                    )}
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <>
+                    <div className="h-12 border-b border-border bg-surface/50 backdrop-blur flex items-center justify-between px-4">
+                      <span className="font-bold text-sm">分镜表 (Shot List)</span>
+                      {activeScene && (
+                        <span className="text-xs text-textMuted font-mono">
+                          SCENE {activeScene.number} - {activeScene.shots.length} SHOTS
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex-1 overflow-y-auto p-4 lg:p-8">
+                      <div className="max-w-4xl mx-auto space-y-4">
+                        {activeScene?.shots.map((shot) => (
+                          <div key={shot.id} className="flex gap-4 p-5 rounded-xl border border-border bg-surface hover:border-primary/30 transition-all group relative">
+                            <div className="w-10 flex-shrink-0 flex flex-col items-center">
+                              <span className="text-xl font-bold text-textMain font-mono">{shot.number}</span>
+                              <div className="h-full w-px bg-border/50 my-2"></div>
+                            </div>
+                            <div className="flex-1 space-y-3">
+                              <div className="flex items-center justify-between">
+                                <div className="flex gap-2">
+                                  <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-xs font-bold border border-purple-500/30">{shot.camera}</span>
+                                  <span className="px-2 py-0.5 rounded bg-surfaceHighlight text-textMuted text-xs border border-border">{shot.duration}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <button
+                                    onClick={() => handleDeleteShot(shot.id)}
+                                    className="p-1.5 text-textMuted hover:text-red-400 hover:bg-surfaceHighlight rounded transition-colors"
+                                    type="button"
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => navigateToDirectorFlow(shot.id)}
+                                    className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 hover:bg-primary text-primary hover:text-white rounded-lg text-xs font-bold transition-all"
+                                    type="button"
+                                  >
+                                    <Workflow size={14} /> 进入导演创作
+                                  </button>
+                                </div>
+                              </div>
+                              <textarea
+                                value={shot.visual}
+                                onChange={(e) => handleUpdateShot(shot.id, "visual", e.target.value)}
+                                className="w-full bg-transparent text-base text-textMain leading-relaxed font-medium outline-none resize-none border-b border-transparent focus:border-primary/50 transition-colors"
+                                rows={2}
+                              />
+                              <div className="flex items-center gap-3 bg-surfaceHighlight/30 p-2 rounded-lg border border-border/50">
+                                <Mic size={16} className="text-textMuted flex-shrink-0" />
+                                <input
+                                  value={shot.dialogue}
+                                  onChange={(e) => handleUpdateShot(shot.id, "dialogue", e.target.value)}
+                                  className="w-full bg-transparent text-sm text-textMuted outline-none"
+                                  placeholder="输入对白..."
+                                />
+                              </div>
+
+                              <div className="pt-3 border-t border-border/30 mt-3">
+                                <div className="flex items-center justify-between mb-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10px] font-bold text-textMuted uppercase tracking-wider">关联资产</span>
+                                    <span className="text-[10px] text-textMuted/50 bg-surfaceHighlight px-1.5 rounded">{shot.assets?.length || 0}</span>
+                                  </div>
+                                  <button
+                                    onClick={() => handleOpenAssetBindModal(shot)}
+                                    className="text-[10px] flex items-center gap-1 bg-surfaceHighlight hover:bg-primary/10 hover:text-primary border border-border hover:border-primary/30 px-2 py-1 rounded transition-colors"
+                                    type="button"
+                                  >
+                                    <Plus size={10} /> 管理资产
+                                  </button>
+                                </div>
+
+                                {!shot.assets || shot.assets.length === 0 ? (
+                                  <div
+                                    onClick={() => handleOpenAssetBindModal(shot)}
+                                    className="border border-dashed border-border rounded-lg p-4 flex flex-col items-center justify-center gap-2 text-textMuted/40 hover:text-primary hover:border-primary/30 hover:bg-surfaceHighlight/30 cursor-pointer transition-all group/empty"
+                                  >
+                                    <Link size={16} className="group-hover/empty:scale-110 transition-transform" />
+                                    <span className="text-xs">暂无绑定资产，点击添加</span>
+                                  </div>
+                                ) : (
+                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                    {shot.assets.map((asset) => (
+                                      <div
+                                        key={asset.id}
+                                        className="group/card relative flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-2 hover:border-primary/50 hover:bg-surfaceHighlight/50 transition-all cursor-default"
+                                      >
+                                        <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border relative">
+                                          <img src={asset.thumbnail} className="w-full h-full object-cover" alt={asset.name} />
+                                          <div className="absolute inset-0 ring-1 ring-inset ring-border/30 rounded-md pointer-events-none"></div>
+                                        </div>
+                                        <div className="flex-1 min-w-0 flex flex-col pt-0.5">
+                                          <div className="text-sm font-bold text-textMain truncate leading-tight" title={asset.name}>
+                                            {asset.name}
+                                          </div>
+                                          <div className="flex items-center gap-1.5 mt-1.5">
+                                            <span className="text-[9px] text-textMuted uppercase tracking-wider bg-surface px-1.5 py-0.5 rounded border border-border flex items-center gap-1">
+                                              {asset.type === "CHARACTER" && <User size={8} />}
+                                              {asset.type === "SCENE" && <ImageIcon size={8} />}
+                                              {asset.type === "PROP" && <Box size={8} />}
+                                              {asset.type}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleUnbindAsset(shot.id, asset.id);
+                                          }}
+                                          className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-surface border border-border text-textMuted hover:text-red-400 hover:border-red-400/50 rounded-full opacity-0 group-hover/card:opacity-100 transition-all shadow-sm z-10"
+                                          title="解除绑定"
+                                          type="button"
+                                        >
+                                          <X size={10} />
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      onClick={() => handleOpenAssetBindModal(shot)}
+                                      className="flex flex-col items-center justify-center gap-1 border border-dashed border-border rounded-lg text-textMuted/30 hover:text-primary hover:border-primary/30 hover:bg-surfaceHighlight/30 transition-all h-full min-h-[60px]"
+                                      type="button"
+                                    >
+                                      <Plus size={14} />
+                                      <span className="text-[10px]">Add</span>
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+
+                        {activeScene && (
+                          <button
+                            onClick={handleAddShot}
+                            className="w-full py-4 border-2 border-dashed border-border rounded-xl text-textMuted hover:text-primary hover:border-primary/50 transition-all flex items-center justify-center gap-2 font-medium bg-surface/30 hover:bg-surface/50"
+                            type="button"
+                          >
+                            <Plus size={20} /> 添加新分镜
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
@@ -1188,6 +1590,40 @@ export default function Page() {
                   type="button"
                 >
                   <Settings size={16} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (useMockApi) {
+                      const blob = new Blob([series.rawContent || ""], { type: "text/plain;charset=utf-8" });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement("a");
+                      a.href = url;
+                      a.download = series.originalFilename || `${series.title}.txt`;
+                      document.body.appendChild(a);
+                      a.click();
+                      a.remove();
+                      URL.revokeObjectURL(url);
+                      return;
+                    }
+                    window.location.href = `/api/scripts/${series.id}/download`;
+                  }}
+                  className="absolute top-4 right-12 p-1.5 text-textMuted hover:text-primary bg-surface/50 rounded-lg backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="下载原始剧本"
+                  type="button"
+                >
+                  <Download size={16} />
+                </button>
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void handleDeleteSeries(series);
+                  }}
+                  className="absolute top-4 right-20 p-1.5 text-textMuted hover:text-red-500 bg-surface/50 rounded-lg backdrop-blur opacity-0 group-hover:opacity-100 transition-opacity"
+                  title="删除剧本"
+                  type="button"
+                >
+                  <Trash2 size={16} />
                 </button>
                 <div className="flex justify-between items-start mb-4">
                   <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-blue-500/20 to-purple-500/20 flex items-center justify-center text-primary group-hover:scale-110 transition-transform">
@@ -1390,9 +1826,9 @@ export default function Page() {
                   >
                     <Upload size={24} className="mb-2" />
                     <span className="text-xs">点击上传 .txt, .md, .pdf, .docx</span>
-                    {scriptContent && (
+                    {uploadedScriptFile && (
                       <span className="text-[10px] text-green-400 mt-2 flex items-center gap-1">
-                        <CheckCircle size={10} /> 已加载文本内容
+                        <CheckCircle size={10} /> 已选择：{uploadedScriptFile.name}
                       </span>
                     )}
                   </div>

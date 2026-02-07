@@ -19,10 +19,18 @@ function normalizeDetail(detail: unknown): string | undefined {
 }
 
 export function getErrorMessage(error: unknown): string {
-  const defaultMessage = "An unknown error occurred";
+  const defaultMessage = "发生未知错误";
   if (!error || typeof error !== "object") return defaultMessage;
 
   const err = error as Record<string, unknown>;
+
+  const axiosResponse = err.response as Record<string, unknown> | undefined;
+  if (axiosResponse && typeof axiosResponse === "object") {
+    const data = (axiosResponse as Record<string, unknown>)["data"];
+    const axiosDetail = normalizeDetail((data as Record<string, unknown> | undefined)?.["detail"]);
+    if (axiosDetail) return axiosDetail;
+    if (typeof data === "string" && data.trim().length > 0) return data;
+  }
 
   const direct = normalizeDetail(err.detail);
   if (direct) return direct;
@@ -32,7 +40,12 @@ export function getErrorMessage(error: unknown): string {
   if (wrappedDetail) return wrappedDetail;
 
   const message = err.message;
-  if (typeof message === "string" && message.trim().length > 0) return message;
+  if (typeof message === "string" && message.trim().length > 0) {
+    if (message.includes("ECONNREFUSED") || message.includes("connect") || message.includes("WinError 10061")) {
+      return "无法连接后端 API（默认 http://localhost:8000）。请先启动 fastapi_backend，或设置 NEXT_PUBLIC_API_BASE_URL/API_BASE_URL。";
+    }
+    return message;
+  }
 
   return defaultMessage;
 }

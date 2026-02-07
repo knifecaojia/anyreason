@@ -1,9 +1,11 @@
 from httpx import AsyncClient, ASGITransport
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.engine.url import make_url
 from fastapi_users.db import SQLAlchemyUserDatabase
 from fastapi_users.password import PasswordHelper
 import uuid
+import asyncpg
 
 from app.config import settings
 from app.models import User, Base
@@ -16,6 +18,21 @@ from app.users import get_jwt_strategy
 @pytest_asyncio.fixture(scope="function")
 async def engine():
     """Create a fresh test database engine for each test function."""
+    test_url = make_url(settings.TEST_DATABASE_URL)
+    admin_url = test_url.set(database="postgres")
+    admin_dsn = admin_url.render_as_string(hide_password=False).replace(
+        "postgresql+asyncpg://", "postgresql://"
+    )
+    conn = await asyncpg.connect(admin_dsn)
+    try:
+        exists = await conn.fetchval(
+            "SELECT 1 FROM pg_database WHERE datname = $1", test_url.database
+        )
+        if not exists:
+            await conn.execute(f'CREATE DATABASE "{test_url.database}"')
+    finally:
+        await conn.close()
+
     engine = create_async_engine(settings.TEST_DATABASE_URL, echo=True)
 
     async with engine.begin() as conn:

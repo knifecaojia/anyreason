@@ -7,3 +7,4 @@ done
 
 mc mb --ignore-existing "local/$MINIO_BUCKET_ASSETS"
 mc mb --ignore-existing "local/$MINIO_BUCKET_EXPORTS"
+mc mb --ignore-existing "local/$MINIO_BUCKET_SCRIPTS"

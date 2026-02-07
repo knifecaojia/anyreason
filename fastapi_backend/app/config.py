@@ -43,6 +43,13 @@ class Settings(BaseSettings):
     DEFAULT_ADMIN_EMAIL: str | None = None
     DEFAULT_ADMIN_PASSWORD: str | None = None
 
+    # MinIO (S3 compatible object storage)
+    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ACCESS_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin"
+    MINIO_SECURE: bool = False
+    MINIO_BUCKET_SCRIPTS: str = "anyreason-scripts"
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )

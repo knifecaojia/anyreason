@@ -54,6 +54,7 @@ services:
       MINIO_ENDPOINT: http://minio:9000
       MINIO_BUCKET_ASSETS: ${MINIO_BUCKET_ASSETS:-anyreason-assets}
       MINIO_BUCKET_EXPORTS: ${MINIO_BUCKET_EXPORTS:-anyreason-exports}
+      MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
       MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minioadmin}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-minioadmin}
     volumes:

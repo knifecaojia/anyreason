@@ -15,6 +15,11 @@ services:
       VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
     volumes:
       - ../fastapi_backend:/app
       - fastapi-venv:/app/.venv
@@ -43,6 +48,11 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
       OPENAPI_OUTPUT_FILE: /app/shared-data/openapi.json
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
