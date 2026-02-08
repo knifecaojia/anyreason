@@ -20,6 +20,11 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm-proxy:4000}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
+      LITELLM_DEFAULT_ALLOWED_MODELS: ${LITELLM_DEFAULT_ALLOWED_MODELS:-mock,deepseek}
+      LITELLM_VIRTUAL_KEY_ALLOWED_MODELS: ${LITELLM_VIRTUAL_KEY_ALLOWED_MODELS:-*}
+      LITELLM_WEBHOOK_SECRET: ${LITELLM_WEBHOOK_SECRET:-}
     volumes:
       - ../fastapi_backend:/app
       - fastapi-venv:/app/.venv
@@ -53,6 +58,11 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm-proxy:4000}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
+      LITELLM_DEFAULT_ALLOWED_MODELS: ${LITELLM_DEFAULT_ALLOWED_MODELS:-mock,deepseek}
+      LITELLM_VIRTUAL_KEY_ALLOWED_MODELS: ${LITELLM_VIRTUAL_KEY_ALLOWED_MODELS:-*}
+      LITELLM_WEBHOOK_SECRET: ${LITELLM_WEBHOOK_SECRET:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -86,6 +96,7 @@ services:
     volumes:
       - ../nextjs-frontend:/app
       - nextjs-node-modules:/app/node_modules
+      - nextjs-next-cache:/app/.next
       - ../local-shared-data:/app/shared-data
     depends_on:
       backend:
@@ -93,4 +104,5 @@ services:
 
 volumes:
   nextjs-node-modules:
+  nextjs-next-cache:
   fastapi-venv:

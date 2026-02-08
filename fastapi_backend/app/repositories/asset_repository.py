@@ -1,0 +1,137 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+from sqlalchemy import delete, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.models import Asset, AssetTag, AssetTagRelation, AssetVariant, Project, Script
+
+
+async def get_asset_for_user(*, db: AsyncSession, user_id: UUID, asset_id: UUID) -> Asset | None:
+    res = await db.execute(
+        select(Asset)
+        .join(Project, Asset.project_id == Project.id)
+        .join(Script, Script.id == Project.id)
+        .where(
+            Asset.id == asset_id,
+            Script.owner_id == user_id,
+            Script.is_deleted.is_(False),
+        )
+    )
+    return res.scalars().first()
+
+
+async def list_asset_tags(*, db: AsyncSession, asset_entity_id: UUID) -> list[str]:
+    res = await db.execute(
+        select(AssetTag.name)
+        .join(AssetTagRelation, AssetTagRelation.tag_id == AssetTag.id)
+        .where(AssetTagRelation.asset_entity_id == asset_entity_id)
+        .order_by(AssetTag.name.asc())
+    )
+    return [str(x) for x in res.scalars().all()]
+
+
+async def replace_asset_tags(
+    *,
+    db: AsyncSession,
+    project_id: UUID,
+    asset_entity_id: UUID,
+    tags: list[str],
+) -> None:
+    cleaned = []
+    seen = set()
+    for t in tags or []:
+        name = str(t or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        cleaned.append(name[:64])
+
+    await db.execute(delete(AssetTagRelation).where(AssetTagRelation.asset_entity_id == asset_entity_id))
+    await db.flush()
+
+    for name in cleaned:
+        tag_res = await db.execute(select(AssetTag).where(AssetTag.project_id == project_id, AssetTag.name == name))
+        tag = tag_res.scalars().first()
+        if not tag:
+            tag = AssetTag(project_id=project_id, name=name)
+            db.add(tag)
+            await db.flush()
+        db.add(AssetTagRelation(asset_entity_id=asset_entity_id, tag_id=tag.id))
+
+
+async def list_variants(*, db: AsyncSession, asset_entity_id: UUID) -> list[AssetVariant]:
+    res = await db.execute(select(AssetVariant).where(AssetVariant.asset_entity_id == asset_entity_id).order_by(AssetVariant.variant_code.asc()))
+    return list(res.scalars().all())
+
+
+async def create_variant(
+    *,
+    db: AsyncSession,
+    asset_entity_id: UUID,
+    variant_code: str,
+    stage_tag: str | None,
+    age_range: str | None,
+    attributes: dict,
+    prompt_template: str | None,
+    is_default: bool,
+) -> AssetVariant:
+    if is_default:
+        await db.execute(
+            select(AssetVariant)
+            .where(AssetVariant.asset_entity_id == asset_entity_id, AssetVariant.is_default.is_(True))
+        )
+        res = await db.execute(select(AssetVariant).where(AssetVariant.asset_entity_id == asset_entity_id))
+        for v in res.scalars().all():
+            v.is_default = False
+
+    row = AssetVariant(
+        asset_entity_id=asset_entity_id,
+        variant_code=variant_code,
+        stage_tag=stage_tag,
+        age_range=age_range,
+        attributes=attributes or {},
+        prompt_template=prompt_template,
+        is_default=bool(is_default),
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def update_variant(
+    *,
+    db: AsyncSession,
+    variant: AssetVariant,
+    stage_tag: str | None,
+    age_range: str | None,
+    attributes: dict | None,
+    prompt_template: str | None,
+    is_default: bool | None,
+) -> AssetVariant:
+    if stage_tag is not None:
+        variant.stage_tag = stage_tag
+    if age_range is not None:
+        variant.age_range = age_range
+    if attributes is not None:
+        variant.attributes = attributes
+    if prompt_template is not None:
+        variant.prompt_template = prompt_template
+    if is_default is not None:
+        if is_default:
+            res = await db.execute(select(AssetVariant).where(AssetVariant.asset_entity_id == variant.asset_entity_id))
+            for v in res.scalars().all():
+                v.is_default = False
+        variant.is_default = bool(is_default)
+    await db.flush()
+    return variant
+
+
+async def delete_variant(*, db: AsyncSession, variant: AssetVariant) -> None:
+    await db.delete(variant)
+    await db.flush()
+

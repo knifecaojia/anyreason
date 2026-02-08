@@ -1,15 +1,16 @@
 # LiteLLM Proxy Configuration
 
 model_list:
-  - model_name: deepseek
+  - model_name: mock
     litellm_params:
-      model: deepseek/deepseek-chat
-      api_key: sk-38888f23e56f4966a0112a6e4904e490
+      model: openai/gpt-3.5-turbo
+      api_key: ""
+      mock_response: "pong"
 
 litellm_settings:
   drop_params: true
-  set_verbose: true
+  callbacks: litellm_custom_callbacks.proxy_handler_instance
 
 general_settings:
-  master_key: litellm123
+  master_key: os.environ/LITELLM_MASTER_KEY
   store_model_in_db: true

@@ -13,11 +13,10 @@ COPY package*.json ./
 # Install dependencies as root (or myappuser, depending on your structure)
 RUN pnpm install
 
-## Switch to the non-root user
-USER node
-
 # Copy the rest of your application code
 COPY . .
+
+RUN chmod +x /app/start.sh
 
 EXPOSE 3000
 

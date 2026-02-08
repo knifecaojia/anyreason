@@ -6,6 +6,7 @@ from fastapi_users.db import SQLAlchemyBaseUserTableUUID
 from sqlalchemy import (
     CheckConstraint,
     Column,
+    Date,
     DateTime,
     ForeignKey,
     Index,
@@ -48,6 +49,155 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         back_populates="owner",
         cascade="all, delete-orphan",
         passive_deletes=True,
+    )
+    llm_virtual_keys = relationship(
+        "LLMVirtualKey",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    ai_prompt_presets = relationship(
+        "AIPromptPreset",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+
+class LLMVirtualKey(Base):
+    __tablename__ = "llm_virtual_keys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+
+    purpose = Column(String(32), nullable=False, server_default=text("'default'"))
+    litellm_key_id = Column(String(128), nullable=True)
+    key_prefix = Column(String(16), nullable=False)
+    key_hash = Column(String(64), nullable=False)
+    encrypted_token = Column(LargeBinary, nullable=True)
+
+    status = Column(String(16), nullable=False, server_default=text("'active'"))
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    last_seen_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User", back_populates="llm_virtual_keys")
+
+    __table_args__ = (
+        UniqueConstraint("key_hash", name="uq_llm_virtual_keys_key_hash"),
+        Index("idx_llm_virtual_keys_user", "user_id"),
+        Index("idx_llm_virtual_keys_user_status", "user_id", "status"),
+        Index("idx_llm_virtual_keys_created_at", "created_at"),
+        CheckConstraint(
+            "status IN ('active', 'revoked', 'expired')",
+            name="ck_llm_virtual_keys_status",
+        ),
+    )
+
+
+class LLMUsageEvent(Base):
+    __tablename__ = "llm_usage_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+
+    request_id = Column(String(64), nullable=True)
+    model = Column(String(128), nullable=True)
+    endpoint = Column(String(64), nullable=True)
+
+    prompt_tokens = Column(Integer, nullable=False, server_default=text("0"))
+    completion_tokens = Column(Integer, nullable=False, server_default=text("0"))
+    total_tokens = Column(Integer, nullable=False, server_default=text("0"))
+
+    latency_ms = Column(Integer, nullable=True)
+    cost = Column(Numeric(18, 10), nullable=True)
+
+    raw_payload = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User")
+
+    __table_args__ = (
+        Index("idx_llm_usage_events_user", "user_id"),
+        Index("idx_llm_usage_events_created_at", "created_at"),
+        Index("idx_llm_usage_events_model", "model"),
+    )
+
+
+class LLMUsageDaily(Base):
+    __tablename__ = "llm_usage_daily"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    date = Column(Date, nullable=False)
+    model = Column(String(128), nullable=False)
+
+    prompt_tokens = Column(Integer, nullable=False, server_default=text("0"))
+    completion_tokens = Column(Integer, nullable=False, server_default=text("0"))
+    total_tokens = Column(Integer, nullable=False, server_default=text("0"))
+    request_count = Column(Integer, nullable=False, server_default=text("0"))
+    cost = Column(Numeric(18, 10), nullable=False, server_default=text("0"))
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "date", "model", name="uq_llm_usage_daily_user_date_model"),
+        Index("idx_llm_usage_daily_user_date", "user_id", "date"),
+    )
+
+
+class LLMCustomService(Base):
+    __tablename__ = "llm_custom_services"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    name = Column(String(128), nullable=False)
+    kind = Column(String(32), nullable=False, server_default=text("'openai_compatible'"))
+    base_url = Column(Text, nullable=False)
+    supported_models = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    created_models = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    encrypted_api_key = Column(LargeBinary, nullable=False)
+    enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_llm_custom_services_name"),
+        Index("idx_llm_custom_services_enabled", "enabled"),
+        Index("idx_llm_custom_services_created_at", "created_at"),
+        CheckConstraint(
+            "kind IN ('openai_compatible')",
+            name="ck_llm_custom_services_kind",
+        ),
+    )
+
+
+class AIPromptPreset(Base):
+    __tablename__ = "ai_prompt_presets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+
+    tool_key = Column(String(64), nullable=False)
+    name = Column(String(128), nullable=False)
+    provider = Column(String(64), nullable=True)
+    model = Column(String(128), nullable=True)
+    prompt_template = Column(Text, nullable=False)
+    is_default = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User", back_populates="ai_prompt_presets")
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "tool_key", "name", name="uq_ai_prompt_presets_user_tool_name"),
+        Index("idx_ai_prompt_presets_user_tool", "user_id", "tool_key"),
+        Index("idx_ai_prompt_presets_user_updated_at", "user_id", "updated_at"),
     )
 
 

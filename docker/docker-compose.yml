@@ -123,16 +123,19 @@ services:
       - "4000:4000"
     volumes:
       - ./litellm_config.yaml:/app/config.yaml
+      - ./litellm_custom_callbacks.py:/app/litellm_custom_callbacks.py:ro
     env_file:
       - ${ANYREASON_ENV_FILE:-.env}
     environment:
       DATABASE_URL: postgresql://${LITELLM_DB_USER:-litellm}:${LITELLM_DB_PASSWORD:-litellm123}@postgres:5432/${LITELLM_DB_NAME:-litellm}
       STORE_MODEL_IN_DB: "True"
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-change-me}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
       LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-change-me}
       UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
       UI_PASSWORD: ${LITELLM_UI_PASSWORD:-change-me}
-      PROXY_ADMIN_ID: ${LITELLM_ADMIN_USER_ID:-admin}s
+      PROXY_ADMIN_ID: ${LITELLM_ADMIN_USER_ID:-admin}
+      LITELLM_WEBHOOK_URL: ${LITELLM_WEBHOOK_URL:-http://backend:8000/api/v1/llm/webhooks/litellm}
+      LITELLM_WEBHOOK_SECRET: ${LITELLM_WEBHOOK_SECRET:-}
     command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
     restart: unless-stopped
     healthcheck:

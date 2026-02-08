@@ -50,6 +50,13 @@ class Settings(BaseSettings):
     MINIO_SECURE: bool = False
     MINIO_BUCKET_SCRIPTS: str = "anyreason-scripts"
 
+    # LiteLLM
+    LITELLM_BASE_URL: str = "http://localhost:4000"
+    LITELLM_MASTER_KEY: str | None = None
+    LITELLM_DEFAULT_ALLOWED_MODELS: str = "deepseek"
+    LITELLM_VIRTUAL_KEY_ALLOWED_MODELS: str = "*"
+    LITELLM_WEBHOOK_SECRET: str | None = None
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )

@@ -4,7 +4,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from uuid import UUID
 
-from app.models import Episode, Project, Scene, Script
+from app.models import Episode, Project, Scene, Script, Shot
 
 
 async def _get_episode_for_user(*, db: AsyncSession, user_id: UUID, episode_id: UUID) -> Episode | None:
@@ -98,10 +98,47 @@ async def update_scene(
 
 
 async def delete_scene(*, db: AsyncSession, user_id: UUID, scene_id: UUID) -> bool:
-    scene = await _get_scene_for_user(db=db, user_id=user_id, scene_id=scene_id)
-    if not scene:
+    pair_res = await db.execute(
+        select(Scene, Episode)
+        .join(Episode, Scene.episode_id == Episode.id)
+        .join(Project, Episode.project_id == Project.id)
+        .join(Script, Script.id == Project.id)
+        .where(
+            Scene.id == scene_id,
+            Script.owner_id == user_id,
+            Script.is_deleted.is_(False),
+        )
+    )
+    row = pair_res.first()
+    if not row:
         return False
+    scene, episode = row
+
     await db.delete(scene)
+    await db.flush()
+
+    scenes_res = await db.execute(
+        select(Scene).where(Scene.episode_id == episode.id).order_by(Scene.scene_number.asc(), Scene.created_at.asc())
+    )
+    remaining = list(scenes_res.scalars().all())
+
+    for sc in remaining:
+        sc.scene_code = f"TMP_{sc.id}"
+    await db.flush()
+
+    for idx, sc in enumerate(remaining, start=1):
+        sc.scene_number = idx
+        sc.scene_code = f"EP{episode.episode_number:03d}_SC{idx:02d}"
+
+        shots_res = await db.execute(select(Shot).where(Shot.scene_id == sc.id).order_by(Shot.shot_number.asc(), Shot.created_at.asc()))
+        shots = list(shots_res.scalars().all())
+        for sh in shots:
+            sh.shot_code = f"TMP_{sh.id}"
+        await db.flush()
+
+        for sidx, sh in enumerate(shots, start=1):
+            sh.shot_number = sidx
+            sh.shot_code = f"EP{episode.episode_number:03d}_SC{idx:02d}_SH{sidx:02d}"
+
     await db.commit()
     return True
-

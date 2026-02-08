@@ -26,10 +26,10 @@ import {
   Link,
   Loader2,
   Mic,
-  Pencil,
   Plus,
   Save,
   Search,
+  SlidersHorizontal,
   Settings,
   Sparkles,
   SplitSquareHorizontal,
@@ -51,8 +51,9 @@ interface Keyframe {
 
 interface AssetReference {
   id: string;
-  type: "CHARACTER" | "SCENE" | "PROP";
+  type: "CHARACTER" | "SCENE" | "PROP" | "VFX";
   name: string;
+  category?: string;
   thumbnail?: string;
   tags?: string[];
 }
@@ -101,6 +102,112 @@ interface ScriptSeries {
   rawContent: string;
   episodes: Episode[];
   originalFilename?: string;
+}
+
+interface AIModelOption {
+  provider: string;
+  model: string;
+}
+
+interface AIPromptPreset {
+  id: string;
+  tool_key: string;
+  name: string;
+  provider?: string | null;
+  model?: string | null;
+  prompt_template: string;
+  is_default: boolean;
+}
+
+type ApiAssetVariantRead = {
+  id: string;
+  asset_entity_id: string;
+  variant_code: string;
+  stage_tag?: string | null;
+  age_range?: string | null;
+  attributes?: Record<string, unknown>;
+  prompt_template?: string | null;
+  is_default: boolean;
+};
+
+type ApiAssetRead = {
+  id: string;
+  project_id?: string | null;
+  asset_id: string;
+  name: string;
+  type: string;
+  category?: string | null;
+  lifecycle_status: string;
+  tags: string[];
+  variants: ApiAssetVariantRead[];
+};
+
+type ApiAssetBindingBrief = {
+  id: string;
+  asset_entity_id: string;
+  asset_variant_id?: string | null;
+  name: string;
+  type: string;
+  category?: string | null;
+  variant_code?: string | null;
+  stage_tag?: string | null;
+  age_range?: string | null;
+};
+
+interface AISceneDraft {
+  scene_number?: number | null;
+  title?: string | null;
+  content?: string | null;
+  location?: string | null;
+  time_of_day?: string | null;
+  location_type?: "内" | "外" | "内外" | null;
+}
+
+interface AIShotDraft {
+  shot_type?: string | null;
+  camera_angle?: string | null;
+  camera_move?: string | null;
+  filter_style?: string | null;
+  narrative_function?: string | null;
+  pov_character?: string | null;
+  description?: string | null;
+  dialogue?: string | null;
+  dialogue_speaker?: string | null;
+  sound_effect?: string | null;
+  active_assets?: string[] | null;
+  duration_estimate?: number | null;
+}
+
+interface AIWorldUnityDraft {
+  production_title?: string | null;
+  era_setting?: string | null;
+  unified_emblem?: string | null;
+  base_costume?: string | null;
+  color_system?: string | null;
+  material_style?: string | null;
+  lighting_style?: string | null;
+  art_style?: string | null;
+  notes?: string | null;
+}
+
+interface AIAssetVariantDraft {
+  variant_code?: string | null;
+  stage_tag?: string | null;
+  attributes?: Record<string, unknown> | null;
+  prompt_en?: string | null;
+}
+
+interface AIAssetDraft {
+  type: "character" | "scene" | "prop" | "vfx";
+  name: string;
+  category_path?: string[] | null;
+  tags?: string[] | null;
+  importance?: "main" | "support" | "minor" | null;
+  concept?: string | null;
+  visual_details?: Record<string, unknown> | null;
+  prompt_en?: string | null;
+  variants?: AIAssetVariantDraft[] | null;
+  children?: AIAssetDraft[] | null;
 }
 
 const useMockApi = process.env.NEXT_PUBLIC_USE_MOCK_API !== "false" && process.env.USE_MOCK_API !== "false";
@@ -257,6 +364,69 @@ export default function Page() {
   const [episodeFormData, setEpisodeFormData] = useState({ title: "", logline: "", number: 1 });
   const [sceneFormData, setSceneFormData] = useState({ intExt: "EXT.", location: "", time: "DAY", content: "" });
   const [uploadedScriptFile, setUploadedScriptFile] = useState<File | null>(null);
+  const [aiToolOpen, setAiToolOpen] = useState(false);
+  const [aiModels, setAiModels] = useState<AIModelOption[]>([]);
+  const [aiProvider, setAiProvider] = useState("");
+  const [aiModel, setAiModel] = useState("");
+  const [aiPromptTemplate, setAiPromptTemplate] = useState("请根据剧集剧本正文生成结构化分场信息。");
+  const [aiPresets, setAiPresets] = useState<AIPromptPreset[]>([]);
+  const [aiPresetId, setAiPresetId] = useState<string>("");
+  const [aiPresetName, setAiPresetName] = useState("");
+  const [aiPresetIsDefault, setAiPresetIsDefault] = useState(false);
+  const [aiFinalPrompt, setAiFinalPrompt] = useState("");
+  const [aiRawText, setAiRawText] = useState("");
+  const [aiScenes, setAiScenes] = useState<AISceneDraft[]>([]);
+  const [aiApplyMode, setAiApplyMode] = useState<"replace" | "append">("replace");
+  const [aiIsLoading, setAiIsLoading] = useState(false);
+  const [aiIsApplying, setAiIsApplying] = useState(false);
+  const [episodeActionsOpen, setEpisodeActionsOpen] = useState(false);
+  const [sceneActionsOpen, setSceneActionsOpen] = useState(false);
+  const [selectedShotId, setSelectedShotId] = useState<string | null>(null);
+
+  const [sceneAssetBindings, setSceneAssetBindings] = useState<ApiAssetBindingBrief[]>([]);
+  const [shotAssetBindingsMap, setShotAssetBindingsMap] = useState<Record<string, ApiAssetBindingBrief[]>>({});
+
+  const [assetEditorOpen, setAssetEditorOpen] = useState(false);
+  const [assetEditorAssetId, setAssetEditorAssetId] = useState<string | null>(null);
+  const [assetEditorData, setAssetEditorData] = useState<ApiAssetRead | null>(null);
+  const [assetEditorSelectedVariantId, setAssetEditorSelectedVariantId] = useState<string | null>(null);
+  const [assetEditorIsLoading, setAssetEditorIsLoading] = useState(false);
+  const [assetEditorIsSaving, setAssetEditorIsSaving] = useState(false);
+
+  const [assetToolOpen, setAssetToolOpen] = useState(false);
+  const [assetModels, setAssetModels] = useState<AIModelOption[]>([]);
+  const [assetProvider, setAssetProvider] = useState("");
+  const [assetModel, setAssetModel] = useState("");
+  const [assetPromptTemplate, setAssetPromptTemplate] = useState(
+    "请基于剧集剧本正文进行资产提取并补全：先抽取世界观统一要素，再抽取角色/场景/道具/特效；输出可落库的 JSON。",
+  );
+  const [assetPresets, setAssetPresets] = useState<AIPromptPreset[]>([]);
+  const [assetPresetId, setAssetPresetId] = useState<string>("");
+  const [assetPresetName, setAssetPresetName] = useState("");
+  const [assetPresetIsDefault, setAssetPresetIsDefault] = useState(false);
+  const [assetFinalPrompt, setAssetFinalPrompt] = useState("");
+  const [assetRawText, setAssetRawText] = useState("");
+  const [assetWorldUnity, setAssetWorldUnity] = useState<AIWorldUnityDraft | null>(null);
+  const [assetDraftAssets, setAssetDraftAssets] = useState<AIAssetDraft[]>([]);
+  const [assetApplyMode, setAssetApplyMode] = useState<"replace" | "append">("append");
+  const [assetIsLoading, setAssetIsLoading] = useState(false);
+  const [assetIsApplying, setAssetIsApplying] = useState(false);
+
+  const [sbToolOpen, setSbToolOpen] = useState(false);
+  const [sbModels, setSbModels] = useState<AIModelOption[]>([]);
+  const [sbProvider, setSbProvider] = useState("");
+  const [sbModel, setSbModel] = useState("");
+  const [sbPromptTemplate, setSbPromptTemplate] = useState("请将分场剧本拆解为分镜列表，输出镜头信息。");
+  const [sbPresets, setSbPresets] = useState<AIPromptPreset[]>([]);
+  const [sbPresetId, setSbPresetId] = useState<string>("");
+  const [sbPresetName, setSbPresetName] = useState("");
+  const [sbPresetIsDefault, setSbPresetIsDefault] = useState(false);
+  const [sbFinalPrompt, setSbFinalPrompt] = useState("");
+  const [sbRawText, setSbRawText] = useState("");
+  const [sbShots, setSbShots] = useState<AIShotDraft[]>([]);
+  const [sbApplyMode, setSbApplyMode] = useState<"replace" | "append">("replace");
+  const [sbIsLoading, setSbIsLoading] = useState(false);
+  const [sbIsApplying, setSbIsApplying] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const resultImportInputRef = useRef<HTMLInputElement>(null);
@@ -317,14 +487,15 @@ export default function Page() {
       title?: string | null;
       script_full_text?: string | null;
       scenes?: Array<{ id: string; scene_number: number; title?: string | null; content?: string | null; location?: string | null; time_of_day?: string | null }>;
-      assets?: Array<{ id: string; asset_id: string; name: string; type: string }>;
+      assets?: Array<{ id: string; asset_id: string; name: string; type: string; category?: string | null }>;
     }>,
   ): Episode[] => {
     return apiEpisodes.map((ep) => {
       const assets: AssetReference[] = (ep.assets || []).map((a) => ({
         id: a.id,
-        type: a.type === "character" ? "CHARACTER" : a.type === "scene" ? "SCENE" : "PROP",
+        type: a.type === "character" ? "CHARACTER" : a.type === "scene" ? "SCENE" : a.type === "vfx" ? "VFX" : "PROP",
         name: a.name,
+        category: a.category || undefined,
       }));
       const scenes: Scene[] = (ep.scenes || []).map((sc) => ({
         id: sc.id,
@@ -352,15 +523,26 @@ export default function Page() {
   const refreshHierarchy = async (scriptIdValue: string) => {
     const res = await fetch(`/api/scripts/${encodeURIComponent(scriptIdValue)}/hierarchy`, { cache: "no-store" });
     if (!res.ok) throw new Error(await res.text());
-    const json = (await res.json()) as any;
-    const apiEpisodes = (json?.data?.episodes || []) as Array<{
-      id: string;
-      episode_number: number;
-      title?: string | null;
-      script_full_text?: string | null;
-      scenes?: Array<{ id: string; scene_number: number; title?: string | null; content?: string | null; location?: string | null; time_of_day?: string | null }>;
-      assets?: Array<{ id: string; asset_id: string; name: string; type: string }>;
-    }>;
+    const json = (await res.json()) as {
+      data?: {
+        episodes?: Array<{
+          id: string;
+          episode_number: number;
+          title?: string | null;
+          script_full_text?: string | null;
+          scenes?: Array<{
+            id: string;
+            scene_number: number;
+            title?: string | null;
+            content?: string | null;
+            location?: string | null;
+            time_of_day?: string | null;
+          }>;
+          assets?: Array<{ id: string; asset_id: string; name: string; type: string; category?: string | null }>;
+        }>;
+      };
+    };
+    const apiEpisodes = json.data?.episodes || [];
     const mappedEpisodes = mapApiEpisodes(apiEpisodes);
     if (!activeSeries) return;
     updateActiveSeries({ ...activeSeries, episodes: mappedEpisodes });
@@ -403,37 +585,10 @@ export default function Page() {
         episode_number: number;
         title?: string | null;
         script_full_text?: string | null;
-        scenes?: Array<{ id: string; scene_number: number; title?: string | null; content?: string | null }>;
+        scenes?: Array<{ id: string; scene_number: number; title?: string | null; content?: string | null; location?: string | null; time_of_day?: string | null }>;
         assets?: Array<{ id: string; asset_id: string; name: string; type: string }>;
       }>;
-
-      const mappedEpisodes: Episode[] = apiEpisodes.map((ep) => {
-        const assets: AssetReference[] = (ep.assets || []).map((a) => ({
-          id: a.id,
-          type: a.type === "character" ? "CHARACTER" : a.type === "scene" ? "SCENE" : "PROP",
-          name: a.name,
-        }));
-        const scenes: Scene[] = (ep.scenes || []).map((sc) => ({
-          id: sc.id,
-          number: sc.scene_number,
-          title: sc.title || `SCENE ${sc.scene_number}`,
-          location: "",
-          time: "",
-          content: sc.content || "",
-          shots: [],
-          status: "BREAKDOWN",
-          assets: [],
-        }));
-        return {
-          id: ep.id,
-          number: ep.episode_number,
-          title: ep.title || `EP${String(ep.episode_number).padStart(2, "0")}`,
-          logline: "",
-          scriptFullText: ep.script_full_text || "",
-          scenes,
-          assets,
-        };
-      });
+      const mappedEpisodes = mapApiEpisodes(apiEpisodes);
 
       if (cancelled) return;
       setSeriesList((prev) =>
@@ -454,15 +609,952 @@ export default function Page() {
     () => activeEpisode?.scenes.find((s) => s.id === activeSceneId),
     [activeEpisode, activeSceneId],
   );
+  const episodeAssetPool = useMemo(() => activeEpisode?.assets || [], [activeEpisode?.assets]);
+  const assetBindPool = useMemo(() => {
+    if (!useMockApi) return episodeAssetPool;
+    const episodeKeys = new Set(episodeAssetPool.map((a) => `${a.type}:${a.name}`.toLowerCase()));
+    const extra = MOCK_ASSETS_POOL.filter((a) => !episodeKeys.has(`${a.type}:${a.name}`.toLowerCase()));
+    return [...episodeAssetPool, ...extra];
+  }, [episodeAssetPool]);
+  const episodeAssetIdSet = useMemo(() => new Set(episodeAssetPool.map((a) => a.id)), [episodeAssetPool]);
+
+  const episodeAssetsGrouped = useMemo(() => {
+    const groups: Record<string, Record<string, AssetReference[]>> = {};
+    for (const a of episodeAssetPool) {
+      const typeKey = a.type;
+      const cat = (a.category || "未分类").trim() || "未分类";
+      if (!groups[typeKey]) groups[typeKey] = {};
+      if (!groups[typeKey][cat]) groups[typeKey][cat] = [];
+      groups[typeKey][cat].push(a);
+    }
+    return groups;
+  }, [episodeAssetPool]);
 
   const updateActiveSeries = (updatedSeries: ScriptSeries) => {
     setSeriesList((prev) => prev.map((s) => (s.id === updatedSeries.id ? updatedSeries : s)));
     setActiveSeries(updatedSeries);
   };
 
+  type ApiShotRead = {
+    id: string;
+    scene_id: string;
+    shot_code: string;
+    shot_number: number;
+    shot_type?: string | null;
+    camera_angle?: string | null;
+    camera_move?: string | null;
+    filter_style?: string | null;
+    narrative_function?: string | null;
+    pov_character?: string | null;
+    description?: string | null;
+    dialogue?: string | null;
+    dialogue_speaker?: string | null;
+    sound_effect?: string | null;
+    active_assets?: string[] | null;
+    duration_estimate?: number | string | null;
+  };
+
+  const mapApiShots = (apiShots: ApiShotRead[]): Shot[] => {
+    return apiShots.map((s) => {
+      const camera = [s.shot_type, s.camera_angle, s.camera_move].filter(Boolean).join(" / ");
+      const durationNum = s.duration_estimate === null || s.duration_estimate === undefined ? null : Number(s.duration_estimate);
+      const duration = Number.isFinite(durationNum) ? `${durationNum}s` : "";
+      return {
+        id: s.id,
+        number: s.shot_number,
+        visual: s.description || "",
+        dialogue: s.dialogue || "",
+        camera: camera || "—",
+        duration: duration || "—",
+        keyframes: [],
+        assets: [],
+      };
+    });
+  };
+
+  const patchSeriesScene = (series: ScriptSeries, sceneId: string, patch: (scene: Scene) => Scene): ScriptSeries => {
+    return {
+      ...series,
+      episodes: series.episodes.map((ep) => ({
+        ...ep,
+        scenes: ep.scenes.map((sc) => (sc.id === sceneId ? patch(sc) : sc)),
+      })),
+    };
+  };
+
+  const refreshSceneShots = async (seriesId: string, sceneId: string) => {
+    const res = await fetch(`/api/scenes/${encodeURIComponent(sceneId)}/shots`, { cache: "no-store" });
+    if (!res.ok) throw new Error(await res.text());
+    const json = (await res.json()) as { data?: ApiShotRead[] };
+    const shots = mapApiShots(json.data || []);
+    setSeriesList((prev) =>
+      prev.map((s) => (s.id === seriesId ? patchSeriesScene(s, sceneId, (sc) => ({ ...sc, shots })) : s)),
+    );
+    setActiveSeries((prev) => (prev && prev.id === seriesId ? patchSeriesScene(prev, sceneId, (sc) => ({ ...sc, shots })) : prev));
+  };
+
+  const refreshSceneAssetBindings = async (sceneId: string) => {
+    const res = await fetch(`/api/scenes/${encodeURIComponent(sceneId)}/asset-bindings`, { cache: "no-store" });
+    if (!res.ok) throw new Error(await res.text());
+    const json = (await res.json()) as { data?: { scene_id: string; bindings: ApiAssetBindingBrief[] } };
+    setSceneAssetBindings(json.data?.bindings || []);
+  };
+
+  const refreshShotAssetBindingsMap = async (seriesId: string, sceneId: string) => {
+    const res = await fetch(`/api/scenes/${encodeURIComponent(sceneId)}/shot-asset-bindings`, { cache: "no-store" });
+    if (!res.ok) throw new Error(await res.text());
+    const json = (await res.json()) as { data?: { scene_id: string; shot_bindings: Record<string, ApiAssetBindingBrief[]> } };
+    const map = json.data?.shot_bindings || {};
+    setShotAssetBindingsMap(map);
+    const patch = (sc: Scene): Scene => {
+      const nextShots = sc.shots.map((s) => {
+        const bindings = map[s.id] || [];
+        const assets: AssetReference[] = bindings.map((b) => ({
+          id: b.asset_entity_id,
+          type: b.type === "character" ? "CHARACTER" : b.type === "scene" ? "SCENE" : b.type === "vfx" ? "VFX" : "PROP",
+          name: b.name,
+          category: b.category || undefined,
+        }));
+        return { ...s, assets };
+      });
+      return { ...sc, shots: nextShots };
+    };
+    setSeriesList((prev) => prev.map((s) => (s.id === seriesId ? patchSeriesScene(s, sceneId, patch) : s)));
+    setActiveSeries((prev) => (prev && prev.id === seriesId ? patchSeriesScene(prev, sceneId, patch) : prev));
+  };
+
+  useEffect(() => {
+    if (useMockApi) return;
+    if (!activeSeries?.id) return;
+    if (!activeSceneId) return;
+    const seriesId = activeSeries.id;
+    let cancelled = false;
+    (async () => {
+      try {
+        await refreshSceneShots(seriesId, activeSceneId);
+        await Promise.all([refreshSceneAssetBindings(activeSceneId), refreshShotAssetBindingsMap(seriesId, activeSceneId)]);
+      } catch (err) {
+        if (cancelled) return;
+        alert(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeSeries?.id, activeSceneId]);
+
+  const aiProviders = useMemo(() => {
+    const set = new Set(aiModels.map((m) => m.provider).filter(Boolean));
+    return Array.from(set).sort();
+  }, [aiModels]);
+
+  const aiModelsForProvider = useMemo(() => {
+    if (!aiProvider) return aiModels;
+    return aiModels.filter((m) => m.provider === aiProvider);
+  }, [aiModels, aiProvider]);
+
+  const assetProviders = useMemo(() => {
+    const set = new Set(assetModels.map((m) => m.provider).filter(Boolean));
+    return Array.from(set).sort();
+  }, [assetModels]);
+
+  const assetModelsForProvider = useMemo(() => {
+    if (!assetProvider) return assetModels;
+    return assetModels.filter((m) => m.provider === assetProvider);
+  }, [assetModels, assetProvider]);
+
+  const sbProviders = useMemo(() => {
+    const set = new Set(sbModels.map((m) => m.provider).filter(Boolean));
+    return Array.from(set).sort();
+  }, [sbModels]);
+
+  const sbModelsForProvider = useMemo(() => {
+    if (!sbProvider) return sbModels;
+    return sbModels.filter((m) => m.provider === sbProvider);
+  }, [sbModels, sbProvider]);
+
+  useEffect(() => {
+    if (!aiToolOpen) return;
+    if (useMockApi) return;
+    if (!activeEpisode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [modelsRes, presetsRes] = await Promise.all([
+          fetch("/api/ai/models", { cache: "no-store" }),
+          fetch("/api/ai/prompt-presets?tool_key=episode_scene_structure", { cache: "no-store" }),
+        ]);
+        if (!modelsRes.ok) throw new Error(await modelsRes.text());
+        if (!presetsRes.ok) throw new Error(await presetsRes.text());
+
+        const modelsJson = (await modelsRes.json()) as { data?: AIModelOption[] };
+        const presetsJson = (await presetsRes.json()) as { data?: AIPromptPreset[] };
+
+        if (cancelled) return;
+        const models = modelsJson.data || [];
+        const presets = presetsJson.data || [];
+        setAiModels(models);
+        setAiPresets(presets);
+
+        const defaultPreset = presets.find((p) => p.is_default) || presets[0];
+        if (defaultPreset) {
+          setAiPresetId(defaultPreset.id);
+          setAiPresetName(defaultPreset.name);
+          setAiPresetIsDefault(defaultPreset.is_default);
+          setAiPromptTemplate(defaultPreset.prompt_template);
+          if (defaultPreset.model) setAiModel(defaultPreset.model);
+          if (defaultPreset.provider) setAiProvider(defaultPreset.provider);
+        }
+
+        if (!defaultPreset && models.length > 0) {
+          const providers = Array.from(new Set(models.map((m) => m.provider))).filter(Boolean).sort();
+          const p0 = providers[0] || models[0].provider;
+          setAiProvider(p0);
+          const m0 = models.find((m) => m.provider === p0)?.model || models[0].model;
+          setAiModel(m0);
+        }
+      } catch (err) {
+        alert(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [aiToolOpen, activeEpisode?.id]);
+
+  useEffect(() => {
+    if (!aiToolOpen) return;
+    if (!aiProvider && aiProviders.length > 0) setAiProvider(aiProviders[0]);
+  }, [aiToolOpen, aiProviders]);
+
+  useEffect(() => {
+    if (!aiToolOpen) return;
+    if (!aiModel && aiModelsForProvider.length > 0) setAiModel(aiModelsForProvider[0].model);
+  }, [aiToolOpen, aiProvider, aiModelsForProvider]);
+
+  useEffect(() => {
+    if (!assetToolOpen) return;
+    if (useMockApi) return;
+    if (!activeEpisode) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [modelsRes, presetsRes] = await Promise.all([
+          fetch("/api/ai/models", { cache: "no-store" }),
+          fetch("/api/ai/prompt-presets?tool_key=episode_asset_extraction", { cache: "no-store" }),
+        ]);
+        if (!modelsRes.ok) throw new Error(await modelsRes.text());
+        if (!presetsRes.ok) throw new Error(await presetsRes.text());
+
+        const modelsJson = (await modelsRes.json()) as { data?: AIModelOption[] };
+        const presetsJson = (await presetsRes.json()) as { data?: AIPromptPreset[] };
+
+        if (cancelled) return;
+        const models = modelsJson.data || [];
+        const presets = presetsJson.data || [];
+        setAssetModels(models);
+        setAssetPresets(presets);
+
+        const defaultPreset = presets.find((p) => p.is_default) || presets[0];
+        if (defaultPreset) {
+          setAssetPresetId(defaultPreset.id);
+          setAssetPresetName(defaultPreset.name);
+          setAssetPresetIsDefault(defaultPreset.is_default);
+          setAssetPromptTemplate(defaultPreset.prompt_template);
+          if (defaultPreset.model) setAssetModel(defaultPreset.model);
+          if (defaultPreset.provider) setAssetProvider(defaultPreset.provider);
+        }
+
+        if (!defaultPreset && models.length > 0) {
+          const providers = Array.from(new Set(models.map((m) => m.provider))).filter(Boolean).sort();
+          const p0 = providers[0] || models[0].provider;
+          setAssetProvider(p0);
+          const m0 = models.find((m) => m.provider === p0)?.model || models[0].model;
+          setAssetModel(m0);
+        }
+      } catch (err) {
+        alert(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [assetToolOpen, activeEpisode?.id]);
+
+  useEffect(() => {
+    if (!assetToolOpen) return;
+    if (!assetProvider && assetProviders.length > 0) setAssetProvider(assetProviders[0]);
+  }, [assetToolOpen, assetProviders]);
+
+  useEffect(() => {
+    if (!assetToolOpen) return;
+    if (!assetModel && assetModelsForProvider.length > 0) setAssetModel(assetModelsForProvider[0].model);
+  }, [assetToolOpen, assetProvider, assetModelsForProvider]);
+
+  useEffect(() => {
+    if (!sbToolOpen) return;
+    if (useMockApi) return;
+    if (!activeScene) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const [modelsRes, presetsRes] = await Promise.all([
+          fetch("/api/ai/models", { cache: "no-store" }),
+          fetch("/api/ai/prompt-presets?tool_key=scene_storyboard", { cache: "no-store" }),
+        ]);
+        if (!modelsRes.ok) throw new Error(await modelsRes.text());
+        if (!presetsRes.ok) throw new Error(await presetsRes.text());
+
+        const modelsJson = (await modelsRes.json()) as { data?: AIModelOption[] };
+        const presetsJson = (await presetsRes.json()) as { data?: AIPromptPreset[] };
+
+        if (cancelled) return;
+        const models = modelsJson.data || [];
+        const presets = presetsJson.data || [];
+        setSbModels(models);
+        setSbPresets(presets);
+
+        const defaultPreset = presets.find((p) => p.is_default) || presets[0];
+        if (defaultPreset) {
+          setSbPresetId(defaultPreset.id);
+          setSbPresetName(defaultPreset.name);
+          setSbPresetIsDefault(defaultPreset.is_default);
+          setSbPromptTemplate(defaultPreset.prompt_template);
+          if (defaultPreset.model) setSbModel(defaultPreset.model);
+          if (defaultPreset.provider) setSbProvider(defaultPreset.provider);
+        }
+
+        if (!defaultPreset && models.length > 0) {
+          const providers = Array.from(new Set(models.map((m) => m.provider))).filter(Boolean).sort();
+          const p0 = providers[0] || models[0].provider;
+          setSbProvider(p0);
+          const m0 = models.find((m) => m.provider === p0)?.model || models[0].model;
+          setSbModel(m0);
+        }
+      } catch (err) {
+        alert(err instanceof Error ? err.message : String(err));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sbToolOpen, activeScene?.id]);
+
+  useEffect(() => {
+    if (!sbToolOpen) return;
+    if (!sbProvider && sbProviders.length > 0) setSbProvider(sbProviders[0]);
+  }, [sbToolOpen, sbProviders]);
+
+  useEffect(() => {
+    if (!sbToolOpen) return;
+    if (!sbModel && sbModelsForProvider.length > 0) setSbModel(sbModelsForProvider[0].model);
+  }, [sbToolOpen, sbProvider, sbModelsForProvider]);
+
+  const openAiTool = () => {
+    if (!activeEpisode) {
+      alert("请选择一个剧集");
+      return;
+    }
+    setAiFinalPrompt("");
+    setAiRawText("");
+    setAiScenes([]);
+    setAiToolOpen(true);
+  };
+
+  const closeAiTool = () => {
+    setAiToolOpen(false);
+  };
+
+  const openAssetTool = () => {
+    if (!activeEpisode) {
+      alert("请选择一个剧集");
+      return;
+    }
+    setAssetFinalPrompt("");
+    setAssetRawText("");
+    setAssetWorldUnity(null);
+    setAssetDraftAssets([]);
+    setAssetToolOpen(true);
+  };
+
+  const closeAssetTool = () => {
+    setAssetToolOpen(false);
+  };
+
+  useEffect(() => {
+    if (!episodeActionsOpen) return;
+    const handler = () => setEpisodeActionsOpen(false);
+    window.addEventListener("click", handler);
+    return () => {
+      window.removeEventListener("click", handler);
+    };
+  }, [episodeActionsOpen]);
+
+  useEffect(() => {
+    if (!sceneActionsOpen) return;
+    const handler = () => setSceneActionsOpen(false);
+    window.addEventListener("click", handler);
+    return () => {
+      window.removeEventListener("click", handler);
+    };
+  }, [sceneActionsOpen]);
+
+  useEffect(() => {
+    if (!selectedShotId) return;
+    const el = document.getElementById(`shot-${selectedShotId}`);
+    if (!el) return;
+    el.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [selectedShotId]);
+
+  const openSbTool = (preferredMode?: "replace" | "append") => {
+    if (!activeScene) {
+      alert("请选择一个分场");
+      return;
+    }
+    if (preferredMode) setSbApplyMode(preferredMode);
+    else if (activeScene.shots.length > 0) setSbApplyMode("replace");
+    setSbFinalPrompt("");
+    setSbRawText("");
+    setSbShots([]);
+    setSbToolOpen(true);
+  };
+
+  const closeSbTool = () => {
+    setSbToolOpen(false);
+  };
+
+  const handleAiPreviewPrompt = async () => {
+    if (useMockApi) return;
+    if (!activeEpisode) return;
+    if (!aiModel) {
+      alert("请选择模型");
+      return;
+    }
+    setAiIsLoading(true);
+    try {
+      const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/ai/scene-structure/prompt-preview`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: aiModel, provider: aiProvider || null, prompt_template: aiPromptTemplate }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: { final_prompt?: string } };
+      setAiFinalPrompt(json.data?.final_prompt || "");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAiIsLoading(false);
+    }
+  };
+
+  const handleAssetPreviewPrompt = async () => {
+    if (useMockApi) return;
+    if (!activeEpisode) return;
+    if (!assetModel) {
+      alert("请选择模型");
+      return;
+    }
+    setAssetIsLoading(true);
+    try {
+      const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/ai/asset-extraction/prompt-preview`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: assetModel, provider: assetProvider || null, prompt_template: assetPromptTemplate }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: { final_prompt?: string } };
+      setAssetFinalPrompt(json.data?.final_prompt || "");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssetIsLoading(false);
+    }
+  };
+
+  const handleAssetRunPreview = async () => {
+    if (useMockApi) return;
+    if (!activeEpisode) return;
+    if (!assetModel) {
+      alert("请选择模型");
+      return;
+    }
+    setAssetIsLoading(true);
+    try {
+      const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/ai/asset-extraction/preview`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: assetModel, provider: assetProvider || null, prompt_template: assetPromptTemplate }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: { final_prompt?: string; raw_text?: string; world_unity?: AIWorldUnityDraft | null; assets?: AIAssetDraft[] } };
+      setAssetFinalPrompt(json.data?.final_prompt || "");
+      setAssetRawText(json.data?.raw_text || "");
+      setAssetWorldUnity(json.data?.world_unity || null);
+      setAssetDraftAssets(json.data?.assets || []);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssetIsLoading(false);
+    }
+  };
+
+  const handleAssetApply = async () => {
+    if (useMockApi) return;
+    if (!activeSeries || !activeEpisode) return;
+    if (assetDraftAssets.length === 0) {
+      alert("没有可落库的资产结果");
+      return;
+    }
+    if (assetApplyMode === "replace" && (activeEpisode.assets || []).length > 0) {
+      const ok = confirm("当前剧集已有资产绑定，确认覆盖重建吗？");
+      if (!ok) return;
+    }
+    setAssetIsApplying(true);
+    try {
+      const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/ai/asset-extraction/apply`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: assetApplyMode, world_unity: assetWorldUnity, assets: assetDraftAssets }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await refreshHierarchy(activeSeries.id);
+      setAssetToolOpen(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssetIsApplying(false);
+    }
+  };
+
+  const handleAiRunPreview = async () => {
+    if (useMockApi) return;
+    if (!activeEpisode) return;
+    if (!aiModel) {
+      alert("请选择模型");
+      return;
+    }
+    setAiIsLoading(true);
+    try {
+      const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/ai/scene-structure/preview`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: aiModel, provider: aiProvider || null, prompt_template: aiPromptTemplate }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: { final_prompt?: string; raw_text?: string; scenes?: AISceneDraft[] } };
+      setAiFinalPrompt(json.data?.final_prompt || "");
+      setAiRawText(json.data?.raw_text || "");
+      setAiScenes(json.data?.scenes || []);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAiIsLoading(false);
+    }
+  };
+
+  const handleAiApply = async () => {
+    if (useMockApi) return;
+    if (!activeSeries || !activeEpisode) return;
+    if (aiScenes.length === 0) {
+      alert("没有可落库的分场结果");
+      return;
+    }
+    if (aiApplyMode === "replace" && activeEpisode.scenes.length > 0) {
+      const ok = confirm("当前剧集已有场景，确认覆盖重建吗？");
+      if (!ok) return;
+    }
+    setAiIsApplying(true);
+    try {
+      const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/ai/scene-structure/apply`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: aiApplyMode, scenes: aiScenes }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      await refreshHierarchy(activeSeries.id);
+      setActiveSceneId(null);
+      setAiToolOpen(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAiIsApplying(false);
+    }
+  };
+
+  const handleSbPreviewPrompt = async () => {
+    if (useMockApi) return;
+    if (!activeScene) return;
+    if (!sbModel) {
+      alert("请选择模型");
+      return;
+    }
+    setSbIsLoading(true);
+    try {
+      const res = await fetch(`/api/scenes/${encodeURIComponent(activeScene.id)}/ai/storyboard/prompt-preview`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: sbModel, provider: sbProvider || null, prompt_template: sbPromptTemplate }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: { final_prompt?: string } };
+      setSbFinalPrompt(json.data?.final_prompt || "");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSbIsLoading(false);
+    }
+  };
+
+  const handleSbRunPreview = async () => {
+    if (useMockApi) return;
+    if (!activeScene) return;
+    if (!sbModel) {
+      alert("请选择模型");
+      return;
+    }
+    setSbIsLoading(true);
+    try {
+      const res = await fetch(`/api/scenes/${encodeURIComponent(activeScene.id)}/ai/storyboard/preview`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ model: sbModel, provider: sbProvider || null, prompt_template: sbPromptTemplate }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: { final_prompt?: string; raw_text?: string; shots?: AIShotDraft[] } };
+      setSbFinalPrompt(json.data?.final_prompt || "");
+      setSbRawText(json.data?.raw_text || "");
+      setSbShots(json.data?.shots || []);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSbIsLoading(false);
+    }
+  };
+
+  const handleSbApply = async () => {
+    if (useMockApi) return;
+    if (!activeScene) return;
+    if (sbShots.length === 0) {
+      alert("没有可落库的分镜结果");
+      return;
+    }
+    if (sbApplyMode === "replace" && activeScene.shots.length > 0) {
+      const ok = confirm("当前分场已有分镜，确认覆盖重建吗？");
+      if (!ok) return;
+    }
+    setSbIsApplying(true);
+    try {
+      const res = await fetch(`/api/scenes/${encodeURIComponent(activeScene.id)}/ai/storyboard/apply`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ mode: sbApplyMode, shots: sbShots }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      if (activeSeries?.id) await refreshSceneShots(activeSeries.id, activeScene.id);
+      setSbToolOpen(false);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSbIsApplying(false);
+    }
+  };
+
+  const handleSbSavePreset = async () => {
+    if (useMockApi) return;
+    const name = sbPresetName.trim();
+    if (!name) {
+      alert("请输入提示词名称");
+      return;
+    }
+    setSbIsLoading(true);
+    try {
+      if (sbPresetId) {
+        const res = await fetch(`/api/ai/prompt-presets/${encodeURIComponent(sbPresetId)}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name,
+            provider: sbProvider || null,
+            model: sbModel || null,
+            prompt_template: sbPromptTemplate,
+            is_default: sbPresetIsDefault,
+          }),
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(await res.text());
+      } else {
+        const res = await fetch("/api/ai/prompt-presets", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            tool_key: "scene_storyboard",
+            name,
+            provider: sbProvider || null,
+            model: sbModel || null,
+            prompt_template: sbPromptTemplate,
+            is_default: sbPresetIsDefault,
+          }),
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(await res.text());
+      }
+      const presetsRes = await fetch("/api/ai/prompt-presets?tool_key=scene_storyboard", { cache: "no-store" });
+      if (!presetsRes.ok) throw new Error(await presetsRes.text());
+      const presetsJson = (await presetsRes.json()) as { data?: AIPromptPreset[] };
+      const presets = presetsJson.data || [];
+      setSbPresets(presets);
+      const current = presets.find((p) => p.name === name) || presets.find((p) => p.is_default) || presets[0];
+      if (current) {
+        setSbPresetId(current.id);
+        setSbPresetIsDefault(current.is_default);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSbIsLoading(false);
+    }
+  };
+
+  const handleSbDeletePreset = async () => {
+    if (useMockApi) return;
+    if (!sbPresetId) return;
+    const ok = confirm("确认删除该提示词吗？");
+    if (!ok) return;
+    setSbIsLoading(true);
+    try {
+      const res = await fetch(`/api/ai/prompt-presets/${encodeURIComponent(sbPresetId)}`, { method: "DELETE", cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text());
+      const presetsRes = await fetch("/api/ai/prompt-presets?tool_key=scene_storyboard", { cache: "no-store" });
+      if (!presetsRes.ok) throw new Error(await presetsRes.text());
+      const presetsJson = (await presetsRes.json()) as { data?: AIPromptPreset[] };
+      const presets = presetsJson.data || [];
+      setSbPresets(presets);
+      const next = presets.find((p) => p.is_default) || presets[0];
+      setSbPresetId(next?.id || "");
+      setSbPresetName(next?.name || "");
+      setSbPresetIsDefault(next?.is_default || false);
+      setSbPromptTemplate(next?.prompt_template || "请将分场剧本拆解为分镜列表，输出镜头信息。");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSbIsLoading(false);
+    }
+  };
+
+  const handleSbSelectPreset = (presetId: string) => {
+    setSbPresetId(presetId);
+    const p = sbPresets.find((x) => x.id === presetId);
+    if (!p) return;
+    setSbPresetName(p.name);
+    setSbPresetIsDefault(p.is_default);
+    setSbPromptTemplate(p.prompt_template);
+    if (p.provider) setSbProvider(p.provider);
+    if (p.model) setSbModel(p.model);
+  };
+
+  const handleAiSavePreset = async () => {
+    if (useMockApi) return;
+    const name = aiPresetName.trim();
+    if (!name) {
+      alert("请输入提示词名称");
+      return;
+    }
+    setAiIsLoading(true);
+    try {
+      if (aiPresetId) {
+        const res = await fetch(`/api/ai/prompt-presets/${encodeURIComponent(aiPresetId)}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name,
+            provider: aiProvider || null,
+            model: aiModel || null,
+            prompt_template: aiPromptTemplate,
+            is_default: aiPresetIsDefault,
+          }),
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(await res.text());
+      } else {
+        const res = await fetch("/api/ai/prompt-presets", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            tool_key: "episode_scene_structure",
+            name,
+            provider: aiProvider || null,
+            model: aiModel || null,
+            prompt_template: aiPromptTemplate,
+            is_default: aiPresetIsDefault,
+          }),
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(await res.text());
+      }
+      const presetsRes = await fetch("/api/ai/prompt-presets?tool_key=episode_scene_structure", { cache: "no-store" });
+      if (!presetsRes.ok) throw new Error(await presetsRes.text());
+      const presetsJson = (await presetsRes.json()) as { data?: AIPromptPreset[] };
+      const presets = presetsJson.data || [];
+      setAiPresets(presets);
+      const current = presets.find((p) => p.name === name) || presets.find((p) => p.is_default) || presets[0];
+      if (current) {
+        setAiPresetId(current.id);
+        setAiPresetIsDefault(current.is_default);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAiIsLoading(false);
+    }
+  };
+
+  const handleAiDeletePreset = async () => {
+    if (useMockApi) return;
+    if (!aiPresetId) return;
+    const ok = confirm("确认删除该提示词吗？");
+    if (!ok) return;
+    setAiIsLoading(true);
+    try {
+      const res = await fetch(`/api/ai/prompt-presets/${encodeURIComponent(aiPresetId)}`, { method: "DELETE", cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text());
+      const presetsRes = await fetch("/api/ai/prompt-presets?tool_key=episode_scene_structure", { cache: "no-store" });
+      if (!presetsRes.ok) throw new Error(await presetsRes.text());
+      const presetsJson = (await presetsRes.json()) as { data?: AIPromptPreset[] };
+      const presets = presetsJson.data || [];
+      setAiPresets(presets);
+      const next = presets.find((p) => p.is_default) || presets[0];
+      setAiPresetId(next?.id || "");
+      setAiPresetName(next?.name || "");
+      setAiPresetIsDefault(next?.is_default || false);
+      setAiPromptTemplate(next?.prompt_template || "请根据剧集剧本正文生成结构化分场信息。");
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAiIsLoading(false);
+    }
+  };
+
+  const handleAiSelectPreset = (presetId: string) => {
+    setAiPresetId(presetId);
+    const p = aiPresets.find((x) => x.id === presetId);
+    if (!p) return;
+    setAiPresetName(p.name);
+    setAiPresetIsDefault(p.is_default);
+    setAiPromptTemplate(p.prompt_template);
+    if (p.provider) setAiProvider(p.provider);
+    if (p.model) setAiModel(p.model);
+  };
+
+  const handleAssetSavePreset = async () => {
+    if (useMockApi) return;
+    const name = assetPresetName.trim();
+    if (!name) {
+      alert("请输入提示词名称");
+      return;
+    }
+    setAssetIsLoading(true);
+    try {
+      if (assetPresetId) {
+        const res = await fetch(`/api/ai/prompt-presets/${encodeURIComponent(assetPresetId)}`, {
+          method: "PUT",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            name,
+            provider: assetProvider || null,
+            model: assetModel || null,
+            prompt_template: assetPromptTemplate,
+            is_default: assetPresetIsDefault,
+          }),
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(await res.text());
+      } else {
+        const res = await fetch("/api/ai/prompt-presets", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            tool_key: "episode_asset_extraction",
+            name,
+            provider: assetProvider || null,
+            model: assetModel || null,
+            prompt_template: assetPromptTemplate,
+            is_default: assetPresetIsDefault,
+          }),
+          cache: "no-store",
+        });
+        if (!res.ok) throw new Error(await res.text());
+      }
+      const presetsRes = await fetch("/api/ai/prompt-presets?tool_key=episode_asset_extraction", { cache: "no-store" });
+      if (!presetsRes.ok) throw new Error(await presetsRes.text());
+      const presetsJson = (await presetsRes.json()) as { data?: AIPromptPreset[] };
+      const presets = presetsJson.data || [];
+      setAssetPresets(presets);
+      const current = presets.find((p) => p.name === name) || presets.find((p) => p.is_default) || presets[0];
+      if (current) {
+        setAssetPresetId(current.id);
+        setAssetPresetIsDefault(current.is_default);
+      }
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssetIsLoading(false);
+    }
+  };
+
+  const handleAssetDeletePreset = async () => {
+    if (useMockApi) return;
+    if (!assetPresetId) return;
+    const ok = confirm("确认删除该提示词吗？");
+    if (!ok) return;
+    setAssetIsLoading(true);
+    try {
+      const res = await fetch(`/api/ai/prompt-presets/${encodeURIComponent(assetPresetId)}`, { method: "DELETE", cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text());
+      const presetsRes = await fetch("/api/ai/prompt-presets?tool_key=episode_asset_extraction", { cache: "no-store" });
+      if (!presetsRes.ok) throw new Error(await presetsRes.text());
+      const presetsJson = (await presetsRes.json()) as { data?: AIPromptPreset[] };
+      const presets = presetsJson.data || [];
+      setAssetPresets(presets);
+      const next = presets.find((p) => p.is_default) || presets[0];
+      setAssetPresetId(next?.id || "");
+      setAssetPresetName(next?.name || "");
+      setAssetPresetIsDefault(next?.is_default || false);
+      setAssetPromptTemplate(next?.prompt_template || assetPromptTemplate);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssetIsLoading(false);
+    }
+  };
+
+  const handleAssetSelectPreset = (presetId: string) => {
+    setAssetPresetId(presetId);
+    const p = assetPresets.find((x) => x.id === presetId);
+    if (!p) return;
+    setAssetPresetName(p.name);
+    setAssetPresetIsDefault(p.is_default);
+    setAssetPromptTemplate(p.prompt_template);
+    if (p.provider) setAssetProvider(p.provider);
+    if (p.model) setAssetModel(p.model);
+  };
+
   const handleOpenAssetBindModal = (shot: Shot) => {
-    const currentAssetIds = new Set(shot.assets?.map((a) => a.id) || []);
-    setTempSelectedAssetIds(currentAssetIds);
+    if (useMockApi) {
+      const currentAssetIds = new Set(shot.assets?.map((a) => a.id) || []);
+      setTempSelectedAssetIds(currentAssetIds);
+    } else {
+      const current = shotAssetBindingsMap[shot.id] || [];
+      setTempSelectedAssetIds(new Set(current.map((b) => b.asset_entity_id)));
+    }
     setAssetSearchQuery("");
     setAssetBindModal({ isOpen: true, shotId: shot.id });
   };
@@ -474,10 +1566,43 @@ export default function Page() {
     setTempSelectedAssetIds(newSet);
   };
 
-  const handleSaveAssetBinding = () => {
+  const handleSaveAssetBinding = async () => {
     if (!activeSeries || !activeEpisodeId || !activeSceneId || !assetBindModal.shotId) return;
 
-    const selectedAssets = MOCK_ASSETS_POOL.filter((a) => tempSelectedAssetIds.has(a.id));
+    if (!useMockApi) {
+      const shotId = assetBindModal.shotId;
+      const current = shotAssetBindingsMap[shotId] || [];
+      const currentIds = new Set(current.map((b) => b.asset_entity_id));
+      const nextIds = new Set(tempSelectedAssetIds);
+
+      const toAdd = Array.from(nextIds).filter((id) => !currentIds.has(id));
+      const toRemove = current.filter((b) => !nextIds.has(b.asset_entity_id));
+
+      try {
+        await Promise.all([
+          ...toAdd.map(async (assetEntityId) => {
+            const res = await fetch(`/api/shots/${encodeURIComponent(shotId)}/asset-bindings`, {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ asset_entity_id: assetEntityId, asset_variant_id: null }),
+              cache: "no-store",
+            });
+            if (!res.ok) throw new Error(await res.text());
+          }),
+          ...toRemove.map(async (b) => {
+            const res = await fetch(`/api/asset-bindings/${encodeURIComponent(b.id)}`, { method: "DELETE", cache: "no-store" });
+            if (!res.ok) throw new Error(await res.text());
+          }),
+        ]);
+        await refreshShotAssetBindingsMap(activeSeries.id, activeSceneId);
+        setAssetBindModal({ isOpen: false, shotId: null });
+      } catch (err) {
+        alert(err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
+
+    const selectedAssets = assetBindPool.filter((a) => tempSelectedAssetIds.has(a.id));
     const updatedSeries = {
       ...activeSeries,
       episodes: activeSeries.episodes.map((ep) => {
@@ -496,6 +1621,130 @@ export default function Page() {
     };
     updateActiveSeries(updatedSeries);
     setAssetBindModal({ isOpen: false, shotId: null });
+  };
+
+  const openAssetEditor = async (assetId: string) => {
+    if (useMockApi) {
+      router.push(`/assets?mode=list&assetId=${encodeURIComponent(assetId)}`);
+      return;
+    }
+    setAssetEditorAssetId(assetId);
+    setAssetEditorData(null);
+    setAssetEditorSelectedVariantId(null);
+    setAssetEditorOpen(true);
+    setAssetEditorIsLoading(true);
+    try {
+      const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}`, { cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: ApiAssetRead };
+      const data = json.data || null;
+      setAssetEditorData(data);
+      const defaultVariant = data?.variants.find((v) => v.is_default) || data?.variants[0];
+      setAssetEditorSelectedVariantId(defaultVariant?.id || null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+      setAssetEditorOpen(false);
+    } finally {
+      setAssetEditorIsLoading(false);
+    }
+  };
+
+  const closeAssetEditor = () => {
+    setAssetEditorOpen(false);
+    setAssetEditorAssetId(null);
+    setAssetEditorData(null);
+    setAssetEditorSelectedVariantId(null);
+  };
+
+  const saveAssetEditor = async () => {
+    if (useMockApi) return;
+    if (!assetEditorAssetId || !assetEditorData) return;
+    setAssetEditorIsSaving(true);
+    try {
+      const res = await fetch(`/api/assets/${encodeURIComponent(assetEditorAssetId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          name: assetEditorData.name,
+          category: assetEditorData.category,
+          lifecycle_status: assetEditorData.lifecycle_status,
+          tags: assetEditorData.tags,
+        }),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: ApiAssetRead };
+      setAssetEditorData(json.data || null);
+      if (activeSeries) await refreshHierarchy(activeSeries.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssetEditorIsSaving(false);
+    }
+  };
+
+  const createAssetVariant = async () => {
+    if (useMockApi) return;
+    if (!assetEditorAssetId) return;
+    setAssetEditorIsSaving(true);
+    try {
+      const res = await fetch(`/api/assets/${encodeURIComponent(assetEditorAssetId)}/variants`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: ApiAssetRead };
+      const data = json.data || null;
+      setAssetEditorData(data);
+      const v = data?.variants[data.variants.length - 1];
+      if (v) setAssetEditorSelectedVariantId(v.id);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssetEditorIsSaving(false);
+    }
+  };
+
+  const updateAssetVariant = async (variantId: string, patch: Partial<ApiAssetVariantRead>) => {
+    if (useMockApi) return;
+    setAssetEditorIsSaving(true);
+    try {
+      const res = await fetch(`/api/asset-variants/${encodeURIComponent(variantId)}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(patch),
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: ApiAssetRead };
+      setAssetEditorData(json.data || null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssetEditorIsSaving(false);
+    }
+  };
+
+  const deleteAssetVariant = async (variantId: string) => {
+    if (useMockApi) return;
+    const ok = confirm("确认删除该变体？");
+    if (!ok) return;
+    setAssetEditorIsSaving(true);
+    try {
+      const res = await fetch(`/api/asset-variants/${encodeURIComponent(variantId)}`, { method: "DELETE", cache: "no-store" });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: ApiAssetRead };
+      const data = json.data || null;
+      setAssetEditorData(data);
+      const defaultVariant = data?.variants.find((v) => v.is_default) || data?.variants[0];
+      setAssetEditorSelectedVariantId(defaultVariant?.id || null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAssetEditorIsSaving(false);
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -696,8 +1945,8 @@ export default function Page() {
     setEpisodeModal((prev) => ({ ...prev, isOpen: false }));
   };
 
-  const handleDeleteEpisode = (epId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteEpisode = (epId: string, e?: { stopPropagation?: () => void }) => {
+    e?.stopPropagation?.();
     if (!activeSeries) return;
     if (!confirm("确定删除此集吗？")) return;
     const updatedSeries = { ...activeSeries, episodes: activeSeries.episodes.filter((ep) => ep.id !== epId) };
@@ -788,8 +2037,8 @@ export default function Page() {
     setSceneModal((prev) => ({ ...prev, isOpen: false }));
   };
 
-  const handleDeleteScene = async (epId: string, scId: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+  const handleDeleteScene = async (epId: string, scId: string, e?: { stopPropagation?: () => void }) => {
+    e?.stopPropagation?.();
     if (!activeSeries) return;
     if (!confirm("确定删除此场次吗？")) return;
 
@@ -807,7 +2056,12 @@ export default function Page() {
 
     const updatedSeries = {
       ...activeSeries,
-      episodes: activeSeries.episodes.map((ep) => (ep.id === epId ? { ...ep, scenes: ep.scenes.filter((sc) => sc.id !== scId) } : ep)),
+      episodes: activeSeries.episodes.map((ep) => {
+        if (ep.id !== epId) return ep;
+        const kept = ep.scenes.filter((sc) => sc.id !== scId);
+        const reindexed = kept.map((sc, idx) => ({ ...sc, number: idx + 1 }));
+        return { ...ep, scenes: reindexed };
+      }),
     };
     updateActiveSeries(updatedSeries);
     if (activeSceneId === scId) setActiveSceneId(null);
@@ -815,6 +2069,10 @@ export default function Page() {
 
   const handleAddShot = () => {
     if (!activeSeries || !activeEpisodeId || !activeSceneId) return;
+    if (!useMockApi) {
+      alert("当前版本暂不支持手动新增分镜，请使用 AI 工具生成。");
+      return;
+    }
     const newShot: Shot = { id: `shot-${Date.now()}`, number: (activeScene?.shots.length || 0) + 1, visual: "画面描述...", dialogue: "", camera: "Wide Shot", duration: "3s", keyframes: [], assets: [] };
     const updatedSeries = {
       ...activeSeries,
@@ -827,13 +2085,33 @@ export default function Page() {
     updateActiveSeries(updatedSeries);
   };
 
-  const handleDeleteShot = (shotId: string) => {
+  const handleDeleteShot = async (shotId: string) => {
     if (!activeSeries || !activeEpisodeId || !activeSceneId) return;
+    if (!confirm("确认删除该分镜？")) return;
+
+    if (!useMockApi) {
+      try {
+        const res = await fetch(`/api/shots/${encodeURIComponent(shotId)}`, { method: "DELETE", cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        if (activeSeries?.id) await refreshSceneShots(activeSeries.id, activeSceneId);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
     const updatedSeries = {
       ...activeSeries,
       episodes: activeSeries.episodes.map((ep) =>
         ep.id === activeEpisodeId
-          ? { ...ep, scenes: ep.scenes.map((sc) => (sc.id === activeSceneId ? { ...sc, shots: sc.shots.filter((s) => s.id !== shotId) } : sc)) }
+          ? {
+              ...ep,
+              scenes: ep.scenes.map((sc) => {
+                if (sc.id !== activeSceneId) return sc;
+                const kept = sc.shots.filter((s) => s.id !== shotId);
+                const reindexed = kept.map((s, idx) => ({ ...s, number: idx + 1 }));
+                return { ...sc, shots: reindexed };
+              }),
+            }
           : ep,
       ),
     };
@@ -858,8 +2136,20 @@ export default function Page() {
     updateActiveSeries(updatedSeries);
   };
 
-  const handleUnbindAsset = (shotId: string, assetId: string) => {
+  const handleUnbindAsset = async (shotId: string, assetId: string) => {
     if (!activeSeries || !activeEpisodeId || !activeSceneId) return;
+    if (!useMockApi) {
+      const binding = (shotAssetBindingsMap[shotId] || []).find((b) => b.asset_entity_id === assetId);
+      if (!binding) return;
+      try {
+        const res = await fetch(`/api/asset-bindings/${encodeURIComponent(binding.id)}`, { method: "DELETE", cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        await refreshShotAssetBindingsMap(activeSeries.id, activeSceneId);
+      } catch (err) {
+        alert(err instanceof Error ? err.message : String(err));
+      }
+      return;
+    }
     const updatedSeries = {
       ...activeSeries,
       episodes: activeSeries.episodes.map((ep) =>
@@ -895,15 +2185,26 @@ export default function Page() {
       if (!res.ok) {
         throw new Error(await res.text());
       }
-      const json = (await res.json()) as any;
-      const apiEpisodes = (json?.data?.episodes || []) as Array<{
-        id: string;
-        episode_number: number;
-        title?: string | null;
-        script_full_text?: string | null;
-        scenes?: Array<{ id: string; scene_number: number; title?: string | null; content?: string | null; location?: string | null; time_of_day?: string | null }>;
-        assets?: Array<{ id: string; asset_id: string; name: string; type: string }>;
-      }>;
+      const json = (await res.json()) as {
+        data?: {
+          episodes?: Array<{
+            id: string;
+            episode_number: number;
+            title?: string | null;
+            script_full_text?: string | null;
+            scenes?: Array<{
+              id: string;
+              scene_number: number;
+              title?: string | null;
+              content?: string | null;
+              location?: string | null;
+              time_of_day?: string | null;
+            }>;
+            assets?: Array<{ id: string; asset_id: string; name: string; type: string; category?: string | null }>;
+          }>;
+        };
+      };
+      const apiEpisodes = json.data?.episodes || [];
 
       const mappedEpisodes = mapApiEpisodes(apiEpisodes);
 
@@ -953,14 +2254,6 @@ export default function Page() {
             <ArrowLeft size={16} />
           </button>
           <span className="font-bold text-sm truncate flex-1">{activeSeries?.title}</span>
-          <button
-            onClick={() => openEpisodeModal()}
-            className="p-1.5 hover:bg-surfaceHighlight rounded-lg text-primary transition-colors"
-            title="Add Episode"
-            type="button"
-          >
-            <Plus size={16} />
-          </button>
         </div>
 
         {isEmpty ? (
@@ -978,6 +2271,13 @@ export default function Page() {
               type="button"
             >
               {isBreakingDown ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />} 剧本结构化处理
+            </button>
+            <button
+              onClick={() => openEpisodeModal()}
+              className="w-full py-2 bg-surface border border-border hover:border-primary/40 text-textMuted hover:text-primary rounded-lg text-xs font-bold flex items-center justify-center gap-2 transition-all"
+              type="button"
+            >
+              <Plus size={14} /> 新增剧集
             </button>
           </div>
         ) : (
@@ -1000,35 +2300,6 @@ export default function Page() {
                     {activeEpisodeId === ep.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                     <span className="truncate flex-1 text-left">EP{ep.number}: {ep.title}</span>
                   </button>
-                  <div className="absolute right-2 hidden group-hover:flex items-center bg-surfaceHighlight rounded-md shadow-sm border border-border">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openSceneModal(ep.id);
-                      }}
-                      className="p-1 hover:text-primary transition-colors"
-                      type="button"
-                    >
-                      <Plus size={12} />
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openEpisodeModal(ep);
-                      }}
-                      className="p-1 hover:text-blue-400 transition-colors"
-                      type="button"
-                    >
-                      <Pencil size={12} />
-                    </button>
-                    <button
-                      onClick={(e) => handleDeleteEpisode(ep.id, e)}
-                      className="p-1 hover:text-red-400 transition-colors"
-                      type="button"
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
                 </div>
                 {activeEpisodeId === ep.id && (
                   <div className="ml-3 pl-2 border-l border-border mt-1 space-y-0.5 animate-fade-in">
@@ -1053,34 +2324,26 @@ export default function Page() {
                           />
                           <span className="truncate flex-1">{sc.title}</span>
                         </button>
-                        <div className="absolute right-2 top-1.5 hidden group-hover:flex items-center bg-surface rounded-md shadow-sm border border-border">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openSceneModal(ep.id, sc);
-                            }}
-                            className="p-1 hover:text-blue-400 transition-colors"
-                            type="button"
-                          >
-                            <Pencil size={10} />
-                          </button>
-                          <button
-                            onClick={(e) => handleDeleteScene(ep.id, sc.id, e)}
-                            className="p-1 hover:text-red-400 transition-colors"
-                            type="button"
-                          >
-                            <Trash2 size={10} />
-                          </button>
-                        </div>
+                        {activeSceneId === sc.id && sc.shots.length > 0 && (
+                          <div className="ml-4 mt-1 space-y-0.5">
+                            {sc.shots.map((shot) => (
+                              <button
+                                key={shot.id}
+                                onClick={() => setSelectedShotId(shot.id)}
+                                className="w-full text-left px-3 py-2 rounded-lg text-xs text-textMuted hover:bg-surfaceHighlight/50 hover:text-textMain transition-colors flex items-center gap-2"
+                                type="button"
+                              >
+                                <span className="w-5 text-right font-mono">{shot.number}</span>
+                                <span className="truncate flex-1">{shot.visual || "（无描述）"}</span>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                        {activeSceneId === sc.id && sc.shots.length === 0 && (
+                          <div className="ml-7 mt-1 text-xs text-textMuted/60">暂无分镜</div>
+                        )}
                       </div>
                     ))}
-                    <button
-                      onClick={() => openSceneModal(ep.id)}
-                      className="w-full text-left px-3 py-2 text-[10px] text-textMuted/50 hover:text-primary transition-colors flex items-center gap-1"
-                      type="button"
-                    >
-                      <Plus size={10} /> 添加场次
-                    </button>
                   </div>
                 )}
               </div>
@@ -1223,7 +2486,16 @@ export default function Page() {
             ) : (
               <div className="flex-1 bg-background flex flex-col min-w-0 h-full">
                 {!activeEpisode ? (
-                  <div className="flex-1 flex items-center justify-center text-sm text-textMuted">请选择一个剧集</div>
+                  <div className="flex-1 flex flex-col items-center justify-center text-sm text-textMuted gap-3">
+                    <div>请选择一个剧集</div>
+                    <button
+                      onClick={() => openEpisodeModal()}
+                      className="px-4 py-2 bg-surface border border-border hover:border-primary/40 text-textMuted hover:text-primary rounded-lg text-xs font-bold flex items-center gap-2 transition-all"
+                      type="button"
+                    >
+                      <Plus size={14} /> 新增剧集
+                    </button>
+                  </div>
                 ) : !activeSceneId ? (
                   <div className="flex-1 overflow-hidden flex flex-col">
                     <div className="h-12 border-b border-border bg-surface/50 backdrop-blur flex items-center justify-between px-4">
@@ -1236,7 +2508,91 @@ export default function Page() {
                     <div className="flex-1 overflow-y-auto p-4 lg:p-8">
                       <div className="max-w-4xl mx-auto space-y-6">
                         <div className="rounded-xl border border-border bg-surface overflow-hidden">
-                          <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">剧集剧本</div>
+                          <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm flex items-center justify-between">
+                            <span>剧集剧本</span>
+                            <div className="relative flex items-center gap-2">
+                              <button
+                                onClick={openAiTool}
+                                disabled={useMockApi}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors flex items-center gap-2 disabled:opacity-50"
+                                type="button"
+                                title="分场拆解（结构化分场）"
+                              >
+                                <Sparkles size={14} /> 分场拆解
+                              </button>
+                              <button
+                                onClick={openAssetTool}
+                                disabled={useMockApi}
+                                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors flex items-center gap-2 disabled:opacity-50"
+                                type="button"
+                                title="资产提取（按资产架构落库并绑定）"
+                              >
+                                <Sparkles size={14} /> 资产提取
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setEpisodeActionsOpen((v) => !v);
+                                }}
+                                className="p-1.5 rounded-lg border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                                type="button"
+                                title="剧集操作"
+                              >
+                                <Settings size={14} />
+                              </button>
+                              {episodeActionsOpen && (
+                                <div
+                                  className="absolute right-0 top-9 w-44 rounded-xl border border-border bg-surface shadow-2xl overflow-hidden"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <button
+                                    onClick={() => {
+                                      setEpisodeActionsOpen(false);
+                                      openEpisodeModal();
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors"
+                                    type="button"
+                                  >
+                                    新增剧集
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEpisodeActionsOpen(false);
+                                      openEpisodeModal(activeEpisode);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors"
+                                    type="button"
+                                  >
+                                    编辑剧集
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEpisodeActionsOpen(false);
+                                      openSceneModal(activeEpisode.id);
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors"
+                                    type="button"
+                                  >
+                                    新增场次
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      setEpisodeActionsOpen(false);
+                                      if (!useMockApi) {
+                                        alert("当前版本暂不支持删除剧集（将由后端能力补齐）。");
+                                        return;
+                                      }
+                                      handleDeleteEpisode(activeEpisode.id, { stopPropagation: () => undefined });
+                                    }}
+                                    className="w-full text-left px-3 py-2 text-xs text-textMuted hover:bg-surfaceHighlight hover:text-red-400 transition-colors"
+                                    type="button"
+                                  >
+                                    删除剧集
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </div>
                           <div className="p-4 max-h-80 overflow-y-auto">
                             <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeEpisode.scriptFullText || ""}</ReactMarkdown>
@@ -1247,14 +2603,6 @@ export default function Page() {
                         <div className="rounded-xl border border-border bg-surface overflow-hidden">
                           <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm flex items-center justify-between">
                             <span>场景</span>
-                            <button
-                              onClick={() => openSceneModal(activeEpisode.id)}
-                              className="p-1.5 rounded-md text-textMuted hover:text-primary hover:bg-surfaceHighlight/50 transition-colors"
-                              type="button"
-                              title="新增场景"
-                            >
-                              <Plus size={14} />
-                            </button>
                           </div>
                           <div className="p-4">
                             {activeEpisode.scenes.length === 0 ? (
@@ -1291,23 +2639,59 @@ export default function Page() {
                             {!activeEpisode.assets || activeEpisode.assets.length === 0 ? (
                               <div className="text-sm text-textMuted">暂无关联资产</div>
                             ) : (
-                              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                {activeEpisode.assets.map((asset) => (
-                                  <div
-                                    key={asset.id}
-                                    className="flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-3"
-                                  >
-                                    <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border flex items-center justify-center text-textMuted">
-                                      {asset.type === "CHARACTER" && <User size={16} />}
-                                      {asset.type === "SCENE" && <ImageIcon size={16} />}
-                                      {asset.type === "PROP" && <Box size={16} />}
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                      <div className="text-sm font-bold text-textMain truncate">{asset.name}</div>
-                                      <div className="mt-1 text-[10px] text-textMuted uppercase tracking-wider">{asset.type}</div>
-                                    </div>
-                                  </div>
-                                ))}
+                              <div className="space-y-5">
+                                {(["CHARACTER", "SCENE", "PROP", "VFX"] as const)
+                                  .filter((t) => episodeAssetsGrouped[t] && Object.keys(episodeAssetsGrouped[t]).length > 0)
+                                  .map((t) => {
+                                    const icon =
+                                      t === "CHARACTER" ? <User size={14} className="text-primary" /> : t === "SCENE" ? <ImageIcon size={14} className="text-primary" /> : t === "PROP" ? <Box size={14} className="text-primary" /> : <Sparkles size={14} className="text-primary" />;
+                                    const label = t === "CHARACTER" ? "角色" : t === "SCENE" ? "场景" : t === "PROP" ? "道具" : "特效";
+                                    const catGroups = episodeAssetsGrouped[t] || {};
+                                    const total = Object.values(catGroups).reduce((sum, arr) => sum + arr.length, 0);
+                                    return (
+                                      <div key={t} className="space-y-3">
+                                        <div className="flex items-center justify-between">
+                                          <div className="flex items-center gap-2 text-xs font-bold text-textMain">
+                                            {icon}
+                                            <span>{label}</span>
+                                            <span className="text-[10px] text-textMuted/60 bg-surfaceHighlight px-2 py-0.5 rounded border border-border">
+                                              {total}
+                                            </span>
+                                          </div>
+                                        </div>
+                                        <div className="space-y-4">
+                                          {Object.entries(catGroups)
+                                            .sort(([a], [b]) => a.localeCompare(b))
+                                            .map(([cat, assets]) => (
+                                              <div key={cat} className="space-y-2">
+                                                <div className="text-[10px] text-textMuted uppercase tracking-wider">{cat}</div>
+                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                                  {assets.map((asset) => (
+                                                    <button
+                                                      key={asset.id}
+                                                      onClick={() => openAssetEditor(asset.id)}
+                                                      className="flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-3 hover:border-primary/50 hover:bg-surfaceHighlight/40 transition-all text-left"
+                                                      type="button"
+                                                    >
+                                                      <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border flex items-center justify-center text-textMuted">
+                                                        {asset.type === "CHARACTER" && <User size={16} />}
+                                                        {asset.type === "SCENE" && <ImageIcon size={16} />}
+                                                        {asset.type === "PROP" && <Box size={16} />}
+                                                        {asset.type === "VFX" && <Sparkles size={16} />}
+                                                      </div>
+                                                      <div className="flex-1 min-w-0">
+                                                        <div className="text-sm font-bold text-textMain truncate">{asset.name}</div>
+                                                        <div className="mt-1 text-[10px] text-textMuted uppercase tracking-wider">{asset.type}</div>
+                                                      </div>
+                                                    </button>
+                                                  ))}
+                                                </div>
+                                              </div>
+                                            ))}
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
                               </div>
                             )}
                           </div>
@@ -1318,17 +2702,193 @@ export default function Page() {
                 ) : (
                   <>
                     <div className="h-12 border-b border-border bg-surface/50 backdrop-blur flex items-center justify-between px-4">
-                      <span className="font-bold text-sm">分镜表 (Shot List)</span>
-                      {activeScene && (
-                        <span className="text-xs text-textMuted font-mono">
-                          SCENE {activeScene.number} - {activeScene.shots.length} SHOTS
-                        </span>
-                      )}
+                      <div className="flex items-center gap-2 min-w-0">
+                        <button
+                          onClick={() => setActiveSceneId(null)}
+                          className="p-1.5 hover:bg-surfaceHighlight rounded-lg text-textMuted hover:text-textMain transition-colors"
+                          type="button"
+                          title="返回剧集概览"
+                        >
+                          <ArrowLeft size={16} />
+                        </button>
+                        <div className="min-w-0">
+                          <div className="font-bold text-sm truncate">{activeScene ? `SCENE ${activeScene.number}: ${activeScene.title}` : "分场"}</div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {activeScene && (
+                          <span className="text-xs text-textMuted font-mono">
+                            {activeScene.shots.length} SHOTS
+                          </span>
+                        )}
+                        <button
+                          onClick={() => openSbTool(activeScene?.shots.length ? "replace" : undefined)}
+                          disabled={useMockApi || !activeScene}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors flex items-center gap-2 disabled:opacity-50"
+                          type="button"
+                          title={activeScene?.shots.length ? "重新生成分镜（覆盖）" : "生成分镜"}
+                        >
+                          <Sparkles size={14} /> {activeScene?.shots.length ? "重新生成分镜" : "生成分镜"}
+                        </button>
+                        <div className="relative">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSceneActionsOpen((v) => !v);
+                            }}
+                            className="p-1.5 rounded-lg border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                            type="button"
+                            title="分场操作"
+                          >
+                            <Settings size={14} />
+                          </button>
+                          {sceneActionsOpen && activeScene && activeEpisode && (
+                            <div
+                              className="absolute right-0 top-9 w-44 rounded-xl border border-border bg-surface shadow-2xl overflow-hidden"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <button
+                                onClick={() => {
+                                  setSceneActionsOpen(false);
+                                  openSbTool("replace");
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors"
+                                type="button"
+                              >
+                                重新生成分镜（覆盖）
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSceneActionsOpen(false);
+                                  openSbTool("append");
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors"
+                                type="button"
+                              >
+                                追加生成分镜
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSceneActionsOpen(false);
+                                  openSceneModal(activeEpisode.id, activeScene);
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors"
+                                type="button"
+                              >
+                                编辑场次
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setSceneActionsOpen(false);
+                                  handleDeleteScene(activeEpisode.id, activeScene.id, { stopPropagation: () => undefined });
+                                }}
+                                className="w-full text-left px-3 py-2 text-xs text-textMuted hover:bg-surfaceHighlight hover:text-red-400 transition-colors"
+                                type="button"
+                              >
+                                删除场次
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
                     </div>
                     <div className="flex-1 overflow-y-auto p-4 lg:p-8">
                       <div className="max-w-4xl mx-auto space-y-4">
+                        {activeScene && (
+                          <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                            <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 flex items-center justify-between">
+                              <div className="min-w-0">
+                                <div className="font-bold text-sm truncate">分场剧本</div>
+                                <div className="mt-1 flex items-center gap-2 text-[10px] text-textMuted">
+                                  <span className="bg-surface px-2 py-0.5 rounded border border-border">{activeScene.time || "—"}</span>
+                                  <span className="truncate">{activeScene.location || "—"}</span>
+                                </div>
+                              </div>
+                            </div>
+                            <div className="p-4 max-h-72 overflow-y-auto">
+                              <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeScene.content || ""}</ReactMarkdown>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                        {!useMockApi && sceneAssetBindings.length > 0 && (
+                          <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                            <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">分场资产</div>
+                            <div className="p-4 space-y-4">
+                              {(["character", "scene", "prop", "vfx"] as const)
+                                .filter((t) => sceneAssetBindings.some((b) => b.type === t))
+                                .map((t) => {
+                                  const label = t === "character" ? "角色" : t === "scene" ? "场景" : t === "prop" ? "道具" : "特效";
+                                  const icon =
+                                    t === "character" ? <User size={14} className="text-primary" /> : t === "scene" ? <ImageIcon size={14} className="text-primary" /> : t === "prop" ? <Box size={14} className="text-primary" /> : <Sparkles size={14} className="text-primary" />;
+                                  const typed = sceneAssetBindings.filter((b) => b.type === t);
+                                  const byCat = typed.reduce((acc, b) => {
+                                    const key = (b.category || "未分类").trim() || "未分类";
+                                    (acc[key] ||= []).push(b);
+                                    return acc;
+                                  }, {} as Record<string, ApiAssetBindingBrief[]>);
+                                  return (
+                                    <div key={t} className="space-y-2">
+                                      <div className="flex items-center gap-2 text-xs font-bold text-textMain">
+                                        {icon}
+                                        <span>{label}</span>
+                                        <span className="text-[10px] text-textMuted/60 bg-surfaceHighlight px-2 py-0.5 rounded border border-border">{typed.length}</span>
+                                      </div>
+                                      <div className="space-y-3">
+                                        {Object.entries(byCat)
+                                          .sort(([a], [b]) => a.localeCompare(b))
+                                          .map(([cat, items]) => (
+                                            <div key={cat} className="space-y-2">
+                                              <div className="text-[10px] text-textMuted uppercase tracking-wider">{cat}</div>
+                                              <div className="flex flex-wrap gap-2">
+                                                {items.map((b) => (
+                                                  <button
+                                                    key={b.id}
+                                                    onClick={() => openAssetEditor(b.asset_entity_id)}
+                                                    className="px-3 py-1.5 rounded-lg border border-border bg-surfaceHighlight/20 hover:bg-surfaceHighlight/40 hover:border-primary/40 text-xs text-textMain flex items-center gap-2"
+                                                    type="button"
+                                                  >
+                                                    <span className="font-bold truncate max-w-[160px]">{b.name}</span>
+                                                    {b.variant_code && (
+                                                      <span className="text-[10px] text-textMuted bg-surface px-2 py-0.5 rounded border border-border">
+                                                        {b.variant_code}
+                                                      </span>
+                                                    )}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            </div>
+                                          ))}
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                            </div>
+                          </div>
+                        )}
+                        {activeScene && activeScene.shots.length === 0 && (
+                          <div className="rounded-xl border border-border bg-surface p-6 text-sm text-textMuted flex items-center justify-between">
+                            <div>暂无分镜，可使用 AI 分镜生成。</div>
+                            <button
+                              onClick={() => openSbTool("replace")}
+                              disabled={useMockApi}
+                              className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                              type="button"
+                            >
+                              <Sparkles size={14} className="inline-block mr-2" />
+                              生成分镜
+                            </button>
+                          </div>
+                        )}
                         {activeScene?.shots.map((shot) => (
-                          <div key={shot.id} className="flex gap-4 p-5 rounded-xl border border-border bg-surface hover:border-primary/30 transition-all group relative">
+                          <div
+                            key={shot.id}
+                            id={`shot-${shot.id}`}
+                            className={`flex gap-4 p-5 rounded-xl border bg-surface transition-all group relative ${
+                              selectedShotId === shot.id ? "border-primary/50" : "border-border hover:border-primary/30"
+                            }`}
+                          >
                             <div className="w-10 flex-shrink-0 flex flex-col items-center">
                               <span className="text-xl font-bold text-textMain font-mono">{shot.number}</span>
                               <div className="h-full w-px bg-border/50 my-2"></div>
@@ -1336,8 +2896,8 @@ export default function Page() {
                             <div className="flex-1 space-y-3">
                               <div className="flex items-center justify-between">
                                 <div className="flex gap-2">
-                                  <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-xs font-bold border border-purple-500/30">{shot.camera}</span>
-                                  <span className="px-2 py-0.5 rounded bg-surfaceHighlight text-textMuted text-xs border border-border">{shot.duration}</span>
+                              <span className="px-2 py-0.5 rounded bg-purple-500/20 text-purple-300 text-sm font-bold border border-purple-500/30">{shot.camera}</span>
+                              <span className="px-2 py-0.5 rounded bg-surfaceHighlight text-textMuted text-sm border border-border">{shot.duration}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <button
@@ -1359,7 +2919,7 @@ export default function Page() {
                               <textarea
                                 value={shot.visual}
                                 onChange={(e) => handleUpdateShot(shot.id, "visual", e.target.value)}
-                                className="w-full bg-transparent text-base text-textMain leading-relaxed font-medium outline-none resize-none border-b border-transparent focus:border-primary/50 transition-colors"
+                                className="w-full bg-transparent text-lg text-textMain leading-relaxed font-medium outline-none resize-none border-b border-transparent focus:border-primary/50 transition-colors"
                                 rows={2}
                               />
                               <div className="flex items-center gap-3 bg-surfaceHighlight/30 p-2 rounded-lg border border-border/50">
@@ -1367,7 +2927,7 @@ export default function Page() {
                                 <input
                                   value={shot.dialogue}
                                   onChange={(e) => handleUpdateShot(shot.id, "dialogue", e.target.value)}
-                                  className="w-full bg-transparent text-sm text-textMuted outline-none"
+                                  className="w-full bg-transparent text-base text-textMuted outline-none"
                                   placeholder="输入对白..."
                                 />
                               </div>
@@ -1396,45 +2956,73 @@ export default function Page() {
                                     <span className="text-xs">暂无绑定资产，点击添加</span>
                                   </div>
                                 ) : (
-                                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                                    {shot.assets.map((asset) => (
-                                      <div
-                                        key={asset.id}
-                                        className="group/card relative flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-2 hover:border-primary/50 hover:bg-surfaceHighlight/50 transition-all cursor-default"
-                                      >
-                                        <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border relative">
-                                          <img src={asset.thumbnail} className="w-full h-full object-cover" alt={asset.name} />
-                                          <div className="absolute inset-0 ring-1 ring-inset ring-border/30 rounded-md pointer-events-none"></div>
-                                        </div>
-                                        <div className="flex-1 min-w-0 flex flex-col pt-0.5">
-                                          <div className="text-sm font-bold text-textMain truncate leading-tight" title={asset.name}>
-                                            {asset.name}
+                                  <div className="space-y-3">
+                                    {Object.entries(
+                                      (shot.assets || []).reduce((acc, a) => {
+                                        const key = (a.category || "未分类").trim() || "未分类";
+                                        (acc[key] ||= []).push(a);
+                                        return acc;
+                                      }, {} as Record<string, AssetReference[]>),
+                                    )
+                                      .sort(([a], [b]) => a.localeCompare(b))
+                                      .map(([cat, assets]) => (
+                                        <div key={cat} className="space-y-2">
+                                          <div className="text-[10px] text-textMuted uppercase tracking-wider">{cat}</div>
+                                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                            {assets.map((asset) => (
+                                              <button
+                                                key={asset.id}
+                                                onClick={() => openAssetEditor(asset.id)}
+                                                className="group/card relative flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-2 hover:border-primary/50 hover:bg-surfaceHighlight/50 transition-all cursor-pointer"
+                                                type="button"
+                                              >
+                                                <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border relative">
+                                                  {asset.thumbnail ? (
+                                                    <img src={asset.thumbnail} className="w-full h-full object-cover" alt={asset.name} />
+                                                  ) : (
+                                                    <div className="w-full h-full flex items-center justify-center text-white/70">
+                                                      {asset.type === "CHARACTER" && <User size={16} />}
+                                                      {asset.type === "SCENE" && <ImageIcon size={16} />}
+                                                      {asset.type === "PROP" && <Box size={16} />}
+                                                      {asset.type !== "CHARACTER" && asset.type !== "SCENE" && asset.type !== "PROP" && (
+                                                        <Sparkles size={16} />
+                                                      )}
+                                                    </div>
+                                                  )}
+                                                  <div className="absolute inset-0 ring-1 ring-inset ring-border/30 rounded-md pointer-events-none"></div>
+                                                </div>
+                                                <div className="flex-1 min-w-0 flex flex-col pt-0.5">
+                                                  <div className="text-sm font-bold text-textMain truncate leading-tight" title={asset.name}>
+                                                    {asset.name}
+                                                  </div>
+                                                  <div className="flex items-center gap-1.5 mt-1.5">
+                                                    <span className="text-[9px] text-textMuted uppercase tracking-wider bg-surface px-1.5 py-0.5 rounded border border-border flex items-center gap-1">
+                                                      {asset.type === "CHARACTER" && <User size={8} />}
+                                                      {asset.type === "SCENE" && <ImageIcon size={8} />}
+                                                      {asset.type === "PROP" && <Box size={8} />}
+                                                      {asset.type}
+                                                    </span>
+                                                  </div>
+                                                </div>
+                                                <button
+                                                  onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    handleUnbindAsset(shot.id, asset.id);
+                                                  }}
+                                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-surface border border-border text-textMuted hover:text-red-400 hover:border-red-400/50 rounded-full opacity-0 group-hover/card:opacity-100 transition-all shadow-sm z-10"
+                                                  title="解除绑定"
+                                                  type="button"
+                                                >
+                                                  <X size={10} />
+                                                </button>
+                                              </button>
+                                            ))}
                                           </div>
-                                          <div className="flex items-center gap-1.5 mt-1.5">
-                                            <span className="text-[9px] text-textMuted uppercase tracking-wider bg-surface px-1.5 py-0.5 rounded border border-border flex items-center gap-1">
-                                              {asset.type === "CHARACTER" && <User size={8} />}
-                                              {asset.type === "SCENE" && <ImageIcon size={8} />}
-                                              {asset.type === "PROP" && <Box size={8} />}
-                                              {asset.type}
-                                            </span>
-                                          </div>
                                         </div>
-                                        <button
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleUnbindAsset(shot.id, asset.id);
-                                          }}
-                                          className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-surface border border-border text-textMuted hover:text-red-400 hover:border-red-400/50 rounded-full opacity-0 group-hover/card:opacity-100 transition-all shadow-sm z-10"
-                                          title="解除绑定"
-                                          type="button"
-                                        >
-                                          <X size={10} />
-                                        </button>
-                                      </div>
-                                    ))}
+                                      ))}
                                     <button
                                       onClick={() => handleOpenAssetBindModal(shot)}
-                                      className="flex flex-col items-center justify-center gap-1 border border-dashed border-border rounded-lg text-textMuted/30 hover:text-primary hover:border-primary/30 hover:bg-surfaceHighlight/30 transition-all h-full min-h-[60px]"
+                                      className="flex flex-col items-center justify-center gap-1 border border-dashed border-border rounded-lg text-textMuted/30 hover:text-primary hover:border-primary/30 hover:bg-surfaceHighlight/30 transition-all w-full min-h-[60px]"
                                       type="button"
                                     >
                                       <Plus size={14} />
@@ -1447,7 +3035,7 @@ export default function Page() {
                           </div>
                         ))}
 
-                        {activeScene && (
+                        {activeScene && useMockApi && (
                           <button
                             onClick={handleAddShot}
                             className="w-full py-4 border-2 border-dashed border-border rounded-xl text-textMuted hover:text-primary hover:border-primary/50 transition-all flex items-center justify-center gap-2 font-medium bg-surface/30 hover:bg-surface/50"
@@ -1497,12 +3085,13 @@ export default function Page() {
                   </div>
                 </div>
                 <div className="p-6 overflow-y-auto grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                  {MOCK_ASSETS_POOL.filter((a) => {
+                  {assetBindPool.filter((a) => {
                     if (!assetSearchQuery) return true;
                     const q = assetSearchQuery.toLowerCase();
                     return a.name.toLowerCase().includes(q) || a.tags?.some((t) => t.toLowerCase().includes(q));
                   }).map((asset) => {
                     const isSelected = tempSelectedAssetIds.has(asset.id);
+                    const isEpisodeAsset = episodeAssetIdSet.has(asset.id);
                     return (
                       <div
                         key={asset.id}
@@ -1511,7 +3100,18 @@ export default function Page() {
                           isSelected ? "border-primary ring-2 ring-primary/20" : "border-border hover:border-primary/50"
                         }`}
                       >
-                        <img src={asset.thumbnail} className="w-full h-full object-cover bg-black/50" alt={asset.name} />
+                        {asset.thumbnail ? (
+                          <img src={asset.thumbnail} className="w-full h-full object-cover bg-black/50" alt={asset.name} />
+                        ) : (
+                          <div className="w-full h-full bg-black/50 flex items-center justify-center border border-border/40">
+                            {asset.type === "CHARACTER" && <User size={22} className="text-white/70" />}
+                            {asset.type === "SCENE" && <ImageIcon size={22} className="text-white/70" />}
+                            {asset.type === "PROP" && <Box size={22} className="text-white/70" />}
+                            {asset.type !== "CHARACTER" && asset.type !== "SCENE" && asset.type !== "PROP" && (
+                              <Sparkles size={22} className="text-white/70" />
+                            )}
+                          </div>
+                        )}
                         <div
                           className={`absolute inset-0 bg-black/40 flex flex-col justify-end p-3 transition-opacity ${
                             isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
@@ -1520,6 +3120,7 @@ export default function Page() {
                           <div className="font-bold text-sm text-white truncate">{asset.name}</div>
                           <div className="flex gap-1 mt-1 flex-wrap">
                             <span className="text-[9px] bg-white/20 px-1 rounded text-white/90">{asset.type}</span>
+                            {isEpisodeAsset && <span className="text-[9px] bg-emerald-400/20 px-1 rounded text-emerald-200 border border-emerald-300/30">本集</span>}
                             {asset.tags?.slice(0, 2).map((t) => (
                               <span key={t} className="text-[9px] bg-primary/20 px-1 rounded text-primary border border-primary/30">
                                 {t}
@@ -1779,6 +3380,908 @@ export default function Page() {
               <button onClick={handleSaveScene} className="w-full py-2 bg-primary hover:bg-blue-600 text-white rounded font-bold" type="button">
                 {sceneModal.mode === "create" ? "创建" : "保存更改"}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {aiToolOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-surface border border-border rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-border flex justify-between items-center bg-surfaceHighlight/50">
+              <h3 className="font-bold text-textMain flex items-center gap-2">
+                <Sparkles size={18} className="text-primary" /> 分场拆解
+              </h3>
+              <button onClick={closeAiTool} type="button">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">供应商</label>
+                  <select
+                    value={aiProvider}
+                    onChange={(e) => {
+                      setAiProvider(e.target.value);
+                      setAiModel("");
+                    }}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    {aiProviders.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">模型</label>
+                  <select
+                    value={aiModel}
+                    onChange={(e) => setAiModel(e.target.value)}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    {aiModelsForProvider.map((m) => (
+                      <option key={m.model} value={m.model}>
+                        {m.model}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">落库策略</label>
+                  <select
+                    value={aiApplyMode}
+                    onChange={(e) => setAiApplyMode(e.target.value as "replace" | "append")}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    <option value="replace">覆盖重建</option>
+                    <option value="append">追加场景</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">提示词</label>
+                  <textarea
+                    value={aiPromptTemplate}
+                    onChange={(e) => setAiPromptTemplate(e.target.value)}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-3 text-sm outline-none focus:border-primary h-40 resize-none text-textMain"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">提示词预设</label>
+                  <select
+                    value={aiPresetId}
+                    onChange={(e) => handleAiSelectPreset(e.target.value)}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    <option value="">(新建预设)</option>
+                    {aiPresets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.is_default ? `⭐ ${p.name}` : p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={aiPresetName}
+                      onChange={(e) => setAiPresetName(e.target.value)}
+                      className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                      placeholder="预设名称"
+                    />
+                    <label className="flex items-center gap-2 text-xs text-textMuted select-none">
+                      <input
+                        type="checkbox"
+                        checked={aiPresetIsDefault}
+                        onChange={(e) => setAiPresetIsDefault(e.target.checked)}
+                      />
+                      设为默认
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAiSavePreset}
+                        disabled={aiIsLoading}
+                        className="flex-1 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        保存提示词
+                      </button>
+                      <button
+                        onClick={handleAiDeletePreset}
+                        disabled={aiIsLoading || !aiPresetId}
+                        className="px-3 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleAiPreviewPrompt}
+                  disabled={aiIsLoading || useMockApi}
+                  className="px-4 py-2 bg-surface border border-border rounded-lg text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
+                  type="button"
+                >
+                  预览提示词
+                </button>
+                <button
+                  onClick={handleAiRunPreview}
+                  disabled={aiIsLoading || useMockApi}
+                  className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                  type="button"
+                >
+                  {aiIsLoading ? "处理中..." : "调用 AI 预览"}
+                </button>
+                <button
+                  onClick={handleAiApply}
+                  disabled={aiIsApplying || useMockApi}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                  type="button"
+                >
+                  {aiIsApplying ? "落库中..." : "确认落库"}
+                </button>
+              </div>
+
+              {aiFinalPrompt && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">最终提示词（已注入）</div>
+                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{aiFinalPrompt}</pre>
+                </div>
+              )}
+
+              {aiRawText && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">返回结果预览</div>
+                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{aiRawText}</pre>
+                </div>
+              )}
+
+              {aiScenes.length > 0 && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">分场效果预览</div>
+                  <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {aiScenes.map((sc, idx) => (
+                      <div key={idx} className="p-4 rounded-xl border border-border bg-surfaceHighlight/20">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="font-bold text-textMain truncate">
+                            SCENE {sc.scene_number ?? idx + 1}: {sc.title || "(无标题)"}
+                          </div>
+                          <span className="text-[10px] text-textMuted font-mono">{sc.time_of_day || ""}</span>
+                        </div>
+                        <div className="mt-2 text-xs text-textMuted line-clamp-4">{sc.content || ""}</div>
+                        {(sc.location || sc.location_type) && (
+                          <div className="mt-3 flex items-center gap-2 text-[10px] text-textMuted">
+                            <span className="px-2 py-0.5 rounded bg-surface border border-border">{sc.location_type || "未标注"}</span>
+                            <span className="truncate">{sc.location || ""}</span>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {assetToolOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-surface border border-border rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-border flex justify-between items-center bg-surfaceHighlight/50">
+              <h3 className="font-bold text-textMain flex items-center gap-2">
+                <Sparkles size={18} className="text-primary" /> 资产提取
+              </h3>
+              <button onClick={closeAssetTool} type="button">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">供应商</label>
+                  <select
+                    value={assetProvider}
+                    onChange={(e) => {
+                      setAssetProvider(e.target.value);
+                      setAssetModel("");
+                    }}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    {assetProviders.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">模型</label>
+                  <select
+                    value={assetModel}
+                    onChange={(e) => setAssetModel(e.target.value)}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    {assetModelsForProvider.map((m) => (
+                      <option key={m.model} value={m.model}>
+                        {m.model}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">落库策略</label>
+                  <select
+                    value={assetApplyMode}
+                    onChange={(e) => setAssetApplyMode(e.target.value as "replace" | "append")}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    <option value="append">追加绑定</option>
+                    <option value="replace">覆盖重建</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">提示词</label>
+                  <textarea
+                    value={assetPromptTemplate}
+                    onChange={(e) => setAssetPromptTemplate(e.target.value)}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-3 text-sm outline-none focus:border-primary h-40 resize-none text-textMain"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">提示词预设</label>
+                  <select
+                    value={assetPresetId}
+                    onChange={(e) => handleAssetSelectPreset(e.target.value)}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    <option value="">(新建预设)</option>
+                    {assetPresets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.is_default ? `⭐ ${p.name}` : p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={assetPresetName}
+                      onChange={(e) => setAssetPresetName(e.target.value)}
+                      className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                      placeholder="预设名称"
+                    />
+                    <label className="flex items-center gap-2 text-xs text-textMuted select-none">
+                      <input
+                        type="checkbox"
+                        checked={assetPresetIsDefault}
+                        onChange={(e) => setAssetPresetIsDefault(e.target.checked)}
+                      />
+                      设为默认
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAssetSavePreset}
+                        disabled={assetIsLoading}
+                        className="flex-1 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        保存提示词
+                      </button>
+                      <button
+                        onClick={handleAssetDeletePreset}
+                        disabled={assetIsLoading || !assetPresetId}
+                        className="px-3 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleAssetPreviewPrompt}
+                  disabled={assetIsLoading || useMockApi}
+                  className="px-4 py-2 bg-surface border border-border rounded-lg text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
+                  type="button"
+                >
+                  预览提示词
+                </button>
+                <button
+                  onClick={handleAssetRunPreview}
+                  disabled={assetIsLoading || useMockApi}
+                  className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                  type="button"
+                >
+                  {assetIsLoading ? "处理中..." : "调用 AI 预览"}
+                </button>
+                <button
+                  onClick={handleAssetApply}
+                  disabled={assetIsApplying || useMockApi}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                  type="button"
+                >
+                  {assetIsApplying ? "落库中..." : "确认落库"}
+                </button>
+              </div>
+
+              {assetFinalPrompt && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">最终提示词（已注入）</div>
+                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{assetFinalPrompt}</pre>
+                </div>
+              )}
+
+              {assetRawText && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">返回结果预览</div>
+                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{assetRawText}</pre>
+                </div>
+              )}
+
+              {(assetWorldUnity || assetDraftAssets.length > 0) && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm flex items-center justify-between">
+                    <span>资产效果预览</span>
+                    <span className="text-xs text-textMuted font-mono">{assetDraftAssets.length} ASSETS</span>
+                  </div>
+                  <div className="p-4 space-y-4">
+                    {assetWorldUnity && (
+                      <div className="rounded-xl border border-border bg-surfaceHighlight/20 p-4">
+                        <div className="font-bold text-textMain text-sm">世界观统一要素</div>
+                        <div className="mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-xs text-textMuted">
+                          <div className="truncate">时代：{assetWorldUnity.era_setting || "—"}</div>
+                          <div className="truncate">艺术风格：{assetWorldUnity.art_style || "—"}</div>
+                          <div className="truncate">配色体系：{assetWorldUnity.color_system || "—"}</div>
+                          <div className="truncate">材质风格：{assetWorldUnity.material_style || "—"}</div>
+                        </div>
+                        {assetWorldUnity.notes && <div className="mt-2 text-xs text-textMuted line-clamp-2">{assetWorldUnity.notes}</div>}
+                      </div>
+                    )}
+
+                    {assetDraftAssets.length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {assetDraftAssets.map((a, idx) => (
+                          <div key={`${a.type}-${a.name}-${idx}`} className="p-4 rounded-xl border border-border bg-surfaceHighlight/20">
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="font-bold text-textMain truncate">{a.name}</div>
+                              <span className="text-[10px] text-textMuted font-mono">{a.type}</span>
+                            </div>
+                            <div className="mt-2 text-xs text-textMuted line-clamp-3">{a.concept || ""}</div>
+                            <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-textMuted">
+                              {a.importance && <span className="px-2 py-0.5 rounded bg-surface border border-border">{a.importance}</span>}
+                              {(a.category_path || []).slice(0, 3).map((c) => (
+                                <span key={c} className="px-2 py-0.5 rounded bg-surface border border-border">
+                                  {c}
+                                </span>
+                              ))}
+                              {(a.tags || []).slice(0, 3).map((t) => (
+                                <span key={t} className="px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20">
+                                  {t}
+                                </span>
+                              ))}
+                              {(a.variants || []).length > 0 && (
+                                <span className="px-2 py-0.5 rounded bg-surface border border-border">{(a.variants || []).length} variants</span>
+                              )}
+                              {(a.children || []).length > 0 && (
+                                <span className="px-2 py-0.5 rounded bg-surface border border-border">{(a.children || []).length} children</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {assetEditorOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-surface border border-border rounded-2xl w-full max-w-6xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-border flex justify-between items-center bg-surfaceHighlight/50">
+              <div className="min-w-0">
+                <div className="font-bold text-textMain flex items-center gap-2">
+                  <SlidersHorizontal size={18} className="text-primary" /> 资产编辑
+                </div>
+                <div className="mt-1 text-[10px] text-textMuted font-mono truncate">{assetEditorAssetId || ""}</div>
+              </div>
+              <button onClick={closeAssetEditor} type="button">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto">
+              {assetEditorIsLoading || !assetEditorData ? (
+                <div className="flex items-center justify-center py-16 text-textMuted">
+                  <Loader2 size={18} className="animate-spin mr-2" /> 正在加载资产...
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                  <div className="lg:col-span-4 space-y-4">
+                    <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">资产</div>
+                      <div className="p-4 space-y-3">
+                        <div className="space-y-1">
+                          <div className="text-xs font-bold text-textMuted uppercase">名称</div>
+                          <input
+                            value={assetEditorData.name}
+                            onChange={(e) => setAssetEditorData({ ...assetEditorData, name: e.target.value })}
+                            className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-xs font-bold text-textMuted uppercase">类别路径</div>
+                          <input
+                            value={assetEditorData.category || ""}
+                            onChange={(e) => setAssetEditorData({ ...assetEditorData, category: e.target.value })}
+                            placeholder="例如：角色/主角团/核心"
+                            className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                          />
+                        </div>
+                        <div className="grid grid-cols-2 gap-3">
+                          <div className="space-y-1">
+                            <div className="text-xs font-bold text-textMuted uppercase">类型</div>
+                            <div className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm text-textMain">
+                              {assetEditorData.type}
+                            </div>
+                          </div>
+                          <div className="space-y-1">
+                            <div className="text-xs font-bold text-textMuted uppercase">状态</div>
+                            <select
+                              value={assetEditorData.lifecycle_status}
+                              onChange={(e) => setAssetEditorData({ ...assetEditorData, lifecycle_status: e.target.value })}
+                              className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                            >
+                              <option value="draft">draft</option>
+                              <option value="published">published</option>
+                              <option value="archived">archived</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="space-y-1">
+                          <div className="text-xs font-bold text-textMuted uppercase">标签</div>
+                          <input
+                            value={(assetEditorData.tags || []).join(", ")}
+                            onChange={(e) =>
+                              setAssetEditorData({
+                                ...assetEditorData,
+                                tags: e.target.value
+                                  .split(",")
+                                  .map((s) => s.trim())
+                                  .filter(Boolean),
+                              })
+                            }
+                            placeholder="用逗号分隔，例如：主角, 男性, 现代"
+                            className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                          />
+                        </div>
+                        <button
+                          onClick={saveAssetEditor}
+                          disabled={assetEditorIsSaving}
+                          className="w-full py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                          type="button"
+                        >
+                          {assetEditorIsSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                          保存资产
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-4 space-y-4">
+                    <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                      <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 flex items-center justify-between">
+                        <div className="font-bold text-sm">变体</div>
+                        <button
+                          onClick={createAssetVariant}
+                          disabled={assetEditorIsSaving}
+                          className="text-[10px] flex items-center gap-1 bg-surfaceHighlight hover:bg-primary/10 hover:text-primary border border-border hover:border-primary/30 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                          type="button"
+                        >
+                          <Plus size={10} /> 新增
+                        </button>
+                      </div>
+                      <div className="p-3 space-y-2">
+                        {assetEditorData.variants.length === 0 ? (
+                          <div className="text-sm text-textMuted p-2">暂无变体</div>
+                        ) : (
+                          assetEditorData.variants.map((v) => (
+                            <button
+                              key={v.id}
+                              onClick={() => setAssetEditorSelectedVariantId(v.id)}
+                              className={`w-full text-left px-3 py-2 rounded-lg border transition-colors ${
+                                assetEditorSelectedVariantId === v.id
+                                  ? "border-primary bg-primary/10 text-primary"
+                                  : "border-border bg-surfaceHighlight/20 hover:bg-surfaceHighlight/40 text-textMain"
+                              }`}
+                              type="button"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <div className="font-bold text-sm">{v.variant_code}</div>
+                                {v.is_default && <span className="text-[10px] px-2 py-0.5 rounded bg-primary/20 border border-primary/30">默认</span>}
+                              </div>
+                              <div className="mt-1 text-[10px] text-textMuted truncate">
+                                {[v.stage_tag, v.age_range].filter(Boolean).join(" · ") || "—"}
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="lg:col-span-4 space-y-4">
+                    {(() => {
+                      const v = assetEditorData.variants.find((x) => x.id === assetEditorSelectedVariantId) || assetEditorData.variants[0];
+                      if (!v) return <div className="text-sm text-textMuted">请选择一个变体</div>;
+                      return (
+                        <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                          <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 flex items-center justify-between">
+                            <div className="font-bold text-sm">变体详情</div>
+                            <button
+                              onClick={() => deleteAssetVariant(v.id)}
+                              disabled={assetEditorIsSaving}
+                              className="text-[10px] flex items-center gap-1 bg-surfaceHighlight hover:bg-red-500/10 hover:text-red-400 border border-border hover:border-red-400/30 px-2 py-1 rounded transition-colors disabled:opacity-50"
+                              type="button"
+                            >
+                              <Trash2 size={10} /> 删除
+                            </button>
+                          </div>
+                          <div className="p-4 space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                              <div className="space-y-1">
+                                <div className="text-xs font-bold text-textMuted uppercase">阶段</div>
+                                <input
+                                  value={v.stage_tag || ""}
+                                  onChange={(e) =>
+                                    setAssetEditorData({
+                                      ...assetEditorData,
+                                      variants: assetEditorData.variants.map((x) => (x.id === v.id ? { ...x, stage_tag: e.target.value } : x)),
+                                    })
+                                  }
+                                  className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                                />
+                              </div>
+                              <div className="space-y-1">
+                                <div className="text-xs font-bold text-textMuted uppercase">年龄段</div>
+                                <input
+                                  value={v.age_range || ""}
+                                  onChange={(e) =>
+                                    setAssetEditorData({
+                                      ...assetEditorData,
+                                      variants: assetEditorData.variants.map((x) => (x.id === v.id ? { ...x, age_range: e.target.value } : x)),
+                                    })
+                                  }
+                                  className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                                />
+                              </div>
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-xs font-bold text-textMuted uppercase">Prompt Template</div>
+                              <textarea
+                                value={v.prompt_template || ""}
+                                onChange={(e) =>
+                                  setAssetEditorData({
+                                    ...assetEditorData,
+                                    variants: assetEditorData.variants.map((x) => (x.id === v.id ? { ...x, prompt_template: e.target.value } : x)),
+                                  })
+                                }
+                                className="w-full bg-surfaceHighlight border border-border rounded p-3 text-sm outline-none focus:border-primary h-40 resize-none text-textMain"
+                              />
+                            </div>
+                            <div className="space-y-1">
+                              <div className="text-xs font-bold text-textMuted uppercase">Attributes (JSON)</div>
+                              <textarea
+                                value={JSON.stringify(v.attributes || {}, null, 2)}
+                                onChange={(e) => {
+                                  try {
+                                    const parsed = JSON.parse(e.target.value || "{}");
+                                    setAssetEditorData({
+                                      ...assetEditorData,
+                                      variants: assetEditorData.variants.map((x) => (x.id === v.id ? { ...x, attributes: parsed } : x)),
+                                    });
+                                  } catch {
+                                    return;
+                                  }
+                                }}
+                                className="w-full bg-surfaceHighlight border border-border rounded p-3 text-xs outline-none focus:border-primary h-40 resize-none text-textMain font-mono"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() =>
+                                  updateAssetVariant(v.id, {
+                                    stage_tag: v.stage_tag ?? null,
+                                    age_range: v.age_range ?? null,
+                                    attributes: v.attributes || {},
+                                    prompt_template: v.prompt_template ?? null,
+                                  })
+                                }
+                                disabled={assetEditorIsSaving}
+                                className="flex-1 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
+                                type="button"
+                              >
+                                {assetEditorIsSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                                保存变体
+                              </button>
+                              <button
+                                onClick={() => updateAssetVariant(v.id, { is_default: true })}
+                                disabled={assetEditorIsSaving}
+                                className="py-2 px-3 bg-surfaceHighlight hover:bg-primary/10 hover:text-primary border border-border hover:border-primary/30 rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                                type="button"
+                              >
+                                设为默认
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {sbToolOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-surface border border-border rounded-2xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+            <div className="p-6 border-b border-border flex justify-between items-center bg-surfaceHighlight/50">
+              <h3 className="font-bold text-textMain flex items-center gap-2">
+                <Sparkles size={18} className="text-primary" /> AI 工具：生成分镜
+              </h3>
+              <button onClick={closeSbTool} type="button">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 overflow-y-auto">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">供应商</label>
+                  <select
+                    value={sbProvider}
+                    onChange={(e) => {
+                      setSbProvider(e.target.value);
+                      setSbModel("");
+                    }}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    {sbProviders.map((p) => (
+                      <option key={p} value={p}>
+                        {p}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">模型</label>
+                  <select
+                    value={sbModel}
+                    onChange={(e) => setSbModel(e.target.value)}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    {sbModelsForProvider.map((m) => (
+                      <option key={m.model} value={m.model}>
+                        {m.model}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">落库策略</label>
+                  <select
+                    value={sbApplyMode}
+                    onChange={(e) => setSbApplyMode(e.target.value as "replace" | "append")}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    <option value="replace">覆盖重建</option>
+                    <option value="append">追加分镜</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="space-y-2 md:col-span-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">提示词</label>
+                  <textarea
+                    value={sbPromptTemplate}
+                    onChange={(e) => setSbPromptTemplate(e.target.value)}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-3 text-sm outline-none focus:border-primary h-40 resize-none text-textMain"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-textMuted uppercase">提示词预设</label>
+                  <select
+                    value={sbPresetId}
+                    onChange={(e) => handleSbSelectPreset(e.target.value)}
+                    className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                  >
+                    <option value="">(新建预设)</option>
+                    {sbPresets.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.is_default ? `⭐ ${p.name}` : p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={sbPresetName}
+                      onChange={(e) => setSbPresetName(e.target.value)}
+                      className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                      placeholder="预设名称"
+                    />
+                    <label className="flex items-center gap-2 text-xs text-textMuted select-none">
+                      <input type="checkbox" checked={sbPresetIsDefault} onChange={(e) => setSbPresetIsDefault(e.target.checked)} />
+                      设为默认
+                    </label>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleSbSavePreset}
+                        disabled={sbIsLoading}
+                        className="flex-1 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        保存提示词
+                      </button>
+                      <button
+                        onClick={handleSbDeletePreset}
+                        disabled={sbIsLoading || !sbPresetId}
+                        className="px-3 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        删除
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  onClick={handleSbPreviewPrompt}
+                  disabled={sbIsLoading || useMockApi}
+                  className="px-4 py-2 bg-surface border border-border rounded-lg text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
+                  type="button"
+                >
+                  预览提示词
+                </button>
+                <button
+                  onClick={handleSbRunPreview}
+                  disabled={sbIsLoading || useMockApi}
+                  className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                  type="button"
+                >
+                  {sbIsLoading ? "处理中..." : "调用 AI 预览"}
+                </button>
+                <button
+                  onClick={handleSbApply}
+                  disabled={sbIsApplying || useMockApi}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
+                  type="button"
+                >
+                  {sbIsApplying ? "落库中..." : "确认落库"}
+                </button>
+              </div>
+
+              {sbFinalPrompt && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">最终提示词（已注入）</div>
+                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{sbFinalPrompt}</pre>
+                </div>
+              )}
+
+              {sbRawText && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">返回结果预览</div>
+                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{sbRawText}</pre>
+                </div>
+              )}
+
+              {sbShots.length > 0 && (
+                <div className="rounded-xl border border-border bg-surface overflow-hidden">
+                  <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">分镜效果预览（可编辑后落库）</div>
+                  <div className="p-4 space-y-4">
+                    {sbShots.map((shot, idx) => (
+                      <div key={idx} className="p-4 rounded-xl border border-border bg-surfaceHighlight/20 space-y-3">
+                        <div className="flex items-center justify-between">
+                          <div className="font-bold text-textMain">SHOT {idx + 1}</div>
+                          <button
+                            onClick={() => setSbShots((prev) => prev.filter((_, i) => i !== idx))}
+                            className="text-textMuted hover:text-red-400"
+                            type="button"
+                            title="移除"
+                          >
+                            <X size={16} />
+                          </button>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                          <input
+                            value={shot.shot_type || ""}
+                            onChange={(e) => setSbShots((prev) => prev.map((s, i) => (i === idx ? { ...s, shot_type: e.target.value } : s)))}
+                            className="bg-surface border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                            placeholder="shot_type"
+                          />
+                          <input
+                            value={shot.camera_angle || ""}
+                            onChange={(e) => setSbShots((prev) => prev.map((s, i) => (i === idx ? { ...s, camera_angle: e.target.value } : s)))}
+                            className="bg-surface border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                            placeholder="camera_angle"
+                          />
+                          <input
+                            value={shot.camera_move || ""}
+                            onChange={(e) => setSbShots((prev) => prev.map((s, i) => (i === idx ? { ...s, camera_move: e.target.value } : s)))}
+                            className="bg-surface border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                            placeholder="camera_move"
+                          />
+                        </div>
+                        <textarea
+                          value={shot.description || ""}
+                          onChange={(e) => setSbShots((prev) => prev.map((s, i) => (i === idx ? { ...s, description: e.target.value } : s)))}
+                          className="w-full bg-surface border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain h-20 resize-none"
+                          placeholder="description（画面描述）"
+                        />
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                          <input
+                            value={shot.dialogue_speaker || ""}
+                            onChange={(e) => setSbShots((prev) => prev.map((s, i) => (i === idx ? { ...s, dialogue_speaker: e.target.value } : s)))}
+                            className="bg-surface border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                            placeholder="dialogue_speaker"
+                          />
+                          <input
+                            value={shot.sound_effect || ""}
+                            onChange={(e) => setSbShots((prev) => prev.map((s, i) => (i === idx ? { ...s, sound_effect: e.target.value } : s)))}
+                            className="bg-surface border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                            placeholder="sound_effect"
+                          />
+                        </div>
+                        <textarea
+                          value={shot.dialogue || ""}
+                          onChange={(e) => setSbShots((prev) => prev.map((s, i) => (i === idx ? { ...s, dialogue: e.target.value } : s)))}
+                          className="w-full bg-surface border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain h-16 resize-none"
+                          placeholder="dialogue（对白）"
+                        />
+                        <input
+                          value={(shot.active_assets || []).join(",")}
+                          onChange={(e) =>
+                            setSbShots((prev) =>
+                              prev.map((s, i) =>
+                                i === idx
+                                  ? { ...s, active_assets: e.target.value.split(",").map((x) => x.trim()).filter(Boolean) }
+                                  : s,
+                              ),
+                            )
+                          }
+                          className="bg-surface border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
+                          placeholder="active_assets（用英文逗号分隔）"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

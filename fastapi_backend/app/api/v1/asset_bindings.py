@@ -1,0 +1,115 @@
+from __future__ import annotations
+
+from uuid import UUID
+
+from fastapi import APIRouter, Depends
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.core.exceptions import AppError
+from app.database import User, get_async_session
+from app.models import Asset, AssetBinding, AssetVariant
+from app.repositories import asset_binding_repository
+from app.schemas import AssetBindingBrief, AssetBindingCreateRequest, SceneAssetBindingsResponse, ShotAssetBindingsMapResponse
+from app.schemas_response import ResponseBase
+from app.users import current_active_user
+
+
+router = APIRouter()
+
+
+def _to_brief(binding, asset, variant) -> AssetBindingBrief:
+    return AssetBindingBrief(
+        id=binding.id,
+        asset_entity_id=asset.id,
+        asset_variant_id=binding.asset_variant_id,
+        name=asset.name,
+        type=str(asset.type),
+        category=asset.category,
+        variant_code=getattr(variant, "variant_code", None) if variant is not None else None,
+        stage_tag=getattr(variant, "stage_tag", None) if variant is not None else None,
+        age_range=getattr(variant, "age_range", None) if variant is not None else None,
+    )
+
+
+@router.get("/episodes/{episode_id}/asset-bindings", response_model=ResponseBase[list[AssetBindingBrief]])
+async def list_episode_asset_bindings(
+    episode_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    rows = await asset_binding_repository.list_episode_bindings(db=db, user_id=user.id, episode_id=episode_id)
+    if rows is None:
+        raise AppError(msg="Episode not found or not authorized", code=404, status_code=404)
+    return ResponseBase(code=200, msg="OK", data=[_to_brief(b, a, v) for (b, a, v) in rows])
+
+
+@router.get("/scenes/{scene_id}/asset-bindings", response_model=ResponseBase[SceneAssetBindingsResponse])
+async def list_scene_asset_bindings(
+    scene_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    rows = await asset_binding_repository.list_scene_bindings(db=db, user_id=user.id, scene_id=scene_id)
+    if rows is None:
+        raise AppError(msg="Scene not found or not authorized", code=404, status_code=404)
+    return ResponseBase(code=200, msg="OK", data=SceneAssetBindingsResponse(scene_id=scene_id, bindings=[_to_brief(b, a, v) for (b, a, v) in rows]))
+
+
+@router.get("/scenes/{scene_id}/shot-asset-bindings", response_model=ResponseBase[ShotAssetBindingsMapResponse])
+async def list_shot_asset_bindings_map(
+    scene_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    mapping = await asset_binding_repository.list_shot_bindings_map_for_scene(db=db, user_id=user.id, scene_id=scene_id)
+    if mapping is None:
+        raise AppError(msg="Scene not found or not authorized", code=404, status_code=404)
+    out: dict[UUID, list[AssetBindingBrief]] = {}
+    for shot_id, rows in mapping.items():
+        out[shot_id] = [_to_brief(b, a, v) for (b, a, v) in rows]
+    return ResponseBase(code=200, msg="OK", data=ShotAssetBindingsMapResponse(scene_id=scene_id, shot_bindings=out))
+
+
+@router.post("/shots/{shot_id}/asset-bindings", response_model=ResponseBase[AssetBindingBrief])
+async def upsert_shot_asset_binding(
+    shot_id: UUID,
+    body: AssetBindingCreateRequest,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    binding = await asset_binding_repository.upsert_shot_binding(
+        db=db,
+        user_id=user.id,
+        shot_id=shot_id,
+        asset_entity_id=body.asset_entity_id,
+        asset_variant_id=body.asset_variant_id,
+    )
+    if not binding:
+        raise AppError(msg="Shot not found or not authorized", code=404, status_code=404)
+
+    await db.commit()
+
+    res = await db.execute(
+        select(AssetBinding, Asset, AssetVariant)
+        .join(Asset, AssetBinding.asset_entity_id == Asset.id)
+        .outerjoin(AssetVariant, AssetBinding.asset_variant_id == AssetVariant.id)
+        .where(AssetBinding.id == binding.id)
+    )
+    row = res.first()
+    if not row:
+        raise AppError(msg="Asset binding not found", code=404, status_code=404)
+    b, a, v = row
+    return ResponseBase(code=200, msg="OK", data=_to_brief(b, a, v))
+
+
+@router.delete("/asset-bindings/{binding_id}", response_model=ResponseBase[dict])
+async def delete_asset_binding(
+    binding_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    ok = await asset_binding_repository.delete_binding(db=db, user_id=user.id, binding_id=binding_id)
+    if not ok:
+        raise AppError(msg="Asset binding not found or not authorized", code=404, status_code=404)
+    return ResponseBase(code=200, msg="OK", data={"message": "Asset binding successfully deleted"})
