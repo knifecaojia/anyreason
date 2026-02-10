@@ -41,6 +41,8 @@ import {
 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { useAiTaskDraft } from "@/components/tasks/useAiTaskDraft";
+import { TASK_ENTITY_TYPES, TASK_TYPES } from "@/lib/tasks/constants";
 
 interface Keyframe {
   id: string;
@@ -315,6 +317,10 @@ export default function Page() {
   const searchParams = useSearchParams();
   const mode = searchParams.get("mode") || "list";
   const seriesId = searchParams.get("seriesId");
+  const episodeIdFromQuery = searchParams.get("episodeId");
+  const sceneIdFromQuery = searchParams.get("sceneId");
+  const toolFromQuery = searchParams.get("tool");
+  const taskIdFromQuery = searchParams.get("taskId");
 
   const setQuery = (next: Record<string, string | null | undefined>) => {
     const sp = new URLSearchParams(searchParams.toString());
@@ -373,9 +379,7 @@ export default function Page() {
   const [aiPresetId, setAiPresetId] = useState<string>("");
   const [aiPresetName, setAiPresetName] = useState("");
   const [aiPresetIsDefault, setAiPresetIsDefault] = useState(false);
-  const [aiFinalPrompt, setAiFinalPrompt] = useState("");
-  const [aiRawText, setAiRawText] = useState("");
-  const [aiScenes, setAiScenes] = useState<AISceneDraft[]>([]);
+  const [aiPromptInjected, setAiPromptInjected] = useState("");
   const [aiApplyMode, setAiApplyMode] = useState<"replace" | "append">("replace");
   const [aiIsLoading, setAiIsLoading] = useState(false);
   const [aiIsApplying, setAiIsApplying] = useState(false);
@@ -404,10 +408,7 @@ export default function Page() {
   const [assetPresetId, setAssetPresetId] = useState<string>("");
   const [assetPresetName, setAssetPresetName] = useState("");
   const [assetPresetIsDefault, setAssetPresetIsDefault] = useState(false);
-  const [assetFinalPrompt, setAssetFinalPrompt] = useState("");
-  const [assetRawText, setAssetRawText] = useState("");
-  const [assetWorldUnity, setAssetWorldUnity] = useState<AIWorldUnityDraft | null>(null);
-  const [assetDraftAssets, setAssetDraftAssets] = useState<AIAssetDraft[]>([]);
+  const [assetPromptInjected, setAssetPromptInjected] = useState("");
   const [assetApplyMode, setAssetApplyMode] = useState<"replace" | "append">("append");
   const [assetIsLoading, setAssetIsLoading] = useState(false);
   const [assetIsApplying, setAssetIsApplying] = useState(false);
@@ -421,9 +422,7 @@ export default function Page() {
   const [sbPresetId, setSbPresetId] = useState<string>("");
   const [sbPresetName, setSbPresetName] = useState("");
   const [sbPresetIsDefault, setSbPresetIsDefault] = useState(false);
-  const [sbFinalPrompt, setSbFinalPrompt] = useState("");
-  const [sbRawText, setSbRawText] = useState("");
-  const [sbShots, setSbShots] = useState<AIShotDraft[]>([]);
+  const [sbPromptInjected, setSbPromptInjected] = useState("");
   const [sbApplyMode, setSbApplyMode] = useState<"replace" | "append">("replace");
   const [sbIsLoading, setSbIsLoading] = useState(false);
   const [sbIsApplying, setSbIsApplying] = useState(false);
@@ -610,6 +609,142 @@ export default function Page() {
     [activeEpisode, activeSceneId],
   );
   const episodeAssetPool = useMemo(() => activeEpisode?.assets || [], [activeEpisode?.assets]);
+
+  useEffect(() => {
+    if (!activeSeries) return;
+    if (!episodeIdFromQuery) return;
+    const found = activeSeries.episodes.some((e) => e.id === episodeIdFromQuery);
+    if (found) setActiveEpisodeId(episodeIdFromQuery);
+  }, [activeSeries, episodeIdFromQuery]);
+
+  useEffect(() => {
+    if (!activeEpisode) return;
+    if (!sceneIdFromQuery) return;
+    const found = activeEpisode.scenes.some((s) => s.id === sceneIdFromQuery);
+    if (found) setActiveSceneId(sceneIdFromQuery);
+  }, [activeEpisode, sceneIdFromQuery]);
+
+  useEffect(() => {
+    if (!toolFromQuery) return;
+    if (toolFromQuery === "scene-structure") {
+      if (activeEpisode && !aiToolOpen) setAiToolOpen(true);
+    }
+    if (toolFromQuery === "asset-extraction") {
+      if (activeEpisode && !assetToolOpen) setAssetToolOpen(true);
+    }
+    if (toolFromQuery === "storyboard") {
+      if (activeScene && !sbToolOpen) setSbToolOpen(true);
+    }
+  }, [toolFromQuery, activeEpisode, activeScene, aiToolOpen, assetToolOpen, sbToolOpen]);
+
+  const episodeSceneStructureTask = useAiTaskDraft<{ final_prompt: string; raw_text: string; scenes: AISceneDraft[] }>({
+    toolKey: "episode_scene_structure",
+    taskType: TASK_TYPES.episodeSceneStructurePreview,
+    entityType: TASK_ENTITY_TYPES.episode,
+    entityId: activeEpisode?.id ?? null,
+    preferredTaskId: toolFromQuery === "scene-structure" ? taskIdFromQuery : null,
+    buildInputJson: () => ({
+      script_id: activeSeries?.id || null,
+      episode_id: activeEpisode?.id || "",
+      model: aiModel,
+      prompt_template: aiPromptTemplate,
+      temperature: null,
+      max_tokens: null,
+    }),
+    mapResultToDraft: (r) => ({
+      final_prompt: typeof r.final_prompt === "string" ? r.final_prompt : "",
+      raw_text: typeof r.raw_text === "string" ? r.raw_text : "",
+      scenes: Array.isArray(r.scenes) ? (r.scenes as AISceneDraft[]) : [],
+    }),
+  });
+  const aiLocked = episodeSceneStructureTask.locked;
+  const aiTaskProgress = episodeSceneStructureTask.progress;
+  const aiFinalPrompt = episodeSceneStructureTask.draft?.final_prompt || "";
+  const aiRawText = episodeSceneStructureTask.draft?.raw_text || "";
+  const aiScenes = episodeSceneStructureTask.draft?.scenes || [];
+
+  const episodeAssetExtractionTask = useAiTaskDraft<{ final_prompt: string; raw_text: string; world_unity: AIWorldUnityDraft | null; assets: AIAssetDraft[] }>({
+    toolKey: "episode_asset_extraction",
+    taskType: TASK_TYPES.episodeAssetExtractionPreview,
+    entityType: TASK_ENTITY_TYPES.episode,
+    entityId: activeEpisode?.id ?? null,
+    preferredTaskId: toolFromQuery === "asset-extraction" ? taskIdFromQuery : null,
+    buildInputJson: () => ({
+      script_id: activeSeries?.id || null,
+      episode_id: activeEpisode?.id || "",
+      model: assetModel,
+      prompt_template: assetPromptTemplate,
+      temperature: null,
+      max_tokens: null,
+    }),
+    mapResultToDraft: (r) => ({
+      final_prompt: typeof r.final_prompt === "string" ? r.final_prompt : "",
+      raw_text: typeof r.raw_text === "string" ? r.raw_text : "",
+      world_unity: (r.world_unity as AIWorldUnityDraft | null) || null,
+      assets: Array.isArray(r.assets) ? (r.assets as AIAssetDraft[]) : [],
+    }),
+  });
+  const assetLocked = episodeAssetExtractionTask.locked;
+  const assetTaskProgress = episodeAssetExtractionTask.progress;
+  const assetFinalPrompt = episodeAssetExtractionTask.draft?.final_prompt || "";
+  const assetRawText = episodeAssetExtractionTask.draft?.raw_text || "";
+  const assetWorldUnity = episodeAssetExtractionTask.draft?.world_unity || null;
+  const assetDraftAssets = episodeAssetExtractionTask.draft?.assets || [];
+
+  const sceneStoryboardTask = useAiTaskDraft<{ final_prompt: string; raw_text: string; shots: AIShotDraft[] }>({
+    toolKey: "scene_storyboard",
+    taskType: TASK_TYPES.sceneStoryboardPreview,
+    entityType: TASK_ENTITY_TYPES.scene,
+    entityId: activeScene?.id ?? null,
+    preferredTaskId: toolFromQuery === "storyboard" ? taskIdFromQuery : null,
+    buildInputJson: () => ({
+      script_id: activeSeries?.id || null,
+      episode_id: activeEpisode?.id || null,
+      scene_id: activeScene?.id || "",
+      model: sbModel,
+      prompt_template: sbPromptTemplate,
+      temperature: null,
+      max_tokens: null,
+    }),
+    mapResultToDraft: (r) => ({
+      final_prompt: typeof r.final_prompt === "string" ? r.final_prompt : "",
+      raw_text: typeof r.raw_text === "string" ? r.raw_text : "",
+      shots: Array.isArray(r.shots) ? (r.shots as AIShotDraft[]) : [],
+    }),
+  });
+  const sbLocked = sceneStoryboardTask.locked;
+  const sbTaskProgress = sceneStoryboardTask.progress;
+  const sbFinalPrompt = sceneStoryboardTask.draft?.final_prompt || "";
+  const sbRawText = sceneStoryboardTask.draft?.raw_text || "";
+  const sbShots = sceneStoryboardTask.draft?.shots || [];
+  const setSbShots = useMemo(() => {
+    return (updater: AIShotDraft[] | ((prev: AIShotDraft[]) => AIShotDraft[])) => {
+      sceneStoryboardTask.setDraft((prev) => {
+        const base = prev || { final_prompt: "", raw_text: "", shots: [] };
+        const prevShots = Array.isArray(base.shots) ? base.shots : [];
+        const nextShots = typeof updater === "function" ? (updater as (p: AIShotDraft[]) => AIShotDraft[])(prevShots) : updater;
+        return { ...base, shots: nextShots };
+      });
+    };
+  }, [sceneStoryboardTask]);
+
+  useEffect(() => {
+    if (!aiToolOpen) return;
+    if (useMockApi) return;
+    void episodeSceneStructureTask.resume();
+  }, [aiToolOpen, activeEpisode?.id]);
+
+  useEffect(() => {
+    if (!assetToolOpen) return;
+    if (useMockApi) return;
+    void episodeAssetExtractionTask.resume();
+  }, [assetToolOpen, activeEpisode?.id]);
+
+  useEffect(() => {
+    if (!sbToolOpen) return;
+    if (useMockApi) return;
+    void sceneStoryboardTask.resume();
+  }, [sbToolOpen, activeScene?.id]);
   const assetBindPool = useMemo(() => {
     if (!useMockApi) return episodeAssetPool;
     const episodeKeys = new Set(episodeAssetPool.map((a) => `${a.type}:${a.name}`.toLowerCase()));
@@ -617,18 +752,6 @@ export default function Page() {
     return [...episodeAssetPool, ...extra];
   }, [episodeAssetPool]);
   const episodeAssetIdSet = useMemo(() => new Set(episodeAssetPool.map((a) => a.id)), [episodeAssetPool]);
-
-  const episodeAssetsGrouped = useMemo(() => {
-    const groups: Record<string, Record<string, AssetReference[]>> = {};
-    for (const a of episodeAssetPool) {
-      const typeKey = a.type;
-      const cat = (a.category || "未分类").trim() || "未分类";
-      if (!groups[typeKey]) groups[typeKey] = {};
-      if (!groups[typeKey][cat]) groups[typeKey][cat] = [];
-      groups[typeKey][cat].push(a);
-    }
-    return groups;
-  }, [episodeAssetPool]);
 
   const updateActiveSeries = (updatedSeries: ScriptSeries) => {
     setSeriesList((prev) => prev.map((s) => (s.id === updatedSeries.id ? updatedSeries : s)));
@@ -955,9 +1078,6 @@ export default function Page() {
       alert("请选择一个剧集");
       return;
     }
-    setAiFinalPrompt("");
-    setAiRawText("");
-    setAiScenes([]);
     setAiToolOpen(true);
   };
 
@@ -970,10 +1090,6 @@ export default function Page() {
       alert("请选择一个剧集");
       return;
     }
-    setAssetFinalPrompt("");
-    setAssetRawText("");
-    setAssetWorldUnity(null);
-    setAssetDraftAssets([]);
     setAssetToolOpen(true);
   };
 
@@ -1013,9 +1129,6 @@ export default function Page() {
     }
     if (preferredMode) setSbApplyMode(preferredMode);
     else if (activeScene.shots.length > 0) setSbApplyMode("replace");
-    setSbFinalPrompt("");
-    setSbRawText("");
-    setSbShots([]);
     setSbToolOpen(true);
   };
 
@@ -1040,7 +1153,7 @@ export default function Page() {
       });
       if (!res.ok) throw new Error(await res.text());
       const json = (await res.json()) as { data?: { final_prompt?: string } };
-      setAiFinalPrompt(json.data?.final_prompt || "");
+      setAiPromptInjected(json.data?.final_prompt || "");
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1065,7 +1178,7 @@ export default function Page() {
       });
       if (!res.ok) throw new Error(await res.text());
       const json = (await res.json()) as { data?: { final_prompt?: string } };
-      setAssetFinalPrompt(json.data?.final_prompt || "");
+      setAssetPromptInjected(json.data?.final_prompt || "");
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1082,18 +1195,8 @@ export default function Page() {
     }
     setAssetIsLoading(true);
     try {
-      const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/ai/asset-extraction/preview`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: assetModel, provider: assetProvider || null, prompt_template: assetPromptTemplate }),
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const json = (await res.json()) as { data?: { final_prompt?: string; raw_text?: string; world_unity?: AIWorldUnityDraft | null; assets?: AIAssetDraft[] } };
-      setAssetFinalPrompt(json.data?.final_prompt || "");
-      setAssetRawText(json.data?.raw_text || "");
-      setAssetWorldUnity(json.data?.world_unity || null);
-      setAssetDraftAssets(json.data?.assets || []);
+      episodeAssetExtractionTask.clearDraft();
+      await episodeAssetExtractionTask.createTask();
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1122,6 +1225,7 @@ export default function Page() {
       });
       if (!res.ok) throw new Error(await res.text());
       await refreshHierarchy(activeSeries.id);
+      episodeAssetExtractionTask.clearDraft();
       setAssetToolOpen(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
@@ -1139,17 +1243,8 @@ export default function Page() {
     }
     setAiIsLoading(true);
     try {
-      const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/ai/scene-structure/preview`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: aiModel, provider: aiProvider || null, prompt_template: aiPromptTemplate }),
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const json = (await res.json()) as { data?: { final_prompt?: string; raw_text?: string; scenes?: AISceneDraft[] } };
-      setAiFinalPrompt(json.data?.final_prompt || "");
-      setAiRawText(json.data?.raw_text || "");
-      setAiScenes(json.data?.scenes || []);
+      episodeSceneStructureTask.clearDraft();
+      await episodeSceneStructureTask.createTask();
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1179,6 +1274,7 @@ export default function Page() {
       if (!res.ok) throw new Error(await res.text());
       await refreshHierarchy(activeSeries.id);
       setActiveSceneId(null);
+      episodeSceneStructureTask.clearDraft();
       setAiToolOpen(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
@@ -1204,7 +1300,7 @@ export default function Page() {
       });
       if (!res.ok) throw new Error(await res.text());
       const json = (await res.json()) as { data?: { final_prompt?: string } };
-      setSbFinalPrompt(json.data?.final_prompt || "");
+      setSbPromptInjected(json.data?.final_prompt || "");
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1221,17 +1317,8 @@ export default function Page() {
     }
     setSbIsLoading(true);
     try {
-      const res = await fetch(`/api/scenes/${encodeURIComponent(activeScene.id)}/ai/storyboard/preview`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ model: sbModel, provider: sbProvider || null, prompt_template: sbPromptTemplate }),
-        cache: "no-store",
-      });
-      if (!res.ok) throw new Error(await res.text());
-      const json = (await res.json()) as { data?: { final_prompt?: string; raw_text?: string; shots?: AIShotDraft[] } };
-      setSbFinalPrompt(json.data?.final_prompt || "");
-      setSbRawText(json.data?.raw_text || "");
-      setSbShots(json.data?.shots || []);
+      sceneStoryboardTask.clearDraft();
+      await sceneStoryboardTask.createTask();
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1260,6 +1347,7 @@ export default function Page() {
       });
       if (!res.ok) throw new Error(await res.text());
       if (activeSeries?.id) await refreshSceneShots(activeSeries.id, activeScene.id);
+      sceneStoryboardTask.clearDraft();
       setSbToolOpen(false);
     } catch (err) {
       alert(err instanceof Error ? err.message : String(err));
@@ -2282,7 +2370,7 @@ export default function Page() {
           </div>
         ) : (
           <div className="flex-1 overflow-y-auto p-2 scrollbar-thin">
-            {activeSeries.episodes.map((ep) => (
+            {activeSeries.episodes.map((ep, idx) => (
               <div key={ep.id} className="mb-1">
                 <div className="flex items-center group relative">
                   <button
@@ -2298,6 +2386,9 @@ export default function Page() {
                     type="button"
                   >
                     {activeEpisodeId === ep.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    <span className="w-5 h-5 rounded-md bg-surfaceHighlight border border-border text-[10px] font-bold flex items-center justify-center text-textMuted flex-shrink-0">
+                      {idx + 1}
+                    </span>
                     <span className="truncate flex-1 text-left">EP{ep.number}: {ep.title}</span>
                   </button>
                 </div>
@@ -2639,60 +2730,66 @@ export default function Page() {
                             {!activeEpisode.assets || activeEpisode.assets.length === 0 ? (
                               <div className="text-sm text-textMuted">暂无关联资产</div>
                             ) : (
-                              <div className="space-y-5">
-                                {(["CHARACTER", "SCENE", "PROP", "VFX"] as const)
-                                  .filter((t) => episodeAssetsGrouped[t] && Object.keys(episodeAssetsGrouped[t]).length > 0)
-                                  .map((t) => {
-                                    const icon =
-                                      t === "CHARACTER" ? <User size={14} className="text-primary" /> : t === "SCENE" ? <ImageIcon size={14} className="text-primary" /> : t === "PROP" ? <Box size={14} className="text-primary" /> : <Sparkles size={14} className="text-primary" />;
-                                    const label = t === "CHARACTER" ? "角色" : t === "SCENE" ? "场景" : t === "PROP" ? "道具" : "特效";
-                                    const catGroups = episodeAssetsGrouped[t] || {};
-                                    const total = Object.values(catGroups).reduce((sum, arr) => sum + arr.length, 0);
-                                    return (
-                                      <div key={t} className="space-y-3">
-                                        <div className="flex items-center justify-between">
-                                          <div className="flex items-center gap-2 text-xs font-bold text-textMain">
-                                            {icon}
-                                            <span>{label}</span>
+                              (() => {
+                                const byCat = episodeAssetPool.reduce(
+                                  (acc, asset) => {
+                                    const cat = (asset.category || "未分类").trim() || "未分类";
+                                    (acc[cat] ||= []).push(asset);
+                                    return acc;
+                                  },
+                                  {} as Record<string, AssetReference[]>,
+                                );
+
+                                const typeLabel = (t: AssetReference["type"]) => {
+                                  if (t === "CHARACTER") return "角色";
+                                  if (t === "SCENE") return "场景";
+                                  if (t === "PROP") return "道具";
+                                  return "特效";
+                                };
+
+                                return (
+                                  <div className="space-y-5">
+                                    {Object.entries(byCat)
+                                      .sort(([a], [b]) => a.localeCompare(b))
+                                      .map(([cat, assets]) => (
+                                        <div key={cat} className="space-y-2">
+                                          <div className="flex items-center justify-between">
+                                            <div className="text-[10px] text-textMuted uppercase tracking-wider">{cat}</div>
                                             <span className="text-[10px] text-textMuted/60 bg-surfaceHighlight px-2 py-0.5 rounded border border-border">
-                                              {total}
+                                              {assets.length}
                                             </span>
                                           </div>
+                                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                            {assets
+                                              .slice()
+                                              .sort((a, b) => `${a.type}:${a.name}`.localeCompare(`${b.type}:${b.name}`))
+                                              .map((asset) => (
+                                                <button
+                                                  key={asset.id}
+                                                  onClick={() => openAssetEditor(asset.id)}
+                                                  className="flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-3 hover:border-primary/50 hover:bg-surfaceHighlight/40 transition-all text-left"
+                                                  type="button"
+                                                >
+                                                  <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border flex items-center justify-center text-textMuted">
+                                                    {asset.type === "CHARACTER" && <User size={16} />}
+                                                    {asset.type === "SCENE" && <ImageIcon size={16} />}
+                                                    {asset.type === "PROP" && <Box size={16} />}
+                                                    {asset.type === "VFX" && <Sparkles size={16} />}
+                                                  </div>
+                                                  <div className="flex-1 min-w-0">
+                                                    <div className="text-sm font-bold text-textMain truncate">{asset.name}</div>
+                                                    <div className="mt-1 text-[10px] text-textMuted uppercase tracking-wider">
+                                                      {typeLabel(asset.type)}
+                                                    </div>
+                                                  </div>
+                                                </button>
+                                              ))}
+                                          </div>
                                         </div>
-                                        <div className="space-y-4">
-                                          {Object.entries(catGroups)
-                                            .sort(([a], [b]) => a.localeCompare(b))
-                                            .map(([cat, assets]) => (
-                                              <div key={cat} className="space-y-2">
-                                                <div className="text-[10px] text-textMuted uppercase tracking-wider">{cat}</div>
-                                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                                                  {assets.map((asset) => (
-                                                    <button
-                                                      key={asset.id}
-                                                      onClick={() => openAssetEditor(asset.id)}
-                                                      className="flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-3 hover:border-primary/50 hover:bg-surfaceHighlight/40 transition-all text-left"
-                                                      type="button"
-                                                    >
-                                                      <div className="w-10 h-10 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border flex items-center justify-center text-textMuted">
-                                                        {asset.type === "CHARACTER" && <User size={16} />}
-                                                        {asset.type === "SCENE" && <ImageIcon size={16} />}
-                                                        {asset.type === "PROP" && <Box size={16} />}
-                                                        {asset.type === "VFX" && <Sparkles size={16} />}
-                                                      </div>
-                                                      <div className="flex-1 min-w-0">
-                                                        <div className="text-sm font-bold text-textMain truncate">{asset.name}</div>
-                                                        <div className="mt-1 text-[10px] text-textMuted uppercase tracking-wider">{asset.type}</div>
-                                                      </div>
-                                                    </button>
-                                                  ))}
-                                                </div>
-                                              </div>
-                                            ))}
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                              </div>
+                                      ))}
+                                  </div>
+                                );
+                              })()
                             )}
                           </div>
                         </div>
@@ -2956,7 +3053,7 @@ export default function Page() {
                                     <span className="text-xs">暂无绑定资产，点击添加</span>
                                   </div>
                                 ) : (
-                                  <div className="space-y-3">
+                                  <div className="space-y-5">
                                     {Object.entries(
                                       (shot.assets || []).reduce((acc, a) => {
                                         const key = (a.category || "未分类").trim() || "未分类";
@@ -2966,15 +3063,19 @@ export default function Page() {
                                     )
                                       .sort(([a], [b]) => a.localeCompare(b))
                                       .map(([cat, assets]) => (
-                                        <div key={cat} className="space-y-2">
+                                        <div key={cat} className="space-y-3">
                                           <div className="text-[10px] text-textMuted uppercase tracking-wider">{cat}</div>
-                                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                                          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                                             {assets.map((asset) => (
-                                              <button
+                                              <div
                                                 key={asset.id}
+                                                role="button"
+                                                tabIndex={0}
                                                 onClick={() => openAssetEditor(asset.id)}
-                                                className="group/card relative flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-2 hover:border-primary/50 hover:bg-surfaceHighlight/50 transition-all cursor-pointer"
-                                                type="button"
+                                                onKeyDown={(e) => {
+                                                  if (e.key === "Enter" || e.key === " ") openAssetEditor(asset.id);
+                                                }}
+                                                className="group/card relative flex items-start gap-3 bg-surfaceHighlight/20 border border-border/60 rounded-lg p-3 hover:border-primary/50 hover:bg-surfaceHighlight/50 transition-all cursor-pointer"
                                               >
                                                 <div className="w-12 h-12 rounded-md overflow-hidden flex-shrink-0 bg-black/50 border border-border relative">
                                                   {asset.thumbnail ? (
@@ -2991,11 +3092,11 @@ export default function Page() {
                                                   )}
                                                   <div className="absolute inset-0 ring-1 ring-inset ring-border/30 rounded-md pointer-events-none"></div>
                                                 </div>
-                                                <div className="flex-1 min-w-0 flex flex-col pt-0.5">
-                                                  <div className="text-sm font-bold text-textMain truncate leading-tight" title={asset.name}>
+                                                <div className="flex-1 min-w-0 flex flex-col pt-0.5 gap-1">
+                                                  <div className="text-sm font-bold text-textMain truncate leading-snug" title={asset.name}>
                                                     {asset.name}
                                                   </div>
-                                                  <div className="flex items-center gap-1.5 mt-1.5">
+                                                  <div className="flex items-center gap-1.5">
                                                     <span className="text-[9px] text-textMuted uppercase tracking-wider bg-surface px-1.5 py-0.5 rounded border border-border flex items-center gap-1">
                                                       {asset.type === "CHARACTER" && <User size={8} />}
                                                       {asset.type === "SCENE" && <ImageIcon size={8} />}
@@ -3009,13 +3110,13 @@ export default function Page() {
                                                     e.stopPropagation();
                                                     handleUnbindAsset(shot.id, asset.id);
                                                   }}
-                                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-surface border border-border text-textMuted hover:text-red-400 hover:border-red-400/50 rounded-full opacity-0 group-hover/card:opacity-100 transition-all shadow-sm z-10"
+                                                  className="absolute -top-1.5 -right-1.5 w-5 h-5 flex items-center justify-center bg-surface border border-border text-textMuted hover:text-red-400 hover:border-red-400/50 rounded-full opacity-100 transition-colors shadow-sm z-10"
                                                   title="解除绑定"
                                                   type="button"
                                                 >
                                                   <X size={10} />
                                                 </button>
-                                              </button>
+                                              </div>
                                             ))}
                                           </div>
                                         </div>
@@ -3084,7 +3185,7 @@ export default function Page() {
                     </span>
                   </div>
                 </div>
-                <div className="p-6 overflow-y-auto grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                <div className="p-6 overflow-y-auto grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
                   {assetBindPool.filter((a) => {
                     if (!assetSearchQuery) return true;
                     const q = assetSearchQuery.toLowerCase();
@@ -3113,11 +3214,9 @@ export default function Page() {
                           </div>
                         )}
                         <div
-                          className={`absolute inset-0 bg-black/40 flex flex-col justify-end p-3 transition-opacity ${
-                            isSelected ? "opacity-100" : "opacity-0 group-hover:opacity-100"
-                          }`}
+                          className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/35 to-transparent flex flex-col justify-end p-3 opacity-100"
                         >
-                          <div className="font-bold text-sm text-white truncate">{asset.name}</div>
+                          <div className="font-bold text-sm text-white truncate leading-snug">{asset.name}</div>
                           <div className="flex gap-1 mt-1 flex-wrap">
                             <span className="text-[9px] bg-white/20 px-1 rounded text-white/90">{asset.type}</span>
                             {isEpisodeAsset && <span className="text-[9px] bg-emerald-400/20 px-1 rounded text-emerald-200 border border-emerald-300/30">本集</span>}
@@ -3175,12 +3274,15 @@ export default function Page() {
             </button>
           </div>
           <div className="p-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 overflow-y-auto">
-            {seriesList.map((series) => (
+            {seriesList.map((series, idx) => (
               <div
                 key={series.id}
                 onClick={() => setQuery({ mode: "studio", seriesId: series.id })}
                 className="group bg-surface border border-border rounded-2xl p-6 hover:border-primary/50 hover:bg-surfaceHighlight/20 transition-all cursor-pointer shadow-sm hover:shadow-xl flex flex-col relative"
               >
+                <div className="absolute top-4 left-4 px-2 py-1 rounded-md text-[10px] font-bold border bg-surface/50 backdrop-blur text-textMuted">
+                  {idx + 1}
+                </div>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -3398,6 +3500,12 @@ export default function Page() {
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto">
+              {aiLocked && (
+                <div className="rounded-xl border border-border bg-surfaceHighlight/30 px-4 py-3 text-sm text-textMain flex items-center justify-between">
+                  <div className="font-semibold">任务执行中，编辑区域已锁定</div>
+                  <div className="text-xs text-textMuted tabular-nums">{aiTaskProgress}%</div>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-textMuted uppercase">供应商</label>
@@ -3407,6 +3515,7 @@ export default function Page() {
                       setAiProvider(e.target.value);
                       setAiModel("");
                     }}
+                    disabled={aiLocked || aiIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     {aiProviders.map((p) => (
@@ -3421,6 +3530,7 @@ export default function Page() {
                   <select
                     value={aiModel}
                     onChange={(e) => setAiModel(e.target.value)}
+                    disabled={aiLocked || aiIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     {aiModelsForProvider.map((m) => (
@@ -3435,6 +3545,7 @@ export default function Page() {
                   <select
                     value={aiApplyMode}
                     onChange={(e) => setAiApplyMode(e.target.value as "replace" | "append")}
+                    disabled={aiLocked || aiIsLoading || aiIsApplying}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     <option value="replace">覆盖重建</option>
@@ -3449,6 +3560,7 @@ export default function Page() {
                   <textarea
                     value={aiPromptTemplate}
                     onChange={(e) => setAiPromptTemplate(e.target.value)}
+                    disabled={aiLocked || aiIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-3 text-sm outline-none focus:border-primary h-40 resize-none text-textMain"
                   />
                 </div>
@@ -3457,6 +3569,7 @@ export default function Page() {
                   <select
                     value={aiPresetId}
                     onChange={(e) => handleAiSelectPreset(e.target.value)}
+                    disabled={aiLocked || aiIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     <option value="">(新建预设)</option>
@@ -3471,6 +3584,7 @@ export default function Page() {
                       type="text"
                       value={aiPresetName}
                       onChange={(e) => setAiPresetName(e.target.value)}
+                      disabled={aiLocked || aiIsLoading}
                       className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                       placeholder="预设名称"
                     />
@@ -3478,6 +3592,7 @@ export default function Page() {
                       <input
                         type="checkbox"
                         checked={aiPresetIsDefault}
+                        disabled={aiLocked || aiIsLoading}
                         onChange={(e) => setAiPresetIsDefault(e.target.checked)}
                       />
                       设为默认
@@ -3485,7 +3600,7 @@ export default function Page() {
                     <div className="flex gap-2">
                       <button
                         onClick={handleAiSavePreset}
-                        disabled={aiIsLoading}
+                        disabled={aiLocked || aiIsLoading}
                         className="flex-1 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
                         type="button"
                       >
@@ -3493,7 +3608,7 @@ export default function Page() {
                       </button>
                       <button
                         onClick={handleAiDeletePreset}
-                        disabled={aiIsLoading || !aiPresetId}
+                        disabled={aiLocked || aiIsLoading || !aiPresetId}
                         className="px-3 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50"
                         type="button"
                       >
@@ -3507,7 +3622,7 @@ export default function Page() {
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleAiPreviewPrompt}
-                  disabled={aiIsLoading || useMockApi}
+                  disabled={aiLocked || aiIsLoading || useMockApi}
                   className="px-4 py-2 bg-surface border border-border rounded-lg text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
                   type="button"
                 >
@@ -3515,15 +3630,15 @@ export default function Page() {
                 </button>
                 <button
                   onClick={handleAiRunPreview}
-                  disabled={aiIsLoading || useMockApi}
+                  disabled={aiLocked || aiIsLoading || useMockApi}
                   className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                   type="button"
                 >
-                  {aiIsLoading ? "处理中..." : "调用 AI 预览"}
+                  {aiLocked ? `处理中...${aiTaskProgress ? ` ${aiTaskProgress}%` : ""}` : aiIsLoading ? "处理中..." : "调用 AI 预览"}
                 </button>
                 <button
                   onClick={handleAiApply}
-                  disabled={aiIsApplying || useMockApi}
+                  disabled={aiLocked || aiIsApplying || useMockApi}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                   type="button"
                 >
@@ -3531,10 +3646,10 @@ export default function Page() {
                 </button>
               </div>
 
-              {aiFinalPrompt && (
+              {(aiFinalPrompt || aiPromptInjected) && (
                 <div className="rounded-xl border border-border bg-surface overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">最终提示词（已注入）</div>
-                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{aiFinalPrompt}</pre>
+                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{aiFinalPrompt || aiPromptInjected}</pre>
                 </div>
               )}
 
@@ -3587,6 +3702,12 @@ export default function Page() {
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto">
+              {assetLocked && (
+                <div className="rounded-xl border border-border bg-surfaceHighlight/30 px-4 py-3 text-sm text-textMain flex items-center justify-between">
+                  <div className="font-semibold">任务执行中，编辑区域已锁定</div>
+                  <div className="text-xs text-textMuted tabular-nums">{assetTaskProgress}%</div>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-textMuted uppercase">供应商</label>
@@ -3596,6 +3717,7 @@ export default function Page() {
                       setAssetProvider(e.target.value);
                       setAssetModel("");
                     }}
+                    disabled={assetLocked || assetIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     {assetProviders.map((p) => (
@@ -3610,6 +3732,7 @@ export default function Page() {
                   <select
                     value={assetModel}
                     onChange={(e) => setAssetModel(e.target.value)}
+                    disabled={assetLocked || assetIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     {assetModelsForProvider.map((m) => (
@@ -3624,6 +3747,7 @@ export default function Page() {
                   <select
                     value={assetApplyMode}
                     onChange={(e) => setAssetApplyMode(e.target.value as "replace" | "append")}
+                    disabled={assetLocked || assetIsLoading || assetIsApplying}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     <option value="append">追加绑定</option>
@@ -3638,6 +3762,7 @@ export default function Page() {
                   <textarea
                     value={assetPromptTemplate}
                     onChange={(e) => setAssetPromptTemplate(e.target.value)}
+                    disabled={assetLocked || assetIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-3 text-sm outline-none focus:border-primary h-40 resize-none text-textMain"
                   />
                 </div>
@@ -3646,6 +3771,7 @@ export default function Page() {
                   <select
                     value={assetPresetId}
                     onChange={(e) => handleAssetSelectPreset(e.target.value)}
+                    disabled={assetLocked || assetIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     <option value="">(新建预设)</option>
@@ -3660,6 +3786,7 @@ export default function Page() {
                       type="text"
                       value={assetPresetName}
                       onChange={(e) => setAssetPresetName(e.target.value)}
+                      disabled={assetLocked || assetIsLoading}
                       className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                       placeholder="预设名称"
                     />
@@ -3667,6 +3794,7 @@ export default function Page() {
                       <input
                         type="checkbox"
                         checked={assetPresetIsDefault}
+                        disabled={assetLocked || assetIsLoading}
                         onChange={(e) => setAssetPresetIsDefault(e.target.checked)}
                       />
                       设为默认
@@ -3674,7 +3802,7 @@ export default function Page() {
                     <div className="flex gap-2">
                       <button
                         onClick={handleAssetSavePreset}
-                        disabled={assetIsLoading}
+                        disabled={assetLocked || assetIsLoading}
                         className="flex-1 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
                         type="button"
                       >
@@ -3682,7 +3810,7 @@ export default function Page() {
                       </button>
                       <button
                         onClick={handleAssetDeletePreset}
-                        disabled={assetIsLoading || !assetPresetId}
+                        disabled={assetLocked || assetIsLoading || !assetPresetId}
                         className="px-3 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50"
                         type="button"
                       >
@@ -3696,7 +3824,7 @@ export default function Page() {
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleAssetPreviewPrompt}
-                  disabled={assetIsLoading || useMockApi}
+                  disabled={assetLocked || assetIsLoading || useMockApi}
                   className="px-4 py-2 bg-surface border border-border rounded-lg text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
                   type="button"
                 >
@@ -3704,15 +3832,15 @@ export default function Page() {
                 </button>
                 <button
                   onClick={handleAssetRunPreview}
-                  disabled={assetIsLoading || useMockApi}
+                  disabled={assetLocked || assetIsLoading || useMockApi}
                   className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                   type="button"
                 >
-                  {assetIsLoading ? "处理中..." : "调用 AI 预览"}
+                  {assetLocked ? `处理中...${assetTaskProgress ? ` ${assetTaskProgress}%` : ""}` : assetIsLoading ? "处理中..." : "调用 AI 预览"}
                 </button>
                 <button
                   onClick={handleAssetApply}
-                  disabled={assetIsApplying || useMockApi}
+                  disabled={assetLocked || assetIsApplying || useMockApi}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                   type="button"
                 >
@@ -3720,10 +3848,10 @@ export default function Page() {
                 </button>
               </div>
 
-              {assetFinalPrompt && (
+              {(assetFinalPrompt || assetPromptInjected) && (
                 <div className="rounded-xl border border-border bg-surface overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">最终提示词（已注入）</div>
-                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{assetFinalPrompt}</pre>
+                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{assetFinalPrompt || assetPromptInjected}</pre>
                 </div>
               )}
 
@@ -4057,6 +4185,12 @@ export default function Page() {
             </div>
 
             <div className="p-6 space-y-4 overflow-y-auto">
+              {sbLocked && (
+                <div className="rounded-xl border border-border bg-surfaceHighlight/30 px-4 py-3 text-sm text-textMain flex items-center justify-between">
+                  <div className="font-semibold">任务执行中，编辑区域已锁定</div>
+                  <div className="text-xs text-textMuted tabular-nums">{sbTaskProgress}%</div>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-textMuted uppercase">供应商</label>
@@ -4066,6 +4200,7 @@ export default function Page() {
                       setSbProvider(e.target.value);
                       setSbModel("");
                     }}
+                    disabled={sbLocked || sbIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     {sbProviders.map((p) => (
@@ -4080,6 +4215,7 @@ export default function Page() {
                   <select
                     value={sbModel}
                     onChange={(e) => setSbModel(e.target.value)}
+                    disabled={sbLocked || sbIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     {sbModelsForProvider.map((m) => (
@@ -4094,6 +4230,7 @@ export default function Page() {
                   <select
                     value={sbApplyMode}
                     onChange={(e) => setSbApplyMode(e.target.value as "replace" | "append")}
+                    disabled={sbLocked || sbIsLoading || sbIsApplying}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     <option value="replace">覆盖重建</option>
@@ -4108,6 +4245,7 @@ export default function Page() {
                   <textarea
                     value={sbPromptTemplate}
                     onChange={(e) => setSbPromptTemplate(e.target.value)}
+                    disabled={sbLocked || sbIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-3 text-sm outline-none focus:border-primary h-40 resize-none text-textMain"
                   />
                 </div>
@@ -4116,6 +4254,7 @@ export default function Page() {
                   <select
                     value={sbPresetId}
                     onChange={(e) => handleSbSelectPreset(e.target.value)}
+                    disabled={sbLocked || sbIsLoading}
                     className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                   >
                     <option value="">(新建预设)</option>
@@ -4130,17 +4269,23 @@ export default function Page() {
                       type="text"
                       value={sbPresetName}
                       onChange={(e) => setSbPresetName(e.target.value)}
+                      disabled={sbLocked || sbIsLoading}
                       className="w-full bg-surfaceHighlight border border-border rounded p-2 text-sm outline-none focus:border-primary text-textMain"
                       placeholder="预设名称"
                     />
                     <label className="flex items-center gap-2 text-xs text-textMuted select-none">
-                      <input type="checkbox" checked={sbPresetIsDefault} onChange={(e) => setSbPresetIsDefault(e.target.checked)} />
+                      <input
+                        type="checkbox"
+                        checked={sbPresetIsDefault}
+                        disabled={sbLocked || sbIsLoading}
+                        onChange={(e) => setSbPresetIsDefault(e.target.checked)}
+                      />
                       设为默认
                     </label>
                     <div className="flex gap-2">
                       <button
                         onClick={handleSbSavePreset}
-                        disabled={sbIsLoading}
+                        disabled={sbLocked || sbIsLoading}
                         className="flex-1 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
                         type="button"
                       >
@@ -4148,7 +4293,7 @@ export default function Page() {
                       </button>
                       <button
                         onClick={handleSbDeletePreset}
-                        disabled={sbIsLoading || !sbPresetId}
+                        disabled={sbLocked || sbIsLoading || !sbPresetId}
                         className="px-3 py-2 bg-surface border border-border rounded text-xs font-bold text-textMuted hover:text-red-400 hover:border-red-500/40 transition-colors disabled:opacity-50"
                         type="button"
                       >
@@ -4162,7 +4307,7 @@ export default function Page() {
               <div className="flex flex-wrap gap-2">
                 <button
                   onClick={handleSbPreviewPrompt}
-                  disabled={sbIsLoading || useMockApi}
+                  disabled={sbLocked || sbIsLoading || useMockApi}
                   className="px-4 py-2 bg-surface border border-border rounded-lg text-xs font-bold text-textMuted hover:text-primary hover:border-primary/40 transition-colors disabled:opacity-50"
                   type="button"
                 >
@@ -4170,15 +4315,15 @@ export default function Page() {
                 </button>
                 <button
                   onClick={handleSbRunPreview}
-                  disabled={sbIsLoading || useMockApi}
+                  disabled={sbLocked || sbIsLoading || useMockApi}
                   className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                   type="button"
                 >
-                  {sbIsLoading ? "处理中..." : "调用 AI 预览"}
+                  {sbLocked ? `处理中...${sbTaskProgress ? ` ${sbTaskProgress}%` : ""}` : sbIsLoading ? "处理中..." : "调用 AI 预览"}
                 </button>
                 <button
                   onClick={handleSbApply}
-                  disabled={sbIsApplying || useMockApi}
+                  disabled={sbLocked || sbIsApplying || useMockApi}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold transition-colors disabled:opacity-50"
                   type="button"
                 >
@@ -4186,10 +4331,10 @@ export default function Page() {
                 </button>
               </div>
 
-              {sbFinalPrompt && (
+              {(sbFinalPrompt || sbPromptInjected) && (
                 <div className="rounded-xl border border-border bg-surface overflow-hidden">
                   <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 font-bold text-sm">最终提示词（已注入）</div>
-                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{sbFinalPrompt}</pre>
+                  <pre className="p-4 text-xs text-textMain whitespace-pre-wrap break-words max-h-64 overflow-y-auto">{sbFinalPrompt || sbPromptInjected}</pre>
                 </div>
               )}
 

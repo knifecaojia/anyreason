@@ -1,4 +1,5 @@
 from httpx import AsyncClient, ASGITransport
+import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.engine.url import make_url
@@ -13,6 +14,52 @@ from app.models import User, Base
 from app.database import get_user_db, get_async_session
 from app.main import app
 from app.users import get_jwt_strategy
+
+
+class _FakeObject:
+    def __init__(self, payload: bytes):
+        self._payload = payload
+
+    def stream(self, _chunk_size: int):
+        yield self._payload
+
+    def close(self):
+        return None
+
+    def release_conn(self):
+        return None
+
+
+class _FakeMinio:
+    def __init__(self):
+        self._buckets: set[str] = set()
+        self._objects: dict[tuple[str, str], bytes] = {}
+
+    def bucket_exists(self, bucket: str) -> bool:
+        return bucket in self._buckets
+
+    def make_bucket(self, bucket: str):
+        self._buckets.add(bucket)
+
+    def put_object(self, *, bucket_name: str, object_name: str, data, length: int, content_type: str):
+        _ = content_type
+        self._buckets.add(bucket_name)
+        self._objects[(bucket_name, object_name)] = data.read(length)
+
+    def get_object(self, bucket: str, key: str):
+        return _FakeObject(self._objects[(bucket, key)])
+
+    def remove_object(self, *, bucket_name: str, object_name: str):
+        self._objects.pop((bucket_name, object_name), None)
+
+
+@pytest.fixture(autouse=True)
+def mock_minio(monkeypatch):
+    fake = _FakeMinio()
+    from app.storage import minio_client as minio_client_module
+
+    monkeypatch.setattr(minio_client_module, "get_minio_client", lambda: fake)
+    return fake
 
 
 @pytest_asyncio.fixture(scope="function")

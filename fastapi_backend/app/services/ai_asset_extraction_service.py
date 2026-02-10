@@ -453,6 +453,47 @@ class AIAssetExtractionService:
             raise AppError(msg="Episode not found or not authorized", code=404, status_code=404)
         return _build_final_prompt(prompt_template=prompt_template, episode_script=episode.script_full_text or "")
 
+    async def preview_from_text(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        script_text: str,
+        model: str,
+        prompt_template: str,
+        temperature: float | None,
+        max_tokens: int | None,
+    ) -> tuple[str, str, AIWorldUnityDraft | None, list[AIAssetDraft]]:
+        litellm_models = await self._list_litellm_model_names()
+        if litellm_models is not None:
+            available = {m["model"] for m in litellm_models if m.get("model")}
+            if available and model not in available:
+                raise AppError(msg="Model not found", code=400, status_code=400)
+        else:
+            models = _allowed_models()
+            if models and model not in models:
+                raise AppError(msg="Model not found", code=400, status_code=400)
+
+        final_prompt = _build_final_prompt(prompt_template=prompt_template, episode_script=(script_text or "").strip())
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": "You are a careful assistant. Output only valid JSON."},
+            {"role": "user", "content": final_prompt},
+        ]
+        raw = await _chat_completions(
+            db=db,
+            user_id=user_id,
+            model=model,
+            messages=messages,
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        raw_text = _extract_output_text(raw)
+        try:
+            world_unity, assets = _parse_assets_from_output(raw_text)
+        except Exception as e:
+            raise AppError(msg="Failed to parse asset extraction output", code=502, status_code=502, data=str(e))
+        return final_prompt, raw_text, world_unity, assets
+
     async def preview(
         self,
         *,

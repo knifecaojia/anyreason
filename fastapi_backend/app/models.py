@@ -790,3 +790,63 @@ class AuditLog(Base):
         Index("idx_audit_logs_created_at", "created_at"),
         Index("idx_audit_logs_action", "action"),
     )
+
+
+class Task(Base):
+    __tablename__ = "tasks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+
+    type = Column(String(64), nullable=False)
+    status = Column(String(16), nullable=False, server_default=text("'queued'"))
+    progress = Column(Integer, nullable=False, server_default=text("0"))
+
+    entity_type = Column(String(32), nullable=True)
+    entity_id = Column(UUID(as_uuid=True), nullable=True)
+
+    input_json = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    result_json = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    error = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+
+    user = relationship("User")
+    events = relationship(
+        "TaskEvent",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'canceled')",
+            name="ck_tasks_status",
+        ),
+        CheckConstraint("progress >= 0 AND progress <= 100", name="ck_tasks_progress"),
+        Index("idx_tasks_user", "user_id"),
+        Index("idx_tasks_user_status", "user_id", "status"),
+        Index("idx_tasks_entity", "entity_type", "entity_id"),
+        Index("idx_tasks_created_at", "created_at"),
+    )
+
+
+class TaskEvent(Base):
+    __tablename__ = "task_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    event_type = Column(String(32), nullable=False)
+    payload = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    task = relationship("Task", back_populates="events")
+
+    __table_args__ = (
+        Index("idx_task_events_task", "task_id"),
+        Index("idx_task_events_task_created_at", "task_id", "created_at"),
+    )

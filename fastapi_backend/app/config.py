@@ -12,6 +12,11 @@ class Settings(BaseSettings):
     TEST_DATABASE_URL: str | None = None
     EXPIRE_ON_COMMIT: bool = False
 
+    # Redis (task queue + events)
+    REDIS_URL: str = "redis://localhost:6379/0"
+    TASK_QUEUE_KEY: str = "tasks:queue"
+    TASK_EVENTS_CHANNEL: str = "tasks:events"
+
     # User
     ACCESS_SECRET_KEY: str
     RESET_PASSWORD_SECRET_KEY: str

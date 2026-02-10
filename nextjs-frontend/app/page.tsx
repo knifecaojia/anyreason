@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   ChevronRight,
@@ -129,8 +128,6 @@ function CaseCard({
 }
 
 export default function Home() {
-  const router = useRouter();
-
   return (
     <div className="h-screen w-full bg-[#000] text-textMain font-sans selection:bg-primary/30 overflow-y-auto overflow-x-hidden scroll-smooth">
       <div className="fixed inset-0 z-0 pointer-events-none">
@@ -170,14 +167,13 @@ export default function Home() {
               <span className="text-xl font-bold tracking-tight text-white font-sans">言之有理</span>
             </div>
             <div className="flex items-center gap-6">
-              <button
-                onClick={() => router.push("/login")}
+              <a
+                href="/login"
                 className="px-6 py-2.5 rounded-full bg-white text-black font-semibold hover:bg-gray-100 transition-all shadow-[0_0_20px_rgba(255,255,255,0.1)] hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] active:scale-95 text-sm flex items-center gap-2"
-                type="button"
               >
                 <span>开始创作</span>
                 <ArrowRight size={14} />
-              </button>
+              </a>
             </div>
           </div>
         </nav>
@@ -205,14 +201,13 @@ export default function Home() {
               </p>
 
               <div className="flex items-center justify-center gap-6">
-                <button
-                  onClick={() => router.push("/login")}
+                <a
+                  href="/login"
                   className="group px-10 py-5 rounded-full bg-blue-600 hover:bg-blue-500 text-white font-bold text-lg shadow-2xl shadow-blue-900/40 transition-all hover:-translate-y-1 flex items-center gap-3"
-                  type="button"
                 >
                   <span>免费试用</span>
                   <ChevronRight size={20} className="group-hover:translate-x-1 transition-transform" />
-                </button>
+                </a>
                 <button
                   className="px-10 py-5 rounded-full bg-white/5 backdrop-blur-md border border-white/10 hover:bg-white/10 text-white font-medium text-lg transition-all hover:-translate-y-1"
                   type="button"

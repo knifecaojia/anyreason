@@ -66,6 +66,7 @@ services:
     container_name: anyreason-redis
     restart: unless-stopped
     profiles:
+      - app
       - queue
     env_file:
       - ${ANYREASON_ENV_FILE:-.env}

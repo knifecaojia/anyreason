@@ -39,10 +39,11 @@ export async function login(prevState: unknown, formData: FormData) {
 
   try {
     const { data } = await authJwtLogin({ ...input, throwOnError: true });
-    if (!data || typeof (data as any).access_token !== "string") {
+    const token = (data as { access_token?: unknown } | null)?.access_token;
+    if (typeof token !== "string") {
       return { server_validation_error: "登录失败：未收到 access_token" };
     }
-    (await cookies()).set("accessToken", data.access_token, {
+    (await cookies()).set("accessToken", token, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",

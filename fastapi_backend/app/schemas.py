@@ -486,3 +486,47 @@ class AIPromptPresetUpdateRequest(BaseModel):
     model: str | None = None
     prompt_template: str | None = None
     is_default: bool | None = None
+
+
+TaskStatus = Literal["queued", "running", "succeeded", "failed", "canceled"]
+
+
+class TaskCreateRequest(BaseModel):
+    type: str
+    entity_type: str | None = None
+    entity_id: UUID | None = None
+    input_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class TaskRead(BaseModel):
+    id: UUID
+    user_id: UUID
+    type: str
+    status: TaskStatus
+    progress: int
+    entity_type: str | None = None
+    entity_id: UUID | None = None
+    input_json: dict[str, Any] = Field(default_factory=dict)
+    result_json: dict[str, Any] = Field(default_factory=dict)
+    error: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+
+    model_config = {"from_attributes": True}
+
+
+class TaskEventRead(BaseModel):
+    id: UUID
+    task_id: UUID
+    event_type: str
+    payload: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class TaskWsTicketRead(BaseModel):
+    ticket: str
+    expires_at: datetime

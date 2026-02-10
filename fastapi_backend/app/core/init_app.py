@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, WebSocket
 from fastapi.middleware import Middleware
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.docs import get_redoc_html, get_swagger_ui_html
@@ -26,12 +27,29 @@ limiter = Limiter(key_func=get_remote_address)
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
+async def lifespan(app: FastAPI):
+    from app.tasks.realtime import TaskWebSocketManager, redis_event_forwarder
+
     await create_db_and_tables()
     await ensure_builtin_roles()
     await ensure_builtin_permissions()
     await ensure_default_admin()
+
+    manager = TaskWebSocketManager()
+    stop_event = asyncio.Event()
+    forwarder = asyncio.create_task(redis_event_forwarder(manager=manager, stop_event=stop_event))
+    app.state.task_ws_manager = manager
+    app.state.task_ws_stop_event = stop_event
+    app.state.task_ws_forwarder = forwarder
     yield
+
+    stop_event.set()
+    forwarder.cancel()
+    try:
+        await forwarder
+    except BaseException:
+        pass
+    await manager.close_all()
 
 
 def make_middlewares() -> list[Middleware]:
@@ -58,6 +76,12 @@ def register_exception_handlers(app: FastAPI) -> None:
 
 def register_routes(app: FastAPI) -> None:
     app.include_router(api_router, prefix="/api")
+
+    from app.tasks.ws import handle_task_ws
+
+    @app.websocket("/ws/tasks")
+    async def ws_tasks(websocket: WebSocket):
+        await handle_task_ws(websocket=websocket, manager=app.state.task_ws_manager)
 
 
 def register_docs(app: FastAPI) -> None:

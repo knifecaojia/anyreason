@@ -47,6 +47,7 @@ services:
       - ${ANYREASON_ENV_FILE:-.env}
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-anyreason}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis}@redis:6379/0
       ACCESS_SECRET_KEY: ${ACCESS_SECRET_KEY:-dev-access-secret-change-me}
       RESET_PASSWORD_SECRET_KEY: ${RESET_PASSWORD_SECRET_KEY:-dev-reset-password-secret-change-me}
       VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
@@ -72,6 +73,47 @@ services:
     command: ["bash", "./start.sh"]
     depends_on:
       postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  task-worker:
+    profiles:
+      - app
+    build:
+      context: ../fastapi_backend
+      args:
+        PYTHON_BASE_IMAGE: ${PYTHON_BASE_IMAGE:-python:3.12-bookworm}
+    container_name: anyreason-task-worker
+    restart: unless-stopped
+    env_file:
+      - ${ANYREASON_ENV_FILE:-.env}
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-anyreason}
+      REDIS_URL: redis://:${REDIS_PASSWORD:-redis}@redis:6379/0
+      ACCESS_SECRET_KEY: ${ACCESS_SECRET_KEY:-dev-access-secret-change-me}
+      RESET_PASSWORD_SECRET_KEY: ${RESET_PASSWORD_SECRET_KEY:-dev-reset-password-secret-change-me}
+      VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      CORS_ORIGINS: ${CORS_ORIGINS:-["http://localhost:3000"]}
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
+      MINIO_SECURE: ${MINIO_SECURE:-false}
+      MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
+      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm-proxy:4000}
+      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
+      LITELLM_DEFAULT_ALLOWED_MODELS: ${LITELLM_DEFAULT_ALLOWED_MODELS:-mock,deepseek}
+      LITELLM_VIRTUAL_KEY_ALLOWED_MODELS: ${LITELLM_VIRTUAL_KEY_ALLOWED_MODELS:-*}
+      LITELLM_WEBHOOK_SECRET: ${LITELLM_WEBHOOK_SECRET:-}
+    volumes:
+      - ../fastapi_backend:/app
+      - fastapi-venv:/app/.venv
+    command: ["python", "-m", "app.tasks.worker", "--reload"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   frontend:

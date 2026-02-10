@@ -12,6 +12,7 @@ from app.api.v1.llm import router as llm_router
 from app.api.v1.scenes import router as scenes_router
 from app.api.v1.shots import router as shots_router
 from app.api.v1.scripts import router as scripts_router
+from app.api.v1.tasks import router as tasks_router
 from app.api.v1.users import router as users_router
 
 
@@ -26,6 +27,7 @@ v1_router.include_router(ai_scene_structure_router, tags=["ai"])
 v1_router.include_router(ai_storyboard_router, tags=["ai"])
 v1_router.include_router(ai_asset_extraction_router, tags=["ai"])
 v1_router.include_router(ai_prompt_presets_router, tags=["ai"])
+v1_router.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 v1_router.include_router(admin_router, tags=["admin"])
 v1_router.include_router(users_router, prefix="/users", tags=["users"])
 v1_router.include_router(llm_router, prefix="/llm", tags=["llm"])

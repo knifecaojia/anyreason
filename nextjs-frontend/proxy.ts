@@ -38,6 +38,7 @@ export const config = {
     "/assets/:path*",
     "/storyboard/:path*",
     "/studio/:path*",
+    "/tasks/:path*",
     "/settings/:path*",
   ],
 };

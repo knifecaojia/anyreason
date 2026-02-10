@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   AlertCircle,
   Box,
@@ -12,20 +12,21 @@ import {
   SplitSquareHorizontal,
   User,
 } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
 
-type ExtractionResult = {
-  model: string;
-  assets: ExtractedAsset[];
-  time: number;
-  error?: string;
+import { useTasks } from "@/components/tasks/TaskProvider";
+import { TASK_TYPES } from "@/lib/tasks/constants";
+import type { Task, TaskStatus } from "@/lib/tasks/types";
+
+type VariantResult = {
+  final_prompt: string;
+  raw_text: string;
+  world_unity: Record<string, unknown> | null;
+  assets: Array<Record<string, unknown>>;
 };
 
-type ExtractedAsset = {
-  name: string;
-  type?: string;
-  description?: string;
-  tags?: string[];
+type CompareResult = {
+  variant_a: VariantResult;
+  variant_b: VariantResult;
 };
 
 const DEFAULT_PROMPT = `Analyze the script provided and extract a list of assets required for production.
@@ -38,7 +39,13 @@ Do not include markdown formatting.`;
 
 export default function Page() {
   const [scriptContent, setScriptContent] = useState("");
-  const [isProcessing, setIsProcessing] = useState(false);
+  const { tasks } = useTasks();
+  const [taskId, setTaskId] = useState<string | null>(null);
+  const [taskStatus, setTaskStatus] = useState<TaskStatus | null>(null);
+  const [taskProgress, setTaskProgress] = useState(0);
+  const [taskError, setTaskError] = useState<string | null>(null);
+  const [result, setResult] = useState<CompareResult | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     try {
@@ -58,74 +65,78 @@ export default function Page() {
     prompt: DEFAULT_PROMPT,
   });
 
-  const [resultA, setResultA] = useState<ExtractionResult | null>(null);
-  const [resultB, setResultB] = useState<ExtractionResult | null>(null);
+  const isProcessing = useMemo(() => {
+    return isSubmitting || taskStatus === "queued" || taskStatus === "running";
+  }, [isSubmitting, taskStatus]);
+
+  useEffect(() => {
+    if (!taskId) return;
+    const t = tasks.find((x) => x.id === taskId);
+    if (!t) return;
+    setTaskStatus(t.status);
+    setTaskProgress(Number(t.progress || 0));
+    setTaskError(t.error || null);
+    if (t.status !== "succeeded") return;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        const json = (await res.json()) as { data?: Task };
+        const r = (json.data?.result_json || null) as CompareResult | null;
+        if (r && r.variant_a && r.variant_b) setResult(r);
+      } catch (e) {
+        setTaskError(e instanceof Error ? e.message : String(e));
+      }
+    })();
+  }, [taskId, tasks]);
 
   const runExtraction = async () => {
     if (!scriptContent.trim()) return;
-    setIsProcessing(true);
-    setResultA(null);
-    setResultB(null);
-
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
-    const processConfig = async (config: typeof configA): Promise<ExtractionResult> => {
-      const startTime = performance.now();
-      try {
-        const response = await ai.models.generateContent({
-          model: config.model,
-          contents: `SCRIPT:\n${scriptContent}\n\nINSTRUCTION:\n${config.prompt}`,
-          config: { responseMimeType: "application/json" },
-        });
-
-        const endTime = performance.now();
-        const text = response.text || "[]";
-        const cleanJson = text.replace(/```json|```/g, "").trim();
-        const parsed = JSON.parse(cleanJson) as unknown;
-        const assets: ExtractedAsset[] = Array.isArray(parsed)
-          ? parsed
-              .filter((x) => {
-                if (!x || typeof x !== "object") return false;
-                const rec = x as Record<string, unknown>;
-                return typeof rec.name === "string";
-              })
-              .map((x) => {
-                const rec = x as Record<string, unknown>;
-                return {
-                  name: String(rec.name),
-                  type: typeof rec.type === "string" ? rec.type : undefined,
-                  description: typeof rec.description === "string" ? rec.description : undefined,
-                  tags: Array.isArray(rec.tags) ? rec.tags.filter((t) => typeof t === "string") : undefined,
-                };
-              })
-          : [];
-
-        return { model: config.model, assets, time: Math.round(endTime - startTime) };
-      } catch (e: unknown) {
-        const msg = e instanceof Error ? e.message : "未知错误";
-        return { model: config.model, assets: [], time: 0, error: msg };
-      }
-    };
-
     try {
-      const [resA, resB] = await Promise.all([processConfig(configA), processConfig(configB)]);
-      setResultA(resA);
-      setResultB(resB);
+      setIsSubmitting(true);
+      setTaskError(null);
+      setResult(null);
+      const res = await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          type: TASK_TYPES.freeformAssetExtractionComparePreview,
+          input_json: {
+            script_text: scriptContent,
+            config_a: { model: configA.model, prompt_template: configA.prompt },
+            config_b: { model: configB.model, prompt_template: configB.prompt },
+            temperature: null,
+            max_tokens: null,
+          },
+        }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: { id?: string } };
+      const id = json.data?.id || null;
+      if (!id) throw new Error("task id missing");
+      setTaskId(id);
+      setTaskStatus("queued");
+      setTaskProgress(0);
     } finally {
-      setIsProcessing(false);
+      setIsSubmitting(false);
     }
   };
 
-  const AssetCard = ({ asset }: { asset: ExtractedAsset }) => {
+  const AssetCard = ({ asset }: { asset: Record<string, unknown> }) => {
+    const name = typeof asset.name === "string" ? asset.name : "未命名";
+    const type = typeof asset.type === "string" ? asset.type : "";
+    const concept = typeof asset.concept === "string" ? asset.concept : "";
+    const tags = Array.isArray(asset.tags) ? asset.tags.filter((t) => typeof t === "string") : [];
     const getIcon = () => {
-      switch (asset.type?.toUpperCase()) {
-        case "CHARACTER":
+      switch (type?.toLowerCase()) {
+        case "character":
           return <User size={14} className="text-blue-400" />;
-        case "SCENE":
+        case "scene":
           return <ImageIcon size={14} className="text-purple-400" />;
-        case "PROP":
+        case "prop":
           return <Box size={14} className="text-orange-400" />;
-        case "EFFECT":
+        case "vfx":
           return <Sparkles size={14} className="text-cyan-400" />;
         default:
           return <Database size={14} className="text-gray-400" />;
@@ -136,14 +147,14 @@ export default function Page() {
       <div className="bg-surface border border-border/50 rounded-lg p-3 hover:border-primary/30 transition-colors">
         <div className="flex items-center gap-2 mb-2">
           {getIcon()}
-          <span className="font-semibold text-sm text-textMain">{asset.name}</span>
+          <span className="font-semibold text-sm text-textMain">{name}</span>
           <span className="ml-auto text-[10px] bg-white/5 px-1.5 py-0.5 rounded text-textMuted uppercase">
-            {asset.type}
+            {type}
           </span>
         </div>
-        <p className="text-xs text-textMuted line-clamp-2 leading-relaxed">{asset.description}</p>
+        <p className="text-xs text-textMuted line-clamp-2 leading-relaxed">{concept}</p>
         <div className="flex flex-wrap gap-1 mt-2">
-          {asset.tags?.map((t: string, i: number) => (
+          {tags.map((t: string, i: number) => (
             <span key={`${t}-${i}`} className="text-[10px] text-accent/80 bg-accent/10 px-1 rounded">
               {t}
             </span>
@@ -154,36 +165,41 @@ export default function Page() {
   };
 
   const ResultColumn = ({
-    result,
+    variant,
     label,
+    model,
   }: {
-    result: ExtractionResult | null;
+    variant: VariantResult | null;
     label: string;
+    model: string;
   }) => {
-    if (!result && isProcessing) {
+    if (taskError) {
       return (
-        <div className="h-full flex items-center justify-center flex-col gap-3 text-textMuted animate-pulse">
-          <Loader2 size={32} className="animate-spin text-primary" />
-          <span className="text-sm">AI 正在分析剧本...</span>
+        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3">
+          <AlertCircle size={20} />
+          <span>Error: {taskError}</span>
         </div>
       );
     }
 
-    if (!result)
+    if (!variant && isProcessing) {
+      return (
+        <div className="h-full flex items-center justify-center flex-col gap-3 text-textMuted animate-pulse">
+          <Loader2 size={32} className="animate-spin text-primary" />
+          <span className="text-sm">任务执行中... {taskProgress}%</span>
+        </div>
+      );
+    }
+
+    if (!variant) {
       return (
         <div className="h-full flex items-center justify-center text-textMuted/30 text-sm">
           等待运行...
         </div>
       );
-
-    if (result.error) {
-      return (
-        <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl text-red-400 flex items-center gap-3">
-          <AlertCircle size={20} />
-          <span>Error: {result.error}</span>
-        </div>
-      );
     }
+
+    const assets = Array.isArray(variant.assets) ? variant.assets : [];
 
     return (
       <div className="space-y-4 animate-fade-in">
@@ -191,24 +207,22 @@ export default function Page() {
           <div className="flex items-center gap-2">
             <span className="text-sm font-bold text-textMain">{label}</span>
             <span className="text-xs text-textMuted bg-surface px-2 py-0.5 rounded border border-border">
-              {result.model}
+              {model}
             </span>
           </div>
-          <span className="text-xs text-green-400">{result.time}ms</span>
+          <span className="text-xs text-textMuted tabular-nums">{assets.length} assets</span>
         </div>
 
         <div className="bg-surfaceHighlight/30 rounded-xl p-4 h-[500px] overflow-y-auto border border-border/50 scrollbar-thin space-y-3">
-          {Array.isArray(result.assets) && result.assets.length > 0 ? (
-            result.assets.map((asset, idx) => <AssetCard key={idx} asset={asset} />)
+          {assets.length > 0 ? (
+            assets.map((asset, idx) => <AssetCard key={idx} asset={asset} />)
           ) : (
             <div className="text-center text-textMuted text-sm py-10">未提取到有效资产</div>
           )}
         </div>
 
         <div className="flex justify-between items-center px-2">
-          <span className="text-xs text-textMuted">
-            共 {Array.isArray(result.assets) ? result.assets.length : 0} 个资产
-          </span>
+          <span className="text-xs text-textMuted">共 {assets.length} 个资产</span>
           <button className="text-xs text-primary hover:text-blue-400 font-medium" type="button">
             存入资产库
           </button>
@@ -240,7 +254,7 @@ export default function Page() {
           ) : (
             <Play size={18} fill="currentColor" />
           )}
-          开始提取对比
+          {isProcessing ? `处理中... ${taskProgress}%` : "开始提取对比"}
         </button>
       </div>
 
@@ -325,9 +339,9 @@ export default function Page() {
         <div className="col-span-8 bg-background border border-border rounded-2xl p-6 relative overflow-hidden">
           <div className="absolute inset-0 grid-bg opacity-20 pointer-events-none" />
           <div className="relative z-10 grid grid-cols-2 gap-8 h-full">
-            <ResultColumn result={resultA} label="结果 A" />
+            <ResultColumn variant={result?.variant_a || null} label="结果 A" model={configA.model} />
             <div className="absolute left-1/2 top-10 bottom-10 w-px bg-border/50 hidden md:block" />
-            <ResultColumn result={resultB} label="结果 B" />
+            <ResultColumn variant={result?.variant_b || null} label="结果 B" model={configB.model} />
           </div>
         </div>
       </div>

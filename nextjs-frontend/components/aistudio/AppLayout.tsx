@@ -9,7 +9,6 @@ import {
   Library,
   Settings,
   Wand2,
-  Bell,
   Search,
   DoorOpen,
   ChevronRight,
@@ -27,6 +26,7 @@ import {
   Shield,
   Lock,
   FileClock,
+  ListTodo,
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -36,6 +36,8 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AvatarCropDialog } from "@/components/ui/avatar-crop-dialog";
 import type { Me } from "@/components/actions/me-actions";
 import { deleteMeAvatar, updateMeAvatar, updateMePassword } from "@/components/actions/me-actions";
+import { TaskProvider } from "@/components/tasks/TaskProvider";
+import { NotificationCenter } from "@/components/notifications/NotificationCenter";
 
 function SidebarGroup({
   icon: Icon,
@@ -257,6 +259,7 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
     if (path.includes("/storyboard")) return "内容创作 / Content Creation";
     if (path.includes("/assets")) return "资产管理 / Asset Management";
     if (path.includes("/studio")) return "AI 创作工坊 / Studio";
+    if (path.includes("/tasks")) return "任务清单 / Tasks";
     if (path.includes("/settings")) return "系统设置 / Settings";
     return "言之有理";
   };
@@ -266,7 +269,8 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
   }, [pathname]);
 
   return (
-    <div className="flex h-screen bg-background text-textMain overflow-hidden font-sans transition-colors duration-300">
+    <TaskProvider>
+      <div className="flex h-screen bg-background text-textMain overflow-hidden font-sans transition-colors duration-300">
       <aside
         className={`${
           collapsed ? "w-20" : "w-64"
@@ -370,6 +374,12 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
                 to="/projects"
                 icon={Clapperboard}
                 label="项目归档"
+                collapsed={collapsed}
+              />
+              <SidebarItem
+                to="/tasks"
+                icon={ListTodo}
+                label="任务清单"
                 collapsed={collapsed}
               />
 
@@ -599,10 +609,7 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
                 className="bg-surfaceHighlight border-none rounded-full py-1.5 pl-9 pr-4 text-sm w-48 focus:w-64 focus:ring-1 focus:ring-primary focus:bg-surface transition-all placeholder-textMuted/50 text-textMain outline-none"
               />
             </div>
-            <button className="relative text-textMuted hover:text-textMain transition-colors">
-              <Bell size={18} />
-              <span className="absolute -top-0.5 -right-0.5 w-1.5 h-1.5 bg-red-500 rounded-full"></span>
-            </button>
+            <NotificationCenter />
           </div>
         </header>
 
@@ -628,6 +635,7 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
           setProfileAvatarContentType(r.contentType);
         }}
       />
-    </div>
+      </div>
+    </TaskProvider>
   );
 }
