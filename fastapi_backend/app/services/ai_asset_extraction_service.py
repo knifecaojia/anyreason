@@ -5,13 +5,13 @@ import re
 from typing import Any
 from uuid import UUID
 
-import httpx
 from sqlalchemy import Integer, delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app.ai_gateway import ai_gateway_service
 from app.core.exceptions import AppError
 from app.models import (
+    AIModelConfig,
     Asset,
     AssetBinding,
     AssetTag,
@@ -22,8 +22,6 @@ from app.models import (
     Script,
 )
 from app.schemas import AIAssetDraft, AIAssetVariantDraft, AIWorldUnityDraft
-from app.services.llm_key_service import llm_key_service
-from app.services.llm_model_service import llm_model_service
 
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
@@ -107,10 +105,7 @@ def _split_provider_model(model: str) -> tuple[str, str]:
 
 
 def _allowed_models() -> list[str]:
-    raw = (settings.LITELLM_DEFAULT_ALLOWED_MODELS or "").strip()
-    if not raw:
-        return []
-    return [m.strip() for m in raw.split(",") if m.strip()]
+    return []
 
 
 def _build_final_prompt(*, prompt_template: str, episode_script: str) -> str:
@@ -324,61 +319,28 @@ async def _chat_completions(
     temperature: float | None,
     max_tokens: int | None,
 ) -> dict[str, Any]:
-    token = await llm_key_service.get_or_issue_user_token(db=db, user_id=user_id, purpose="episode_asset_extraction")
-    base_url = (settings.LITELLM_BASE_URL or "").strip().rstrip("/")
-    if not base_url:
-        raise AppError(msg="LiteLLM base url not configured", code=500, status_code=500, data={"key": "LITELLM_BASE_URL"})
-    url = f"{base_url}/chat/completions"
-    payload: dict[str, Any] = {"model": model, "messages": messages, "stream": True}
-    if temperature is not None:
-        payload["temperature"] = temperature
-    if max_tokens is not None:
-        payload["max_tokens"] = max_tokens
-    timeout = httpx.Timeout(connect=10.0, read=240.0, write=30.0, pool=10.0)
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        try:
-            async with client.stream(
-                "POST",
-                url,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json=payload,
-            ) as resp:
-                if resp.status_code >= 400:
-                    body = ""
-                    try:
-                        body = await resp.aread()
-                        body = body.decode("utf-8", errors="ignore")
-                    except Exception:
-                        body = ""
-                    raise AppError(
-                        msg="LiteLLM chat failed",
-                        code=502,
-                        status_code=502,
-                        data={"status_code": resp.status_code, "body": (body or "")[:2000], "model": model, "url": url},
-                    )
-
-                content_type = (resp.headers.get("content-type") or "").lower()
-                if "text/event-stream" in content_type:
-                    lines = [line async for line in resp.aiter_lines()]
-                    content = _parse_sse_lines_to_text(lines)
-                    return {"choices": [{"message": {"content": content}}]}
-
-                body_bytes = await resp.aread()
-                body_text = body_bytes.decode("utf-8", errors="ignore")
-                if body_text.lstrip().startswith("data:"):
-                    content = _parse_sse_lines_to_text(body_text.splitlines())
-                    return {"choices": [{"message": {"content": content}}]}
-
-                return json.loads(body_text) if body_text else {}
-        except httpx.TimeoutException as e:
-            raise AppError(
-                msg="LiteLLM chat timeout",
-                code=504,
-                status_code=504,
-                data={"error": repr(e), "model": model, "url": url},
+    cfg = (
+        await db.execute(
+            select(AIModelConfig).where(
+                AIModelConfig.enabled.is_(True),
+                AIModelConfig.category == "text",
+                AIModelConfig.model == (model or "").strip(),
             )
-        except httpx.HTTPError as e:
-            raise AppError(msg="LiteLLM chat failed", code=502, status_code=502, data={"error": repr(e), "model": model, "url": url})
+        )
+    ).scalars().first()
+    if cfg is None:
+        raise AppError(msg="Model not found", code=400, status_code=400)
+
+    raw = await ai_gateway_service.chat_text(
+        db=db,
+        user_id=user_id,
+        binding_key=None,
+        model_config_id=cfg.id,
+        messages=messages,
+        attachments=[],
+        credits_cost=1,
+    )
+    return raw
 
 
 def _parse_assets_from_output(text: str) -> tuple[AIWorldUnityDraft | None, list[AIAssetDraft]]:
@@ -416,30 +378,6 @@ def _parse_assets_from_output(text: str) -> tuple[AIWorldUnityDraft | None, list
 
 
 class AIAssetExtractionService:
-    async def _list_litellm_model_names(self) -> list[dict[str, str]] | None:
-        if not settings.LITELLM_MASTER_KEY:
-            return None
-        res = await llm_model_service.list_models()
-        data = res.get("data")
-        if not isinstance(data, list):
-            return []
-        out: list[dict[str, str]] = []
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            model_name = str(item.get("model_name") or "").strip()
-            if not model_name:
-                continue
-            litellm_params = item.get("litellm_params")
-            internal_model = ""
-            if isinstance(litellm_params, dict):
-                internal_model = str(litellm_params.get("model") or "").strip()
-            provider, _ = _split_provider_model(model_name)
-            if provider == model_name and "/" not in model_name and internal_model:
-                provider, _ = _split_provider_model(internal_model)
-            out.append({"provider": provider, "model": model_name})
-        return out
-
     async def build_prompt_preview(
         self,
         *,
@@ -464,16 +402,6 @@ class AIAssetExtractionService:
         temperature: float | None,
         max_tokens: int | None,
     ) -> tuple[str, str, AIWorldUnityDraft | None, list[AIAssetDraft]]:
-        litellm_models = await self._list_litellm_model_names()
-        if litellm_models is not None:
-            available = {m["model"] for m in litellm_models if m.get("model")}
-            if available and model not in available:
-                raise AppError(msg="Model not found", code=400, status_code=400)
-        else:
-            models = _allowed_models()
-            if models and model not in models:
-                raise AppError(msg="Model not found", code=400, status_code=400)
-
         final_prompt = _build_final_prompt(prompt_template=prompt_template, episode_script=(script_text or "").strip())
         messages: list[dict[str, Any]] = [
             {"role": "system", "content": "You are a careful assistant. Output only valid JSON."},
@@ -505,16 +433,6 @@ class AIAssetExtractionService:
         temperature: float | None,
         max_tokens: int | None,
     ) -> tuple[str, str, AIWorldUnityDraft | None, list[AIAssetDraft]]:
-        litellm_models = await self._list_litellm_model_names()
-        if litellm_models is not None:
-            available = {m["model"] for m in litellm_models if m.get("model")}
-            if available and model not in available:
-                raise AppError(msg="Model not found", code=400, status_code=400)
-        else:
-            models = _allowed_models()
-            if models and model not in models:
-                raise AppError(msg="Model not found", code=400, status_code=400)
-
         episode = await _get_episode_for_user(db=db, user_id=user_id, episode_id=episode_id)
         if not episode:
             raise AppError(msg="Episode not found or not authorized", code=404, status_code=404)

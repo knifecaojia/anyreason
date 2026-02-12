@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories import task_repository
 from app.schemas import TaskCreateRequest
+from app.tasks.queue import publish_task_event
 from app.tasks.queue import enqueue_task
 
 
@@ -27,6 +28,15 @@ class TaskService:
         )
         await task_repository.create_task_event(
             db=db, task_id=task.id, event_type="created", payload={"status": task.status}
+        )
+        await publish_task_event(
+            payload={
+                "user_id": str(task.user_id),
+                "task_id": str(task.id),
+                "event_type": "created",
+                "status": task.status,
+                "progress": int(task.progress or 0),
+            }
         )
         await enqueue_task(task_id=task.id)
         return task
@@ -53,6 +63,25 @@ class TaskService:
             entity_id=entity_id,
         )
 
+    async def list_task_events(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        task_id: UUID,
+        limit: int = 200,
+        offset: int = 0,
+        order: str = "asc",
+    ):
+        return await task_repository.list_task_events(
+            db=db,
+            user_id=user_id,
+            task_id=task_id,
+            limit=limit,
+            offset=offset,
+            order=order,
+        )
+
     async def cancel_task(self, *, db: AsyncSession, user_id: UUID, task_id: UUID):
         task = await task_repository.get_user_task(db=db, user_id=user_id, task_id=task_id)
         if task is None:
@@ -65,6 +94,15 @@ class TaskService:
         task = await task_repository.update_task(db=db, task=task)
         await task_repository.create_task_event(
             db=db, task_id=task.id, event_type="canceled", payload={"status": task.status}
+        )
+        await publish_task_event(
+            payload={
+                "user_id": str(task.user_id),
+                "task_id": str(task.id),
+                "event_type": "canceled",
+                "status": task.status,
+                "progress": int(task.progress or 0),
+            }
         )
         return task
 
@@ -84,6 +122,15 @@ class TaskService:
         task = await task_repository.update_task(db=db, task=task)
         await task_repository.create_task_event(
             db=db, task_id=task.id, event_type="retried", payload={"status": task.status}
+        )
+        await publish_task_event(
+            payload={
+                "user_id": str(task.user_id),
+                "task_id": str(task.id),
+                "event_type": "retried",
+                "status": task.status,
+                "progress": int(task.progress or 0),
+            }
         )
         await enqueue_task(task_id=task.id)
         return task

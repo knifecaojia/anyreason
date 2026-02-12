@@ -22,11 +22,11 @@ router = APIRouter()
 
 
 @router.post(
-    "/scenes/{scene_id}/ai/storyboard/prompt-preview",
+    "/storyboards/{storyboard_id}/ai/storyboard/prompt-preview",
     response_model=ResponseBase[AISceneStoryboardPromptPreviewResponse],
 )
 async def preview_storyboard_prompt(
-    scene_id: UUID,
+    storyboard_id: UUID,
     body: AISceneStoryboardPromptPreviewRequest,
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
@@ -34,18 +34,18 @@ async def preview_storyboard_prompt(
     final_prompt = await ai_storyboard_service.build_prompt_preview(
         db=db,
         user_id=user.id,
-        scene_id=scene_id,
+        storyboard_id=storyboard_id,
         prompt_template=body.prompt_template,
     )
     return ResponseBase(code=200, msg="OK", data=AISceneStoryboardPromptPreviewResponse(final_prompt=final_prompt))
 
 
 @router.post(
-    "/scenes/{scene_id}/ai/storyboard/preview",
+    "/storyboards/{storyboard_id}/ai/storyboard/preview",
     response_model=ResponseBase[AISceneStoryboardPreviewResponse],
 )
 async def preview_storyboard(
-    scene_id: UUID,
+    storyboard_id: UUID,
     body: AISceneStoryboardPreviewRequest,
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
@@ -53,7 +53,7 @@ async def preview_storyboard(
     final_prompt, raw_text, shots = await ai_storyboard_service.preview(
         db=db,
         user_id=user.id,
-        scene_id=scene_id,
+        storyboard_id=storyboard_id,
         model=body.model,
         prompt_template=body.prompt_template,
         temperature=body.temperature,
@@ -67,11 +67,11 @@ async def preview_storyboard(
 
 
 @router.post(
-    "/scenes/{scene_id}/ai/storyboard/apply",
+    "/storyboards/{storyboard_id}/ai/storyboard/apply",
     response_model=ResponseBase[dict],
 )
 async def apply_storyboard(
-    scene_id: UUID,
+    storyboard_id: UUID,
     body: AISceneStoryboardApplyRequest,
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
@@ -79,9 +79,8 @@ async def apply_storyboard(
     created_count = await ai_storyboard_service.apply(
         db=db,
         user_id=user.id,
-        scene_id=scene_id,
+        storyboard_id=storyboard_id,
         shots=body.shots,
         mode=body.mode,
     )
     return ResponseBase(code=200, msg="OK", data={"created_count": created_count})
-

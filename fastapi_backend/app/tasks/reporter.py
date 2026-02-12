@@ -92,18 +92,48 @@ class TaskReporter:
             }
         )
 
-    async def fail(self, *, error: str) -> None:
+    async def log(self, *, message: str, level: str = "info", payload: dict[str, Any] | None = None) -> None:
+        now = datetime.now(timezone.utc)
+        msg = (message or "").strip()
+        if not msg:
+            return
+        data: dict[str, Any] = {"level": (level or "info").strip() or "info", "message": msg}
+        if payload:
+            data["payload"] = payload
+        self._task.updated_at = now
+        self._task = await task_repository.update_task(db=self._db, task=self._task)
+        await task_repository.create_task_event(
+            db=self._db,
+            task_id=self._task.id,
+            event_type="log",
+            payload=data,
+        )
+        await publish_task_event(
+            payload={
+                "user_id": str(self._task.user_id),
+                "task_id": str(self._task.id),
+                "event_type": "log",
+                "status": self._task.status,
+                "progress": int(self._task.progress or 0),
+                "payload": data,
+            }
+        )
+
+    async def fail(self, *, error: str, details: dict[str, Any] | None = None) -> None:
         now = datetime.now(timezone.utc)
         self._task.status = "failed"
         self._task.error = (error or "").strip() or "Task failed"
         self._task.finished_at = now
         self._task.updated_at = now
         self._task = await task_repository.update_task(db=self._db, task=self._task)
+        data: dict[str, Any] = {"status": self._task.status, "error": self._task.error}
+        if details:
+            data["details"] = details
         await task_repository.create_task_event(
             db=self._db,
             task_id=self._task.id,
             event_type="failed",
-            payload={"status": self._task.status, "error": self._task.error},
+            payload=data,
         )
         await publish_task_event(
             payload={
@@ -112,5 +142,6 @@ class TaskReporter:
                 "event_type": "failed",
                 "status": self._task.status,
                 "error": self._task.error,
+                "payload": {"details": details} if details else {},
             }
         )

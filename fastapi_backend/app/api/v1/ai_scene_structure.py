@@ -27,9 +27,8 @@ async def list_ai_models(
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ):
-    _ = db
     _ = user
-    data = [AIModelRead.model_validate(m) for m in (await ai_scene_structure_service.list_models())]
+    data = [AIModelRead.model_validate(m) for m in (await ai_scene_structure_service.list_models(db=db))]
     return ResponseBase(code=200, msg="OK", data=data)
 
 

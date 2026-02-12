@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.core.exceptions import AppError
 from app.database import User, get_async_session
-from app.schemas import TaskCreateRequest, TaskRead, TaskWsTicketRead
+from app.schemas import TaskCreateRequest, TaskEventRead, TaskRead, TaskWsTicketRead
 from app.schemas_response import ResponseBase
 from app.services.task_service import task_service
 from app.tasks.ticket import issue_ws_ticket
@@ -102,3 +102,19 @@ async def retry_task(
     if task is None:
         raise AppError(msg="Task not found", code=404, status_code=404)
     return ResponseBase(code=200, msg="OK", data=TaskRead.model_validate(task))
+
+
+@router.get("/{task_id}/events", response_model=ResponseBase[list[TaskEventRead]])
+async def list_task_events(
+    task_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+    limit: int = Query(200, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    order: str = Query("asc", pattern="^(asc|desc)$"),
+):
+    task = await task_service.get_task(db=db, user_id=user.id, task_id=task_id)
+    if task is None:
+        raise AppError(msg="Task not found", code=404, status_code=404)
+    events = await task_service.list_task_events(db=db, user_id=user.id, task_id=task_id, limit=limit, offset=offset, order=order)
+    return ResponseBase(code=200, msg="OK", data=[TaskEventRead.model_validate(e) for e in events])

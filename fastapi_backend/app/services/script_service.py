@@ -12,6 +12,7 @@ from app.config import settings
 from app.models import Script
 from app.repositories import script_repository
 from app.storage import get_minio_client
+from app.storage.image_thumbs import generate_thumbnail, should_generate_thumbnail
 
 
 def _safe_filename(value: str) -> str:
@@ -74,9 +75,14 @@ class ScriptService:
         user_id: UUID,
         title: str,
         description: str | None,
+        aspect_ratio: str | None = None,
+        animation_style: str | None = None,
         file_bytes: bytes,
         original_filename: str | None,
         content_type: str | None,
+        panorama_file_bytes: bytes | None = None,
+        panorama_original_filename: str | None = None,
+        panorama_content_type: str | None = None,
     ) -> Script:
         bucket = settings.MINIO_BUCKET_SCRIPTS
         await _ensure_bucket(bucket)
@@ -85,23 +91,63 @@ class ScriptService:
         filename = _safe_filename(original_filename or f"{_slug(title)}.txt")
         key = f"scripts/{user_id}/{script_id}/{filename}"
 
+        panorama_key: str | None = None
+        panorama_filename: str | None = None
+        panorama_thumb_key: str | None = None
+        panorama_thumb_filename: str | None = None
+        panorama_thumb_content_type: str | None = None
+        panorama_thumb_size_bytes = 0
+
         await _put_object(bucket=bucket, key=key, data=file_bytes, content_type=content_type)
+        if panorama_file_bytes:
+            panorama_filename = _safe_filename(panorama_original_filename or "panorama.png")
+            panorama_key = f"scripts/{user_id}/{script_id}/panorama/{panorama_filename}"
+            await _put_object(bucket=bucket, key=panorama_key, data=panorama_file_bytes, content_type=panorama_content_type)
+            if should_generate_thumbnail(content_type=panorama_content_type, filename=panorama_filename):
+                try:
+                    thumb = generate_thumbnail(panorama_file_bytes, max_size=512)
+                    ext = ".jpg" if thumb.content_type == "image/jpeg" else ".png"
+                    panorama_thumb_filename = f"thumbnail{ext}"
+                    panorama_thumb_key = f"scripts/{user_id}/{script_id}/panorama/thumb/{panorama_thumb_filename}"
+                    panorama_thumb_content_type = thumb.content_type
+                    panorama_thumb_size_bytes = thumb.size_bytes
+                    await _put_object(bucket=bucket, key=panorama_thumb_key, data=thumb.data, content_type=thumb.content_type)
+                except Exception:
+                    panorama_thumb_key = None
+                    panorama_thumb_filename = None
+                    panorama_thumb_content_type = None
+                    panorama_thumb_size_bytes = 0
         script = Script(
             id=script_id,
             owner_id=user_id,
             title=title,
             description=description,
+            aspect_ratio=aspect_ratio,
+            animation_style=animation_style,
             minio_bucket=bucket,
             minio_key=key,
             original_filename=filename,
             content_type=content_type,
             size_bytes=len(file_bytes),
+            panorama_minio_bucket=bucket if panorama_key else None,
+            panorama_minio_key=panorama_key,
+            panorama_original_filename=panorama_filename,
+            panorama_content_type=panorama_content_type if panorama_key else None,
+            panorama_size_bytes=len(panorama_file_bytes or b""),
+            panorama_thumb_minio_bucket=bucket if panorama_thumb_key else None,
+            panorama_thumb_minio_key=panorama_thumb_key,
+            panorama_thumb_content_type=panorama_thumb_content_type if panorama_thumb_key else None,
+            panorama_thumb_size_bytes=panorama_thumb_size_bytes,
         )
 
         try:
             return await script_repository.create_script(db=db, script=script)
         except Exception:
             await _remove_object(bucket=bucket, key=key)
+            if panorama_key:
+                await _remove_object(bucket=bucket, key=panorama_key)
+            if panorama_thumb_key:
+                await _remove_object(bucket=bucket, key=panorama_thumb_key)
             raise
 
     async def get_user_script(self, *, db: AsyncSession, user_id: UUID, script_id: UUID) -> Script | None:

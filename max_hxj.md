@@ -132,6 +132,9 @@
 **L5：生成执行层（对接模型）**
 - `video_prompts`：视频提示词与生成参数
   - 关键字段：`prompt_main / negative_prompt / style_model / aspect_ratio / character_prompts(JSONB) / camera_settings(JSONB)`
+- `ai_model_configs`：平台级模型配置（text/image/video），包含 base_url 与加密 api_key
+- `ai_model_bindings`：用途 key → 默认模型配置绑定（例如 `chatbox` / `image` / `video`）
+- `agents`：业务 Agent，按类别绑定 `ai_model_config_id`，并可配置扣积分策略
 
 **门禁/质检**
 - `qc_reports`：跑批质检报告（整包 JSON 入库，便于迭代比对）

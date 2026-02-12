@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 import uuid
 from typing import Callable
@@ -33,17 +34,22 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response: Response = await call_next(request)
         finally:
             duration_ms = (time.perf_counter() - start) * 1000
-            logger.bind(
-                context={
-                    "request_id": request_id,
-                    "method": request.method,
-                    "path": str(request.url.path),
-                    "query": str(request.url.query),
-                    "client": request.client.host if request.client else None,
-                    "duration_ms": round(duration_ms, 3),
-                }
-            ).info("http_request")
+            payload = {
+                "request_id": request_id,
+                "method": request.method,
+                "path": str(request.url.path),
+                "query": str(request.url.query),
+                "client": request.client.host if request.client else None,
+                "duration_ms": round(duration_ms, 3),
+            }
+
+            def _emit() -> None:
+                try:
+                    logger.bind(context=payload).info("http_request")
+                except Exception:
+                    pass
+
+            asyncio.create_task(asyncio.to_thread(_emit))
 
         response.headers.setdefault("X-Request-ID", request_id)
         return response
-

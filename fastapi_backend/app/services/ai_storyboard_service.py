@@ -5,15 +5,13 @@ import re
 from typing import Any
 from uuid import UUID
 
-import httpx
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app.ai_gateway import ai_gateway_service
 from app.core.exceptions import AppError
-from app.models import Episode, Project, Scene, Script, Shot
+from app.models import AIModelConfig, Episode, Project, Storyboard, Script
 from app.schemas import AIShotDraft
-from app.services.llm_key_service import llm_key_service
 
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
@@ -120,19 +118,19 @@ def _parse_shots_from_output(text: str) -> list[AIShotDraft]:
     return out
 
 
-async def _get_scene_and_episode_for_user(
+async def _get_storyboard_and_episode_for_user(
     *,
     db: AsyncSession,
     user_id: UUID,
-    scene_id: UUID,
-) -> tuple[Scene, Episode] | None:
+    storyboard_id: UUID,
+) -> tuple[Storyboard, Episode] | None:
     result = await db.execute(
-        select(Scene, Episode)
-        .join(Episode, Scene.episode_id == Episode.id)
+        select(Storyboard, Episode)
+        .join(Episode, Storyboard.episode_id == Episode.id)
         .join(Project, Episode.project_id == Project.id)
         .join(Script, Script.id == Project.id)
         .where(
-            Scene.id == scene_id,
+            Storyboard.id == storyboard_id,
             Script.owner_id == user_id,
             Script.is_deleted.is_(False),
         )
@@ -140,8 +138,8 @@ async def _get_scene_and_episode_for_user(
     row = result.first()
     if not row:
         return None
-    scene, episode = row
-    return scene, episode
+    storyboard, episode = row
+    return storyboard, episode
 
 
 async def _chat_completions(
@@ -153,26 +151,28 @@ async def _chat_completions(
     temperature: float | None,
     max_tokens: int | None,
 ) -> dict[str, Any]:
-    token = await llm_key_service.get_or_issue_user_token(db=db, user_id=user_id, purpose="scene_storyboard")
-    base_url = settings.LITELLM_BASE_URL.rstrip("/")
-    url = f"{base_url}/chat/completions"
-    payload: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
-    if temperature is not None:
-        payload["temperature"] = temperature
-    if max_tokens is not None:
-        payload["max_tokens"] = max_tokens
-
-    async with httpx.AsyncClient(timeout=httpx.Timeout(90.0)) as client:
-        try:
-            resp = await client.post(
-                url,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json=payload,
+    cfg = (
+        await db.execute(
+            select(AIModelConfig).where(
+                AIModelConfig.enabled.is_(True),
+                AIModelConfig.category == "text",
+                AIModelConfig.model == (model or "").strip(),
             )
-            resp.raise_for_status()
-        except httpx.HTTPError as e:
-            raise AppError(msg="LiteLLM chat failed", code=502, status_code=502, data=str(e))
-    return resp.json()
+        )
+    ).scalars().first()
+    if cfg is None:
+        raise AppError(msg="Model not found", code=400, status_code=400)
+
+    raw = await ai_gateway_service.chat_text(
+        db=db,
+        user_id=user_id,
+        binding_key=None,
+        model_config_id=cfg.id,
+        messages=messages,
+        attachments=[],
+        credits_cost=1,
+    )
+    return raw
 
 
 def _extract_output_text(raw: dict[str, Any]) -> str:
@@ -188,21 +188,21 @@ class AIStoryboardService:
         *,
         db: AsyncSession,
         user_id: UUID,
-        scene_id: UUID,
+        storyboard_id: UUID,
         prompt_template: str,
     ) -> str:
-        pair = await _get_scene_and_episode_for_user(db=db, user_id=user_id, scene_id=scene_id)
+        pair = await _get_storyboard_and_episode_for_user(db=db, user_id=user_id, storyboard_id=storyboard_id)
         if not pair:
-            raise AppError(msg="Scene not found or not authorized", code=404, status_code=404)
-        scene, _episode = pair
+            raise AppError(msg="Storyboard not found or not authorized", code=404, status_code=404)
+        storyboard, _episode = pair
         return _build_final_prompt(
             prompt_template=prompt_template,
-            scene_code=scene.scene_code,
-            scene_number=int(scene.scene_number or 0),
-            title=scene.title or "",
-            location=scene.location or "",
-            time_of_day=scene.time_of_day or "",
-            scene_script=scene.content or "",
+            scene_code=storyboard.scene_code or "",
+            scene_number=int(storyboard.scene_number or 0),
+            title=storyboard.description or "", # Storyboard desc serves as scene content/title placeholder for now
+            location=storyboard.location or "",
+            time_of_day=storyboard.time_of_day or "",
+            scene_script=storyboard.description or "", # Use description as content
         )
 
     async def preview(
@@ -210,25 +210,25 @@ class AIStoryboardService:
         *,
         db: AsyncSession,
         user_id: UUID,
-        scene_id: UUID,
+        storyboard_id: UUID,
         model: str,
         prompt_template: str,
         temperature: float | None,
         max_tokens: int | None,
     ) -> tuple[str, str, list[AIShotDraft]]:
-        pair = await _get_scene_and_episode_for_user(db=db, user_id=user_id, scene_id=scene_id)
+        pair = await _get_storyboard_and_episode_for_user(db=db, user_id=user_id, storyboard_id=storyboard_id)
         if not pair:
-            raise AppError(msg="Scene not found or not authorized", code=404, status_code=404)
-        scene, _episode = pair
+            raise AppError(msg="Storyboard not found or not authorized", code=404, status_code=404)
+        storyboard, _episode = pair
 
         final_prompt = _build_final_prompt(
             prompt_template=prompt_template,
-            scene_code=scene.scene_code,
-            scene_number=int(scene.scene_number or 0),
-            title=scene.title or "",
-            location=scene.location or "",
-            time_of_day=scene.time_of_day or "",
-            scene_script=scene.content or "",
+            scene_code=storyboard.scene_code or "",
+            scene_number=int(storyboard.scene_number or 0),
+            title=storyboard.description or "",
+            location=storyboard.location or "",
+            time_of_day=storyboard.time_of_day or "",
+            scene_script=storyboard.description or "",
         )
         messages = [
             {"role": "system", "content": "你是一个严谨的分镜导演，只输出符合要求的 JSON。"},
@@ -251,54 +251,70 @@ class AIStoryboardService:
         *,
         db: AsyncSession,
         user_id: UUID,
-        scene_id: UUID,
+        storyboard_id: UUID,
         shots: list[AIShotDraft],
         mode: str,
     ) -> int:
-        pair = await _get_scene_and_episode_for_user(db=db, user_id=user_id, scene_id=scene_id)
+        pair = await _get_storyboard_and_episode_for_user(db=db, user_id=user_id, storyboard_id=storyboard_id)
         if not pair:
-            raise AppError(msg="Scene not found or not authorized", code=404, status_code=404)
-        scene, episode = pair
+            raise AppError(msg="Storyboard not found or not authorized", code=404, status_code=404)
+        storyboard, episode = pair
 
         if mode not in {"replace", "append"}:
             raise AppError(msg="Invalid mode", code=400, status_code=400)
         if not shots:
             raise AppError(msg="No shots to apply", code=400, status_code=400)
 
-        start_num = 0
-        if mode == "replace":
-            await db.execute(delete(Shot).where(Shot.scene_id == scene.id))
-        else:
-            max_res = await db.execute(select(func.coalesce(func.max(Shot.shot_number), 0)).where(Shot.scene_id == scene.id))
-            start_num = int(max_res.scalar_one() or 0)
+        # In flattened structure, "applying" AI storyboard means splitting one Storyboard into multiple Storyboards
+        # or replacing the current Storyboard with a sequence.
+        # This logic needs to be adapted. 
+        # Strategy:
+        # If replace: Delete current storyboard, insert new ones in its place (requires handling shot_number sequence)
+        # If append: Insert new ones after (requires handling shot_number sequence)
+        
+        # For simplicity in V1 refactor: We will insert new Storyboards and delete the original one if replace.
+        
+        # TODO: This needs robust renumbering logic which is complex.
+        # For now, let's assume we just append new storyboards to the episode for the same scene group.
+        
+        # Get max shot number in the episode
+        max_res = await db.execute(select(func.coalesce(func.max(Storyboard.shot_number), 0)).where(Storyboard.episode_id == episode.id))
+        start_num = int(max_res.scalar_one() or 0)
 
         created_count = 0
         for idx, s in enumerate(shots, start=1):
             num = start_num + idx
-            shot_code = f"EP{episode.episode_number:03d}_SC{scene.scene_number:02d}_SH{num:02d}"
-            row = Shot(
-                scene_id=scene.id,
+            shot_code = f"EP{episode.episode_number:03d}_SC{storyboard.scene_number:02d}_SH{num:02d}"
+            
+            row = Storyboard(
+                episode_id=episode.id,
                 shot_code=shot_code,
                 shot_number=num,
+                scene_code=storyboard.scene_code,
+                scene_number=storyboard.scene_number,
+                
                 shot_type=(s.shot_type or "").strip() or None,
-                camera_angle=(s.camera_angle or "").strip() or None,
                 camera_move=(s.camera_move or "").strip() or None,
-                filter_style=(s.filter_style or "").strip() or None,
                 narrative_function=(s.narrative_function or "").strip() or None,
-                pov_character=(s.pov_character or "").strip() or None,
+                
+                location=storyboard.location, # Inherit from parent
+                location_type=storyboard.location_type,
+                time_of_day=storyboard.time_of_day,
+                
                 description=(s.description or "").strip() or None,
                 dialogue=(s.dialogue or "").strip() or None,
-                dialogue_speaker=(s.dialogue_speaker or "").strip() or None,
-                sound_effect=(s.sound_effect or "").strip() or None,
-                active_assets=list(s.active_assets or []),
                 duration_estimate=s.duration_estimate,
+                active_assets=list(s.active_assets or []),
             )
             db.add(row)
             created_count += 1
+            
+        # If replace mode, we should delete the original storyboard acting as "Scene" placeholder
+        if mode == "replace":
+             await db.delete(storyboard)
 
         await db.commit()
         return created_count
 
 
 ai_storyboard_service = AIStoryboardService()
-

@@ -60,3 +60,26 @@ async def create_task_event(*, db: AsyncSession, task_id: UUID, event_type: str,
     await db.commit()
     await db.refresh(row)
     return row
+
+
+async def list_task_events(
+    *,
+    db: AsyncSession,
+    user_id: UUID,
+    task_id: UUID,
+    limit: int = 200,
+    offset: int = 0,
+    order: str = "asc",
+) -> list[TaskEvent]:
+    q = (
+        select(TaskEvent)
+        .join(Task, Task.id == TaskEvent.task_id)
+        .where(TaskEvent.task_id == task_id, Task.user_id == user_id)
+    )
+    if order == "desc":
+        q = q.order_by(desc(TaskEvent.created_at))
+    else:
+        q = q.order_by(TaskEvent.created_at.asc())
+    q = q.offset(max(0, int(offset))).limit(max(1, min(500, int(limit))))
+    rows = (await db.execute(q)).scalars().all()
+    return list(rows)

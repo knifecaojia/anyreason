@@ -12,40 +12,7 @@ import {
   Line,
 } from "recharts";
 import { Users, Video, Film, HardDrive } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
-
-function StatCard({
-  label,
-  value,
-  trend,
-  icon: Icon,
-  color,
-}: {
-  label: string;
-  value: string;
-  trend: string;
-  icon: LucideIcon;
-  color: string;
-}) {
-  return (
-    <div className="bg-surface border border-border rounded-2xl p-6 flex items-start justify-between hover:border-border/80 transition-colors">
-      <div>
-        <p className="text-textMuted text-sm font-medium mb-1">{label}</p>
-        <h3 className="text-3xl font-bold text-textMain tracking-tight">{value}</h3>
-        <p
-          className={`text-xs mt-2 ${
-            trend.startsWith("+") ? "text-green-400" : "text-red-400"
-          }`}
-        >
-          {trend} 较上月
-        </p>
-      </div>
-      <div className={`p-3 rounded-xl ${color} bg-opacity-10`}>
-        <Icon size={24} className={color.replace("bg-", "text-")} />
-      </div>
-    </div>
-  );
-}
+import { StatCard } from "@/components/aistudio/StatCard";
 
 const data = [
   { name: "Jan", output: 4, cost: 2400 },

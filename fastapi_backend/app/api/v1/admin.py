@@ -14,6 +14,8 @@ from app.audit import write_audit_log
 from app.database import get_async_session
 from app.models import AuditLog, Permission, Role, RolePermission, User, UserRole
 from app.rbac import require_permissions
+from app.services.credit_service import credit_service
+from app.config import settings
 from app.schemas_rbac import (
     AdminUserCreate,
     AdminUserPasswordUpdate,
@@ -119,6 +121,14 @@ async def create_user(
     )
     session.add(user)
     await session.flush()
+
+    await credit_service.ensure_account(
+        db=session,
+        user_id=user.id,
+        initial_balance=settings.DEFAULT_INITIAL_CREDITS,
+        reason="init",
+        actor_user_id=actor.id,
+    )
 
     for r in role_rows:
         session.add(UserRole(user_id=user.id, role_id=r.id))

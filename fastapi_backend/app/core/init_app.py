@@ -30,10 +30,12 @@ limiter = Limiter(key_func=get_remote_address)
 async def lifespan(app: FastAPI):
     from app.tasks.realtime import TaskWebSocketManager, redis_event_forwarder
 
-    await create_db_and_tables()
-    await ensure_builtin_roles()
-    await ensure_builtin_permissions()
-    await ensure_default_admin()
+    if settings.AUTO_DB_INIT_ON_STARTUP:
+        await create_db_and_tables()
+        if settings.AUTO_DB_SEED_ON_STARTUP:
+            await ensure_builtin_roles()
+            await ensure_builtin_permissions()
+            await ensure_default_admin()
 
     manager = TaskWebSocketManager()
     stop_event = asyncio.Event()

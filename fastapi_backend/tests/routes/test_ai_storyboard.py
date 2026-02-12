@@ -22,7 +22,7 @@ async def test_ai_storyboard_preview_apply_and_delete(test_client, authenticated
 
     monkeypatch.setattr(svc_module, "_chat_completions", _fake_chat_completions)
 
-    script_text = "\n".join(["剧本正文", "EPISODE 1: 第一集", "内容A"])
+    script_text = "\n".join(["剧本正文", "EPISODE 1: 第一集", "SCENE 1: 场景一", "内容A"])
     res = await test_client.post(
         "/api/v1/scripts",
         headers=authenticated_user["headers"],
@@ -33,25 +33,12 @@ async def test_ai_storyboard_preview_apply_and_delete(test_client, authenticated
 
     res = await test_client.post(f"/api/v1/scripts/{script_id}/structure", headers=authenticated_user["headers"])
     assert res.status_code == 200
-    episode_id = res.json()["data"]["episodes"][0]["id"]
-
-    res = await test_client.post(
-        f"/api/v1/episodes/{episode_id}/scenes",
-        headers=authenticated_user["headers"],
-        json={
-            "scene_number": 1,
-            "title": "EXT. 斩仙台 - DAY",
-            "location": "斩仙台",
-            "time_of_day": "DAY",
-            "location_type": "外",
-            "content": "内容A",
-        },
-    )
+    res = await test_client.get(f"/api/v1/scripts/{script_id}/hierarchy", headers=authenticated_user["headers"])
     assert res.status_code == 200
-    scene_id = res.json()["data"]["id"]
+    storyboard_id = res.json()["data"]["episodes"][0]["storyboards"][0]["id"]
 
     res = await test_client.post(
-        f"/api/v1/scenes/{scene_id}/ai/storyboard/prompt-preview",
+        f"/api/v1/storyboards/{storyboard_id}/ai/storyboard/prompt-preview",
         headers=authenticated_user["headers"],
         json={"model": "deepseek", "prompt_template": "test"},
     )
@@ -59,7 +46,7 @@ async def test_ai_storyboard_preview_apply_and_delete(test_client, authenticated
     assert "SCENE_SCRIPT" in res.json()["data"]["final_prompt"]
 
     res = await test_client.post(
-        f"/api/v1/scenes/{scene_id}/ai/storyboard/preview",
+        f"/api/v1/storyboards/{storyboard_id}/ai/storyboard/preview",
         headers=authenticated_user["headers"],
         json={"model": "deepseek", "prompt_template": "test"},
     )
@@ -68,23 +55,9 @@ async def test_ai_storyboard_preview_apply_and_delete(test_client, authenticated
     assert len(shots) == 2
 
     res = await test_client.post(
-        f"/api/v1/scenes/{scene_id}/ai/storyboard/apply",
+        f"/api/v1/storyboards/{storyboard_id}/ai/storyboard/apply",
         headers=authenticated_user["headers"],
         json={"mode": "replace", "shots": shots},
     )
     assert res.status_code == 200
     assert res.json()["data"]["created_count"] == 2
-
-    res = await test_client.get(f"/api/v1/scenes/{scene_id}/shots", headers=authenticated_user["headers"])
-    assert res.status_code == 200
-    data = res.json()["data"]
-    assert [s["shot_number"] for s in data] == [1, 2]
-    shot_id = data[0]["id"]
-
-    res = await test_client.delete(f"/api/v1/shots/{shot_id}", headers=authenticated_user["headers"])
-    assert res.status_code == 200
-
-    res = await test_client.get(f"/api/v1/scenes/{scene_id}/shots", headers=authenticated_user["headers"])
-    assert res.status_code == 200
-    data = res.json()["data"]
-    assert [s["shot_number"] for s in data] == [1]

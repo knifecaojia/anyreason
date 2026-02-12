@@ -5,7 +5,7 @@ if [ -f /.dockerenv ]; then
     if [ ! -x /app/.venv/bin/python ]; then
         uv sync --frozen
     else
-        /app/.venv/bin/python -c "import minio,redis" >/dev/null 2>&1 || uv sync --frozen
+        /app/.venv/bin/python -c "import minio,redis,openai" >/dev/null 2>&1 || uv sync --frozen
     fi
     /app/.venv/bin/fastapi dev app/main.py --host 0.0.0.0 --port 8000 --reload &
     /app/.venv/bin/python watcher.py

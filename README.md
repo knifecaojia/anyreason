@@ -3,6 +3,7 @@
 这是一个“AI 漫剧创作管理平台”的代码基线仓库：先把 **前后端骨架、鉴权、类型契约、统一运行方式** 搭起来，再逐步接入 RBAC、Provider/模型管理、资产管理、画布与分镜、导出闭环。
 
 当前基线已具备：
+
 - 前端：Next.js + shadcn/ui + Tailwind（含登录页与 Dashboard 占位页）
 - 后端：FastAPI（含账号体系/鉴权基础能力）
 - 契约：通过 OpenAPI 生成前端 typed client（`nextjs-frontend/app/openapi-client`）
@@ -20,6 +21,8 @@ docker compose -f docker-compose.yml -f compose.app.yml --profile app up -d --bu
 
 - 后端 Swagger：`http://localhost:8000/docs`
 - 前端：`http://localhost:3000`
+
+docker compose -f docker-compose.yml --profile app up
 
 ## 本机运行（不使用应用容器）
 

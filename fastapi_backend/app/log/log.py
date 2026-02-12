@@ -35,6 +35,22 @@ LOGGING_RESERVED_FIELDS: Set[str] = {
 }
 
 
+def _sanitize_extra(value: Any, depth: int = 0) -> Any:
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    if depth >= 2:
+        return str(value)
+    if isinstance(value, dict):
+        return {str(k): _sanitize_extra(v, depth + 1) for k, v in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_sanitize_extra(v, depth + 1) for v in value]
+    return str(value)
+
+
 class InterceptHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         level: Any
@@ -55,7 +71,9 @@ class InterceptHandler(logging.Handler):
             if key not in LOGGING_RESERVED_FIELDS
         }
 
-        logger.bind(**extra).opt(depth=depth, exception=record.exc_info).log(
+        safe_extra = {k: _sanitize_extra(v) for k, v in extra.items()}
+
+        logger.bind(**safe_extra).opt(depth=depth, exception=record.exc_info).log(
             level, record.getMessage()
         )
 
@@ -67,6 +85,7 @@ class LoggingConfig:
         self.log_dir = getattr(settings, "LOGS_ROOT", "logs")
         self.service_name = getattr(settings, "PROJECT_NAME", "application")
         self.environment = getattr(settings, "APP_ENV", "development")
+        self.enqueue = os.name != "nt"
         self._ensure_log_dir()
 
     def _ensure_log_dir(self) -> None:
@@ -150,7 +169,7 @@ class LoggingConfig:
             colorize=False,
             backtrace=True,
             diagnose=self.debug,
-            enqueue=True,
+            enqueue=self.enqueue,
         )
 
         logger.add(
@@ -163,7 +182,7 @@ class LoggingConfig:
             encoding="utf-8",
             backtrace=True,
             diagnose=self.debug,
-            enqueue=True,
+            enqueue=self.enqueue,
         )
 
         logger.add(
@@ -176,7 +195,7 @@ class LoggingConfig:
             encoding="utf-8",
             backtrace=True,
             diagnose=self.debug,
-            enqueue=True,
+            enqueue=self.enqueue,
         )
 
         logger.add(
@@ -189,7 +208,7 @@ class LoggingConfig:
             encoding="utf-8",
             backtrace=True,
             diagnose=self.debug,
-            enqueue=True,
+            enqueue=self.enqueue,
         )
 
 

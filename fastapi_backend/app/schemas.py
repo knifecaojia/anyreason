@@ -43,43 +43,50 @@ class ScriptRead(BaseModel):
     owner_id: UUID
     title: str
     description: str | None = None
+    aspect_ratio: str | None = None
+    animation_style: str | None = None
     original_filename: str
     content_type: str | None = None
     size_bytes: int
+    panorama_original_filename: str | None = None
+    panorama_content_type: str | None = None
+    panorama_size_bytes: int
+    panorama_thumb_content_type: str | None = None
+    panorama_thumb_size_bytes: int
     created_at: datetime
 
     model_config = {"from_attributes": True}
 
 
-class SceneRead(BaseModel):
+class ScriptStatsRead(BaseModel):
+    script_id: UUID
+    word_count: int
+    episodes_count: int
+    scene_count: int
+    character_count: int
+    prop_count: int
+    vfx_count: int
+    image_count: int
+    video_count: int
+
+
+class StoryboardRead(BaseModel):
     id: UUID
-    scene_code: str
-    scene_number: int
-    title: str | None = None
-    location: str | None = None
-    time_of_day: str | None = None
-    content: str | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class ShotRead(BaseModel):
-    id: UUID
-    scene_id: UUID
+    episode_id: UUID
     shot_code: str
     shot_number: int
+    scene_code: str | None = None
+    scene_number: int | None = None
     shot_type: str | None = None
-    camera_angle: str | None = None
     camera_move: str | None = None
-    filter_style: str | None = None
     narrative_function: str | None = None
-    pov_character: str | None = None
+    location: str | None = None
+    location_type: str | None = None
+    time_of_day: str | None = None
     description: str | None = None
     dialogue: str | None = None
-    dialogue_speaker: str | None = None
-    sound_effect: str | None = None
-    active_assets: list[str] = Field(default_factory=list)
     duration_estimate: Decimal | None = None
+    active_assets: list[str] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -176,6 +183,11 @@ class AssetBindingCreateRequest(BaseModel):
     asset_variant_id: UUID | None = None
 
 
+class StoryboardAssetBindingsResponse(BaseModel):
+    storyboard_id: UUID
+    bindings: list[AssetBindingBrief] = Field(default_factory=list)
+
+
 class SceneAssetBindingsResponse(BaseModel):
     scene_id: UUID
     bindings: list[AssetBindingBrief] = Field(default_factory=list)
@@ -190,10 +202,37 @@ class ShotAssetBindingsMapResponse(BaseModel):
 class EpisodeRead(BaseModel):
     id: UUID
     episode_code: str
+    episode_number: int
     title: str | None = None
     script_full_text: str | None = None
-    scenes: list[SceneRead] = []
+    storyboard_root_node_id: UUID | None = None
+    asset_root_node_id: UUID | None = None
+    storyboards: list[StoryboardRead] = []
     assets: list[AssetBrief] = []
+
+    model_config = {"from_attributes": True}
+
+
+class EpisodeCreateRequest(BaseModel):
+    after_episode_id: UUID | None = None
+    title: str | None = None
+    script_full_text: str | None = None
+
+
+class EpisodeUpdateRequest(BaseModel):
+    title: str | None = None
+    script_full_text: str | None = None
+
+
+class EpisodeMutateRead(BaseModel):
+    id: UUID
+    project_id: UUID | None = None
+    episode_code: str
+    episode_number: int
+    title: str | None = None
+    script_full_text: str | None = None
+    storyboard_root_node_id: UUID | None = None
+    asset_root_node_id: UUID | None = None
 
     model_config = {"from_attributes": True}
 
@@ -203,114 +242,44 @@ class ScriptHierarchyRead(BaseModel):
     episodes: list[EpisodeRead]
 
 
-class LLMVirtualKeyRead(BaseModel):
+class FileNodeRead(BaseModel):
     id: UUID
-    purpose: str
-    litellm_key_id: str | None = None
-    key_prefix: str
-    status: str
-    created_at: datetime
-    revoked_at: datetime | None = None
-    expires_at: datetime | None = None
-    last_seen_at: datetime | None = None
-
-    model_config = {"from_attributes": True}
-
-
-class LLMVirtualKeyIssueRequest(BaseModel):
-    purpose: str = "default"
-    duration_seconds: int | None = None
-
-
-class LLMVirtualKeyIssueResponse(BaseModel):
-    token: str
-    record: LLMVirtualKeyRead
-
-
-class LLMUsageDailyRead(BaseModel):
-    id: UUID
-    user_id: UUID
-    date: date
-    model: str
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-    request_count: int
-    cost: Decimal
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class LLMUsageEventRead(BaseModel):
-    id: UUID
-    user_id: UUID | None = None
-    request_id: str | None = None
-    model: str | None = None
-    endpoint: str | None = None
-    prompt_tokens: int
-    completion_tokens: int
-    total_tokens: int
-    latency_ms: int | None = None
-    cost: Decimal | None = None
-    created_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class LLMModelNewRequest(BaseModel):
-    model_name: str
-    litellm_params: dict[str, Any]
-    model_info: dict[str, Any] | None = None
-
-    model_config = {"protected_namespaces": ()}
-
-
-class LLMCustomServiceCreateRequest(BaseModel):
+    workspace_id: UUID | None = None
+    project_id: UUID | None = None
+    parent_id: UUID | None = None
     name: str
-    base_url: str
-    api_key: str
-    models: list[str] = Field(default_factory=list)
-    enabled: bool = True
-
-
-class LLMCustomServiceRead(BaseModel):
-    id: UUID
-    name: str
-    kind: str
-    base_url: str
-    supported_models: list[str]
-    created_models: list[str]
-    enabled: bool
-    created_at: datetime
-    updated_at: datetime
-
-    model_config = {"from_attributes": True}
-
-
-class LLMChatAttachment(BaseModel):
-    kind: Literal["image", "text"]
-    name: str | None = None
+    is_folder: bool
+    minio_bucket: str | None = None
+    minio_key: str | None = None
     content_type: str | None = None
-    data_url: str | None = None
-    text: str | None = None
+    size_bytes: int
+    thumb_minio_bucket: str | None = None
+    thumb_minio_key: str | None = None
+    thumb_content_type: str | None = None
+    thumb_size_bytes: int
+    created_at: datetime
+    updated_at: datetime
+    created_by: UUID | None = None
+
+    model_config = {"from_attributes": True}
 
 
-class LLMChatMessage(BaseModel):
-    role: Literal["system", "user", "assistant"]
-    content: str
+class WorkspaceMemberRead(BaseModel):
+    user_id: UUID
+    role: str
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
-class LLMChatRequest(BaseModel):
-    model: str
-    messages: list[LLMChatMessage] = Field(default_factory=list)
-    attachments: list[LLMChatAttachment] = Field(default_factory=list)
+class WorkspaceRead(BaseModel):
+    id: UUID
+    name: str
+    owner_id: UUID
+    created_at: datetime
+    members: list[WorkspaceMemberRead] = []
 
-
-class LLMChatResponse(BaseModel):
-    output_text: str
-    raw: dict[str, Any]
+    model_config = {"from_attributes": True}
 
 
 class AIModelRead(BaseModel):

@@ -11,9 +11,6 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       APP_DB_USER: ${APP_DB_USER:-anyreason_app}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-anyreason_app}
-      LITELLM_DB_NAME: ${LITELLM_DB_NAME:-litellm}
-      LITELLM_DB_USER: ${LITELLM_DB_USER:-litellm}
-      LITELLM_DB_PASSWORD: ${LITELLM_DB_PASSWORD:-litellm123}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
     volumes:
@@ -65,9 +62,6 @@ services:
     image: redis:7-alpine
     container_name: anyreason-redis
     restart: unless-stopped
-    profiles:
-      - app
-      - queue
     env_file:
       - ${ANYREASON_ENV_FILE:-.env}
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-redis}"]
@@ -80,98 +74,6 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
-
-  litellm-db-init:
-    image: postgres:16-alpine
-    container_name: litellm-db-init
-    depends_on:
-      postgres:
-        condition: service_healthy
-    restart: "no"
-    env_file:
-      - ${ANYREASON_ENV_FILE:-.env}
-    environment:
-      PGPASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      LITELLM_DB_NAME: ${LITELLM_DB_NAME:-litellm}
-      LITELLM_DB_USER: ${LITELLM_DB_USER:-litellm}
-      LITELLM_DB_PASSWORD: ${LITELLM_DB_PASSWORD:-litellm123}
-    command:
-      - /bin/sh
-      - -lc
-      - |
-        psql -h postgres -U "$$POSTGRES_USER" -d postgres -v ON_ERROR_STOP=1 -v litellm_db="$$LITELLM_DB_NAME" -v litellm_user="$$LITELLM_DB_USER" -v litellm_password="$$LITELLM_DB_PASSWORD" <<'SQL'
-        SELECT format('CREATE ROLE %I LOGIN PASSWORD %L', :'litellm_user', :'litellm_password')
-        WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'litellm_user');
-        \gexec
-
-        SELECT format('CREATE DATABASE %I OWNER %I', :'litellm_db', :'litellm_user')
-        WHERE NOT EXISTS (SELECT 1 FROM pg_database WHERE datname = :'litellm_db');
-        \gexec
-        SQL
-
-        psql -h postgres -U "$$POSTGRES_USER" -d "$$LITELLM_DB_NAME" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS pgcrypto;"
-
-  litellm-proxy:
-    image: ghcr.io/berriai/litellm:main-latest
-    container_name: litellm-proxy
-    depends_on:
-      postgres:
-        condition: service_healthy
-      litellm-db-init:
-        condition: service_completed_successfully
-    ports:
-      - "4000:4000"
-    volumes:
-      - ./litellm_config.yaml:/app/config.yaml
-      - ./litellm_custom_callbacks.py:/app/litellm_custom_callbacks.py:ro
-    env_file:
-      - ${ANYREASON_ENV_FILE:-.env}
-    environment:
-      DATABASE_URL: postgresql://${LITELLM_DB_USER:-litellm}:${LITELLM_DB_PASSWORD:-litellm123}@postgres:5432/${LITELLM_DB_NAME:-litellm}
-      STORE_MODEL_IN_DB: "True"
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
-      LITELLM_SALT_KEY: ${LITELLM_SALT_KEY:-change-me}
-      UI_USERNAME: ${LITELLM_UI_USERNAME:-admin}
-      UI_PASSWORD: ${LITELLM_UI_PASSWORD:-change-me}
-      PROXY_ADMIN_ID: ${LITELLM_ADMIN_USER_ID:-admin}
-      LITELLM_WEBHOOK_URL: ${LITELLM_WEBHOOK_URL:-http://backend:8000/api/v1/llm/webhooks/litellm}
-      LITELLM_WEBHOOK_SECRET: ${LITELLM_WEBHOOK_SECRET:-}
-    command: ["--config", "/app/config.yaml", "--port", "4000", "--host", "0.0.0.0"]
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import socket; s=socket.create_connection(('127.0.0.1', 4000), 2); s.close()"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  litellm-admin-init:
-    image: curlimages/curl:8.6.0
-    container_name: litellm-admin-init
-    depends_on:
-      litellm-proxy:
-        condition: service_healthy
-    restart: "no"
-    env_file:
-      - ${ANYREASON_ENV_FILE:-.env}
-    entrypoint: ["/bin/sh", "-lc"]
-    command: |
-      i=1
-      while [ "$$i" -le 30 ]; do
-        code="$$(curl -sS -o /tmp/out.json -w '%{http_code}' \
-          -H "Authorization: Bearer $$LITELLM_MASTER_KEY" \
-          -H "Content-Type: application/json" \
-          -X POST "http://litellm-proxy:4000/user/new" \
-          --data "{\"user_email\":\"$$LITELLM_ADMIN_EMAIL\",\"user_id\":\"$$LITELLM_ADMIN_USER_ID\"}" || true)"
-        if [ "$$code" = "200" ] || [ "$$code" = "201" ] || [ "$$code" = "409" ]; then
-          cat /tmp/out.json || true
-          exit 0
-        fi
-        sleep 1
-        i="$$(($$i + 1))"
-      done
-      cat /tmp/out.json || true
-      exit 1
 
 volumes:
   pg_data:

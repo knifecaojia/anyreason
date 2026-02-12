@@ -8,6 +8,9 @@ class _FakeObject:
     def stream(self, _chunk_size: int):
         yield self._payload
 
+    def read(self):
+        return self._payload
+
     def close(self):
         return None
 
@@ -30,8 +33,10 @@ class _FakeMinio:
         self._buckets.add(bucket_name)
         self._objects[(bucket_name, object_name)] = data.read(length)
 
-    def get_object(self, bucket: str, key: str):
-        return _FakeObject(self._objects[(bucket, key)])
+    def get_object(self, bucket: str | None = None, key: str | None = None, *, bucket_name: str | None = None, object_name: str | None = None):
+        b = bucket_name or bucket
+        k = object_name or key
+        return _FakeObject(self._objects[(b, k)])
 
     def remove_object(self, *, bucket_name: str, object_name: str):
         self._objects.pop((bucket_name, object_name), None)
@@ -106,5 +111,5 @@ async def test_ai_scene_structure_preview_and_apply(test_client, authenticated_u
 
     res = await test_client.get(f"/api/v1/scripts/{script_id}/hierarchy", headers=authenticated_user["headers"])
     assert res.status_code == 200
-    scenes = res.json()["data"]["episodes"][0]["scenes"]
-    assert [s["scene_number"] for s in scenes] == [1, 2]
+    storyboards = res.json()["data"]["episodes"][0]["storyboards"]
+    assert [s["scene_number"] for s in storyboards] == [1, 2]

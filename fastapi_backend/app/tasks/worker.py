@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
+import traceback
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -26,6 +27,7 @@ async def _process_task(*, task_id: UUID) -> None:
             return
 
         reporter = TaskReporter(db=db, task=task)
+        await reporter.log(message="任务开始执行", level="info", payload={"task_type": str(task.type or "").strip()})
         await reporter.set_running()
 
         raw_type = str(task.type or "")
@@ -33,13 +35,18 @@ async def _process_task(*, task_id: UUID) -> None:
         handler = TASK_HANDLER_REGISTRY.get(task_type)
         if handler is None:
             known = ", ".join(sorted(TASK_HANDLER_REGISTRY.keys()))
-            await reporter.fail(error=f"Unknown task type: {raw_type!r}. Known: {known}")
+            await reporter.fail(
+                error=f"Unknown task type: {raw_type!r}. Known: {known}",
+                details={"task_type": raw_type, "known": list(sorted(TASK_HANDLER_REGISTRY.keys()))},
+            )
             return
 
         try:
+            await reporter.log(message="进入任务处理器", level="info", payload={"handler": handler.__class__.__name__, "task_type": task_type})
             result = await handler.run(db=db, task=reporter.task, reporter=reporter)
         except Exception as e:
-            await reporter.fail(error=str(e))
+            tb = traceback.format_exc()
+            await reporter.fail(error=str(e), details={"exception_type": type(e).__name__, "traceback": tb[-20000:]})
             return
 
         await reporter.succeed(result_json=result or {})

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { RefreshCcw } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 
 import { TASK_TYPES } from "@/lib/tasks/constants";
 import type { Task, TaskStatus } from "@/lib/tasks/types";
@@ -78,6 +79,62 @@ export function TaskList({
   onRetry?: (taskId: string) => void;
   compact?: boolean;
 }) {
+  const [logOpen, setLogOpen] = useState(false);
+  const [logTaskId, setLogTaskId] = useState<string | null>(null);
+  const [logLoading, setLogLoading] = useState(false);
+  const [logError, setLogError] = useState<string | null>(null);
+  const [events, setEvents] = useState<
+    Array<{ id: string; event_type: string; payload: Record<string, unknown>; created_at: string }>
+  >([]);
+
+  useEffect(() => {
+    if (!logOpen || !logTaskId) return;
+    let cancelled = false;
+    setLogLoading(true);
+    setLogError(null);
+    (async () => {
+      const res = await fetch(`/api/tasks/${encodeURIComponent(logTaskId)}/events?order=asc&limit=200`, { cache: "no-store" });
+      if (!res.ok) {
+        if (cancelled) return;
+        setLogError(await res.text());
+        setEvents([]);
+        setLogLoading(false);
+        return;
+      }
+      const json = (await res.json()) as { data?: Array<{ id: string; event_type: string; payload: Record<string, unknown>; created_at: string }> };
+      if (cancelled) return;
+      setEvents(Array.isArray(json.data) ? json.data : []);
+      setLogLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [logOpen, logTaskId]);
+
+  const groupedText = useMemo(() => {
+    return events
+      .map((e) => {
+        const ts = e.created_at ? new Date(e.created_at).toLocaleString() : "";
+        if (e.event_type === "log") {
+          const level = typeof e.payload?.level === "string" ? e.payload.level : "info";
+          const message = typeof e.payload?.message === "string" ? e.payload.message : "";
+          return `[${ts}] [${level}] ${message}`;
+        }
+        if (e.event_type === "failed") {
+          const error = typeof e.payload?.error === "string" ? e.payload.error : "";
+          const details = (e.payload?.details || {}) as Record<string, unknown>;
+          const tb = typeof details.traceback === "string" ? details.traceback : "";
+          return [`[${ts}] [failed] ${error}`, tb ? tb : ""].filter(Boolean).join("\n");
+        }
+        if (e.event_type === "progress") {
+          const p = typeof e.payload?.progress === "number" ? e.payload.progress : "";
+          return `[${ts}] [progress] ${p}%`;
+        }
+        return `[${ts}] [${e.event_type}]`;
+      })
+      .join("\n");
+  }, [events]);
+
   return (
     <div className="rounded-2xl border border-border bg-surface overflow-hidden">
       <div className="px-5 py-4 border-b border-border flex items-center justify-between bg-surfaceHighlight/30">
@@ -144,6 +201,16 @@ export function TaskList({
                       取消
                     </button>
                   )}
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-bold text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
+                    onClick={() => {
+                      setLogTaskId(t.id);
+                      setLogOpen(true);
+                    }}
+                  >
+                    日志
+                  </button>
                   {onRetry && (t.status === "failed" || t.status === "canceled") && (
                     <button
                       type="button"
@@ -174,6 +241,38 @@ export function TaskList({
               {t.error && <div className="mt-2 text-xs text-red-400 line-clamp-2">{t.error}</div>}
             </div>
           ))}
+        </div>
+      )}
+
+      {logOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-4xl rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden">
+            <div className="h-12 px-4 border-b border-border flex items-center justify-between">
+              <div className="font-bold text-sm truncate">任务日志 {logTaskId ? `(${logTaskId.slice(0, 8)})` : ""}</div>
+              <button
+                onClick={() => {
+                  setLogOpen(false);
+                  setLogTaskId(null);
+                }}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                type="button"
+              >
+                关闭
+              </button>
+            </div>
+            <div className="p-4">
+              {logError && <div className="mb-3 text-xs text-red-400 whitespace-pre-wrap">{logError}</div>}
+              {logLoading ? (
+                <div className="text-sm text-textMuted">加载中...</div>
+              ) : events.length === 0 ? (
+                <div className="text-sm text-textMuted">暂无日志</div>
+              ) : (
+                <pre className="text-xs leading-relaxed whitespace-pre-wrap bg-background/40 border border-border rounded-xl p-4 max-h-[70vh] overflow-y-auto">
+                  {groupedText}
+                </pre>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </div>

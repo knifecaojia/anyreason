@@ -24,6 +24,7 @@ from .email import send_reset_password_email
 from .models import User
 from .schemas import UserCreate
 from app.log import logger
+from app.services.credit_service import credit_service
 
 AUTH_URL_PATH = "auth"
 
@@ -34,6 +35,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
     async def on_after_register(self, user: User, request: Optional[Request] = None):
         logger.bind(context={"user_id": str(user.id)}).info("user_registered")
+        await credit_service.ensure_account(
+            db=self.user_db.session,
+            user_id=user.id,
+            initial_balance=settings.DEFAULT_INITIAL_CREDITS,
+            reason="init",
+        )
+        await self.user_db.session.commit()
 
     async def on_after_forgot_password(
         self, user: User, token: str, request: Optional[Request] = None

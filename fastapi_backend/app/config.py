@@ -8,8 +8,8 @@ class Settings(BaseSettings):
     OPENAPI_URL: str = "/openapi.json"
 
     # Database
-    DATABASE_URL: str
-    TEST_DATABASE_URL: str | None = None
+    DATABASE_URL: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/anyreason"
+    TEST_DATABASE_URL: str | None = "postgresql+asyncpg://postgres:postgres@localhost:5432/anyreason_test"
     EXPIRE_ON_COMMIT: bool = False
 
     # Redis (task queue + events)
@@ -18,9 +18,9 @@ class Settings(BaseSettings):
     TASK_EVENTS_CHANNEL: str = "tasks:events"
 
     # User
-    ACCESS_SECRET_KEY: str
-    RESET_PASSWORD_SECRET_KEY: str
-    VERIFICATION_SECRET_KEY: str
+    ACCESS_SECRET_KEY: str = "dev_access_secret_key"
+    RESET_PASSWORD_SECRET_KEY: str = "dev_reset_password_secret_key"
+    VERIFICATION_SECRET_KEY: str = "dev_verification_secret_key"
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_SECONDS: int = 3600
 
@@ -41,12 +41,16 @@ class Settings(BaseSettings):
     FRONTEND_URL: str = "http://localhost:3000"
 
     # CORS
-    CORS_ORIGINS: Set[str]
+    CORS_ORIGINS: Set[str] = {"http://localhost:3000"}
 
     # Default admin seed (development convenience)
     CREATE_DEFAULT_ADMIN: bool = False
     DEFAULT_ADMIN_EMAIL: str | None = None
     DEFAULT_ADMIN_PASSWORD: str | None = None
+    DEFAULT_INITIAL_CREDITS: int = 100
+
+    AUTO_DB_INIT_ON_STARTUP: bool = True
+    AUTO_DB_SEED_ON_STARTUP: bool = True
 
     # MinIO (S3 compatible object storage)
     MINIO_ENDPOINT: str = "localhost:9000"
@@ -54,13 +58,7 @@ class Settings(BaseSettings):
     MINIO_SECRET_KEY: str = "minioadmin"
     MINIO_SECURE: bool = False
     MINIO_BUCKET_SCRIPTS: str = "anyreason-scripts"
-
-    # LiteLLM
-    LITELLM_BASE_URL: str = "http://localhost:4000"
-    LITELLM_MASTER_KEY: str | None = None
-    LITELLM_DEFAULT_ALLOWED_MODELS: str = "deepseek"
-    LITELLM_VIRTUAL_KEY_ALLOWED_MODELS: str = "*"
-    LITELLM_WEBHOOK_SECRET: str | None = None
+    MINIO_BUCKET_VFS: str = "anyreason-vfs"
 
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"

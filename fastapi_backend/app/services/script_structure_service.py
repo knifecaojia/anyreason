@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import io
 import re
 from dataclasses import dataclass
 from typing import Iterable
@@ -10,31 +11,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.core.exceptions import AppError
-from app.models import Episode, Project, Scene, Script
+from app.models import Episode, Project, Storyboard, Script
 from app.storage import get_minio_client
 
+BODY_MARKER = "剧本正文"
 
-_BODY_MARKER_RE = re.compile(r"剧本正文")
-
-_EPISODE_HEADER_RE = re.compile(
-    r"^\s*(?:#{1,6}\s*)?(?:"
-    r"(?:(?:EPISODE|EP)\s*(?P<ep_num>\d{1,4})(?:\s*(?:[:：\-—]\s*(?P<ep_title>.*?))|\s*(?P<ep_title_paren>[（(].*?[）)]))?)"
-    r"|(?:第\s*(?P<cn_num>[\d一二三四五六七八九十百千两零〇]{1,8})\s*(?:集|话|章)(?:\s*(?:[:：\-—]\s*(?P<cn_title>.*?))|\s*(?P<cn_title_paren>[（(].*?[）)]))?)"
-    r")\s*$",
-    re.IGNORECASE | re.MULTILINE,
+_EPISODE_EN_RE = re.compile(
+    r"^\s*\*{0,2}\s*(?:EPISODE|Episode)\s*(?P<ep_num>\d+)\s*[:：\-]\s*(?P<ep_title>.*?)\s*\*{0,2}\s*$",
+    re.MULTILINE,
 )
-
-_SCENE_HEADER_RE = re.compile(
-    r"^\s*(?:#{1,6}\s*)?(?:"
-    r"(?:(?:SCENE|Scene)\s*(?P<sc_num>\d{1,4})(?:\s*(?:[:：\-—]\s*(?P<sc_title>.*?))|\s*(?P<sc_title_paren>[（(].*?[）)]))?)"
-    r"|(?:第\s*(?P<cn_num>[\d一二三四五六七八九十百千两零〇]{1,8})\s*(?:场|幕)(?:\s*(?:[:：\-—]\s*(?P<cn_title>.*?))|\s*(?P<cn_title_paren>[（(].*?[）)]))?)"
-    r")\s*$",
+_EPISODE_CN_RE = re.compile(
+    r"^\s*\*{0,2}\s*第(?P<cn_num>[0-9一二三四五六七八九十百千两零〇]+)(?:集|话|章)\s*(?:[:：\-]\s*(?P<cn_title>.*?)|（(?P<cn_title_paren_zh>[^）]+)）|\((?P<cn_title_paren_en>[^)]+)\))?\s*\*{0,2}\s*$",
     re.MULTILINE,
 )
 
+_SCENE_EN_RE = re.compile(
+    r"^(?:SCENE|Scene)\s*(?P<sc_num>\d+)\s*[:：\-]\s*(?P<sc_title>.*)?$",
+    re.MULTILINE,
+)
+_SCENE_CN_RE = re.compile(
+    r"^第(?P<cn_num>[0-9一二三四五六七八九十百千两零〇]+)场\s*(?:[:：\-]\s*(?P<cn_title>.*)|（(?P<cn_title_paren_zh>[^）]+)）|\((?P<cn_title_paren_en>[^)]+)\))?\s*$",
+    re.MULTILINE,
+)
 
 @dataclass(frozen=True)
-class ParsedScene:
+class ParsedStoryboard:
+    shot_number: int
+    shot_code: str
     scene_number: int
     scene_code: str
     title: str | None
@@ -50,42 +53,35 @@ class ParsedEpisode:
     start_line: int | None
     end_line: int | None
     word_count: int
-    scenes: list[ParsedScene]
-
+    storyboards: list[ParsedStoryboard]
 
 def _strip_bom(value: str) -> str:
-    if value.startswith("\ufeff"):
-        return value.lstrip("\ufeff")
-    return value
-
-
-def _count_non_whitespace_chars(value: str) -> int:
-    return len(re.findall(r"\S", value))
+    return (value or "").lstrip("\ufeff")
 
 
 def _find_marker_start(text: str) -> int:
-    m = _BODY_MARKER_RE.search(text)
-    return m.end() if m else 0
+    if not text:
+        return 0
+    lines = text.splitlines(keepends=True)
+    pos = 0
+    for line in lines:
+        if line.strip() == BODY_MARKER:
+            pos += len(line)
+            return pos
+        pos += len(line)
+    return 0
 
 
-def _iter_headers(pattern: re.Pattern[str], text: str) -> Iterable[re.Match[str]]:
-    return pattern.finditer(text)
+def _count_non_whitespace_chars(value: str) -> int:
+    return sum(1 for ch in (value or "") if not ch.isspace())
 
 
-def _strip_wrapping_brackets(value: str) -> str:
-    v = (value or "").strip()
-    pairs = {
-        ("(", ")"),
-        ("（", "）"),
-        ("[", "]"),
-        ("【", "】"),
-        ("{", "}"),
-    }
-    for left, right in pairs:
-        if v.startswith(left) and v.endswith(right) and len(v) >= 2:
-            inner = v[1:-1].strip()
-            return inner or v
-    return v
+def _iter_headers(regexes: list[re.Pattern[str]], text: str) -> list[re.Match[str]]:
+    matches: list[re.Match[str]] = []
+    for r in regexes:
+        matches.extend(list(r.finditer(text)))
+    matches.sort(key=lambda m: m.start())
+    return matches
 
 
 def _parse_cn_int(value: str) -> int | None:
@@ -95,56 +91,61 @@ def _parse_cn_int(value: str) -> int | None:
     if s.isdigit():
         return int(s)
 
-    s = s.replace("两", "二").replace("〇", "零")
-    digit = {"零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
-    unit = {"十": 10, "百": 100, "千": 1000}
+    digits = {"零": 0, "〇": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "六": 6, "七": 7, "八": 8, "九": 9}
+    unit_map = {"十": 10, "百": 100, "千": 1000}
 
     total = 0
-    current = 0
-    seen = False
+    number = 0
     for ch in s:
-        if ch in digit:
-            current = digit[ch]
-            seen = True
+        if ch in digits:
+            number = digits[ch]
             continue
-        if ch in unit:
-            seen = True
-            u = unit[ch]
-            if current == 0:
-                current = 1
-            total += current * u
-            current = 0
+        if ch in unit_map:
+            unit = unit_map[ch]
+            total += (number or 1) * unit
+            number = 0
             continue
         return None
-    if not seen:
-        return None
-    return total + current
+
+    total += number
+    return total if total > 0 else None
 
 
-def _episode_title(num: int, raw: str | None) -> str | None:
-    title = _strip_wrapping_brackets(raw or "")
-    if title:
-        return title
-    return None
+def _strip_wrapping_brackets(value: str) -> str:
+    v = (value or "").strip()
+    pairs = [("(", ")"), ("（", "）"), ("[", "]"), ("【", "】"), ("《", "》")]
+    for l, r in pairs:
+        if v.startswith(l) and v.endswith(r) and len(v) >= 2:
+            return v[1:-1].strip()
+    return v
 
-def _episode_code(num: int) -> str:
-    return f"EP{num:03d}"
 
+def _episode_code(ep_num: int) -> str:
+    return f"EP{ep_num:03d}"
 
 
 def _scene_code(ep_num: int, sc_num: int) -> str:
     return f"EP{ep_num:03d}_SC{sc_num:02d}"
 
 
+def _episode_title(ep_num: int, title: str | None) -> str | None:
+    t = _strip_wrapping_brackets(title or "").strip()
+    return t or None
+
+
+def _shot_code(ep_num: int, sc_num: int, sh_num: int) -> str:
+    return f"EP{ep_num:03d}_SC{sc_num:02d}_SH{sh_num:02d}"
+
+
 def parse_script_to_episodes(raw_text: str) -> list[ParsedEpisode]:
     text = _strip_bom(raw_text or "")
     base = text[_find_marker_start(text) :]
 
-    matches = list(_iter_headers(_EPISODE_HEADER_RE, base))
+    matches = _iter_headers([_EPISODE_EN_RE, _EPISODE_CN_RE], base)
     if not matches:
         segment = base.strip("\n")
         word_count = _count_non_whitespace_chars(segment)
-        scenes = parse_episode_to_scenes(1, segment)
+        storyboards = parse_episode_to_storyboards(1, segment)
         return [
             ParsedEpisode(
                 episode_number=1,
@@ -154,7 +155,7 @@ def parse_script_to_episodes(raw_text: str) -> list[ParsedEpisode]:
                 start_line=1,
                 end_line=base.count("\n") + 1 if base else 1,
                 word_count=word_count,
-                scenes=scenes,
+                storyboards=storyboards,
             )
         ]
 
@@ -166,7 +167,7 @@ def parse_script_to_episodes(raw_text: str) -> list[ParsedEpisode]:
         if not segment.strip():
             continue
 
-        num_raw = m.group("ep_num") or m.group("cn_num")
+        num_raw = m.groupdict().get("ep_num") or m.groupdict().get("cn_num")
         if not num_raw:
             continue
         parsed_num = _parse_cn_int(num_raw)
@@ -174,16 +175,16 @@ def parse_script_to_episodes(raw_text: str) -> list[ParsedEpisode]:
             continue
         ep_num = parsed_num
         ep_title = (
-            m.group("ep_title")
-            or m.group("ep_title_paren")
-            or m.group("cn_title")
-            or m.group("cn_title_paren")
+            m.groupdict().get("ep_title")
+            or m.groupdict().get("cn_title")
+            or m.groupdict().get("cn_title_paren_zh")
+            or m.groupdict().get("cn_title_paren_en")
         )
 
         start_line = base[:start].count("\n") + 1
         end_line = base[:end].count("\n") + 1
         word_count = _count_non_whitespace_chars(segment)
-        scenes = parse_episode_to_scenes(ep_num, segment)
+        storyboards = parse_episode_to_storyboards(ep_num, segment)
 
         out.append(
             ParsedEpisode(
@@ -194,7 +195,7 @@ def parse_script_to_episodes(raw_text: str) -> list[ParsedEpisode]:
                 start_line=start_line,
                 end_line=end_line,
                 word_count=word_count,
-                scenes=scenes,
+                storyboards=storyboards,
             )
         )
 
@@ -202,12 +203,13 @@ def parse_script_to_episodes(raw_text: str) -> list[ParsedEpisode]:
     return out
 
 
-def parse_episode_to_scenes(ep_num: int, episode_text: str) -> list[ParsedScene]:
-    matches = list(_iter_headers(_SCENE_HEADER_RE, episode_text))
+def parse_episode_to_storyboards(ep_num: int, episode_text: str) -> list[ParsedStoryboard]:
+    matches = _iter_headers([_SCENE_EN_RE, _SCENE_CN_RE], episode_text)
     if not matches:
         return []
 
-    scenes: list[ParsedScene] = []
+    storyboards: list[ParsedStoryboard] = []
+
     for idx, m in enumerate(matches):
         start = m.start()
         end = matches[idx + 1].start() if idx + 1 < len(matches) else len(episode_text)
@@ -215,7 +217,7 @@ def parse_episode_to_scenes(ep_num: int, episode_text: str) -> list[ParsedScene]
         if not segment.strip():
             continue
 
-        num_raw = m.group("sc_num") or m.group("cn_num")
+        num_raw = m.groupdict().get("sc_num") or m.groupdict().get("cn_num")
         if not num_raw:
             continue
         parsed_num = _parse_cn_int(num_raw)
@@ -223,16 +225,18 @@ def parse_episode_to_scenes(ep_num: int, episode_text: str) -> list[ParsedScene]
             continue
         sc_num = parsed_num
         title_raw = (
-            m.group("sc_title")
-            or m.group("sc_title_paren")
-            or m.group("cn_title")
-            or m.group("cn_title_paren")
+            m.groupdict().get("sc_title")
+            or m.groupdict().get("cn_title")
+            or m.groupdict().get("cn_title_paren_zh")
+            or m.groupdict().get("cn_title_paren_en")
             or ""
         )
         title = _strip_wrapping_brackets(title_raw).strip() or None
 
-        scenes.append(
-            ParsedScene(
+        storyboards.append(
+            ParsedStoryboard(
+                shot_number=1,
+                shot_code=_shot_code(ep_num, sc_num, 1),
                 scene_number=sc_num,
                 scene_code=_scene_code(ep_num, sc_num),
                 title=title,
@@ -240,24 +244,23 @@ def parse_episode_to_scenes(ep_num: int, episode_text: str) -> list[ParsedScene]
             )
         )
 
-    scenes.sort(key=lambda s: s.scene_number)
-    return scenes
+    storyboards.sort(key=lambda s: (s.scene_number, s.shot_number))
+    return storyboards
 
 
 async def _read_script_text_from_minio(script: Script) -> str:
     client = get_minio_client()
 
-    def _op():
-        obj = client.get_object(script.minio_bucket, script.minio_key)
+    def _op() -> bytes:
+        obj = client.get_object(bucket_name=script.minio_bucket, object_name=script.minio_key)
         try:
-            payload = b"".join(obj.stream(32 * 1024))
+            return obj.read()
         finally:
             obj.close()
             obj.release_conn()
-        return payload
 
-    raw = await run_in_threadpool(_op)
-    return raw.decode("utf-8", errors="replace")
+    data = await run_in_threadpool(_op)
+    return data.decode("utf-8", errors="replace")
 
 
 class ScriptStructureService:
@@ -310,15 +313,18 @@ class ScriptStructureService:
             ep.end_line = p.end_line
             ep.script_full_text = p.script_full_text
 
-            await db.execute(delete(Scene).where(Scene.episode_id == ep.id))
-            for sc in p.scenes:
+            # Delete existing storyboards for this episode and re-create
+            await db.execute(delete(Storyboard).where(Storyboard.episode_id == ep.id))
+
+            for sb in p.storyboards:
                 db.add(
-                    Scene(
+                    Storyboard(
                         episode_id=ep.id,
-                        scene_code=sc.scene_code,
-                        scene_number=sc.scene_number,
-                        title=sc.title,
-                        content=sc.content,
+                        shot_code=sb.shot_code,
+                        shot_number=sb.shot_number,
+                        scene_code=sb.scene_code,
+                        scene_number=sb.scene_number,
+                        description=f"[{sb.title}] {sb.content}" if sb.title else sb.content,
                     )
                 )
 
@@ -328,6 +334,7 @@ class ScriptStructureService:
         for ep in structured:
             await db.refresh(ep)
         return structured
+
 
 
 script_structure_service = ScriptStructureService()

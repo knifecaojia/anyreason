@@ -4,6 +4,8 @@ from urllib.parse import urlparse
 import asyncio
 import logging
 import os
+import sys
+import subprocess
 
 from fastapi import Depends
 from fastapi_users.db import SQLAlchemyUserDatabase
@@ -15,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from .config import settings
 from .models import Base, Permission, Role, RolePermission, User, UserRole
+from app.services.credit_service import credit_service
 
 
 logger = logging.getLogger("app.database")
@@ -70,22 +73,31 @@ async def _has_public_user_tables() -> bool:
 async def _run_alembic_upgrade(stamp_revision: str | None = None) -> None:
     from pathlib import Path
 
-    from alembic import command
-    from alembic.config import Config
-
     if not os.getenv("DATABASE_URL"):
         os.environ["DATABASE_URL"] = settings.DATABASE_URL
 
     root_dir = Path(__file__).resolve().parents[1]
-    cfg = Config(str(root_dir / "alembic.ini"))
-    cfg.set_main_option("script_location", "alembic_migrations")
+    alembic_ini = root_dir / "alembic.ini"
 
-    def _run() -> None:
-        if stamp_revision:
-            command.stamp(cfg, stamp_revision)
-        command.upgrade(cfg, "head")
+    def _run_cmd(args: list[str]) -> None:
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "alembic",
+                "-c",
+                str(alembic_ini),
+                *args,
+            ],
+            cwd=str(root_dir),
+            env=os.environ.copy(),
+            check=True,
+            timeout=55,
+        )
 
-    await asyncio.to_thread(_run)
+    if stamp_revision:
+        await asyncio.to_thread(_run_cmd, ["stamp", stamp_revision])
+    await asyncio.to_thread(_run_cmd, ["upgrade", "head"])
 
 
 async def create_db_and_tables() -> None:
@@ -153,6 +165,12 @@ async def ensure_default_admin() -> None:
             )
             session.add(user)
             await session.flush()
+            await credit_service.ensure_account(
+                db=session,
+                user_id=user.id,
+                initial_balance=settings.DEFAULT_INITIAL_CREDITS,
+                reason="init",
+            )
             if admin_role is not None:
                 session.add(UserRole(user_id=user.id, role_id=admin_role.id))
             await session.commit()
@@ -190,6 +208,9 @@ async def ensure_builtin_permissions() -> None:
         ("system.users", "用户管理"),
         ("system.roles", "角色与权限"),
         ("system.audit", "审计日志"),
+        ("system.credits", "积分管理"),
+        ("system.agents", "Agent 管理"),
+        ("system.ai_models", "AI 模型配置"),
         ("menu.dashboard", "工作台"),
         ("menu.scripts.list", "剧本清单"),
         ("menu.scripts.write", "剧本创作"),
@@ -204,6 +225,8 @@ async def ensure_builtin_permissions() -> None:
         ("menu.settings.roles", "角色管理"),
         ("menu.settings.permissions", "权限管理"),
         ("menu.settings.audit", "系统审计"),
+        ("menu.settings.credits", "积分管理"),
+        ("menu.settings.agents", "Agent 管理"),
     ]
 
     async def _run() -> None:

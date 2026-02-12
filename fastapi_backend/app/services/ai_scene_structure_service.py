@@ -5,16 +5,13 @@ import re
 from typing import Any
 from uuid import UUID
 
-import httpx
 from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.config import settings
+from app.ai_gateway import ai_gateway_service
 from app.core.exceptions import AppError
-from app.models import Episode, Project, Scene, Script
+from app.models import AIModelConfig, Episode, Project, Storyboard, Script
 from app.schemas import AISceneDraft
-from app.services.llm_key_service import llm_key_service
-from app.services.llm_model_service import llm_model_service
 
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
@@ -49,23 +46,6 @@ _SCENE_STRUCTURE_INJECTION = """
 {episode_script}
 </EPISODE_SCRIPT>
 """.strip()
-
-
-def _split_provider_model(model: str) -> tuple[str, str]:
-    raw = (model or "").strip()
-    if not raw:
-        return "unknown", ""
-    if "/" not in raw:
-        return raw, raw
-    provider, rest = raw.split("/", 1)
-    return provider.strip() or "unknown", rest.strip()
-
-
-def _allowed_models() -> list[str]:
-    raw = (settings.LITELLM_DEFAULT_ALLOWED_MODELS or "").strip()
-    if not raw:
-        return []
-    return [m.strip() for m in raw.split(",") if m.strip()]
 
 
 def _build_final_prompt(*, prompt_template: str, episode_script: str) -> str:
@@ -133,31 +113,21 @@ async def _chat_completions(
     *,
     db: AsyncSession,
     user_id: UUID,
-    model: str,
+    model_config_id: UUID,
     messages: list[dict[str, Any]],
     temperature: float | None,
     max_tokens: int | None,
 ) -> dict[str, Any]:
-    token = await llm_key_service.get_or_issue_user_token(db=db, user_id=user_id, purpose="episode_scene_structure")
-    base_url = settings.LITELLM_BASE_URL.rstrip("/")
-    url = f"{base_url}/chat/completions"
-    payload: dict[str, Any] = {"model": model, "messages": messages, "stream": False}
-    if temperature is not None:
-        payload["temperature"] = temperature
-    if max_tokens is not None:
-        payload["max_tokens"] = max_tokens
-
-    async with httpx.AsyncClient(timeout=httpx.Timeout(90.0)) as client:
-        try:
-            resp = await client.post(
-                url,
-                headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-                json=payload,
-            )
-            resp.raise_for_status()
-        except httpx.HTTPError as e:
-            raise AppError(msg="LiteLLM chat failed", code=502, status_code=502, data=str(e))
-    return resp.json()
+    raw = await ai_gateway_service.chat_text(
+        db=db,
+        user_id=user_id,
+        binding_key=None,
+        model_config_id=model_config_id,
+        messages=messages,
+        attachments=[],
+        credits_cost=1,
+    )
+    return raw
 
 
 def _extract_output_text(raw: dict[str, Any]) -> str:
@@ -168,41 +138,15 @@ def _extract_output_text(raw: dict[str, Any]) -> str:
 
 
 class AISceneStructureService:
-    async def _list_litellm_model_names(self) -> list[dict[str, str]] | None:
-        if not settings.LITELLM_MASTER_KEY:
-            return None
-        res = await llm_model_service.list_models()
-        data = res.get("data")
-        if not isinstance(data, list):
-            return []
-
-        out: list[dict[str, str]] = []
-        for item in data:
-            if not isinstance(item, dict):
-                continue
-            model_name = str(item.get("model_name") or "").strip()
-            if not model_name:
-                continue
-            litellm_params = item.get("litellm_params")
-            internal_model = ""
-            if isinstance(litellm_params, dict):
-                internal_model = str(litellm_params.get("model") or "").strip()
-            provider, _ = _split_provider_model(model_name)
-            if provider == model_name and "/" not in model_name and internal_model:
-                provider, _ = _split_provider_model(internal_model)
-            out.append({"provider": provider, "model": model_name})
-        return out
-
-    async def list_models(self) -> list[dict[str, str]]:
-        litellm_models = await self._list_litellm_model_names()
-        if litellm_models is not None:
-            return litellm_models
-        models = _allowed_models()
-        out: list[dict[str, str]] = []
-        for m in models:
-            provider, _ = _split_provider_model(m)
-            out.append({"provider": provider, "model": m})
-        return out
+    async def list_models(self, *, db: AsyncSession) -> list[dict[str, str]]:
+        rows = (
+            await db.execute(
+                select(AIModelConfig)
+                .where(AIModelConfig.enabled.is_(True), AIModelConfig.category == "text")
+                .order_by(AIModelConfig.sort_order.asc(), AIModelConfig.created_at.asc())
+            )
+        ).scalars().all()
+        return [{"provider": r.manufacturer, "model": r.model} for r in rows]
 
     async def build_prompt_preview(
         self,
@@ -228,15 +172,17 @@ class AISceneStructureService:
         temperature: float | None,
         max_tokens: int | None,
     ) -> tuple[str, str, list[AISceneDraft]]:
-        litellm_models = await self._list_litellm_model_names()
-        if litellm_models is not None:
-            available = {m["model"] for m in litellm_models if m.get("model")}
-            if available and model not in available:
-                raise AppError(msg="Model not found", code=400, status_code=400)
-        else:
-            models = _allowed_models()
-            if models and model not in models:
-                raise AppError(msg="Model not allowed", code=400, status_code=400)
+        cfg = (
+            await db.execute(
+                select(AIModelConfig).where(
+                    AIModelConfig.enabled.is_(True),
+                    AIModelConfig.category == "text",
+                    AIModelConfig.model == (model or "").strip(),
+                )
+            )
+        ).scalars().first()
+        if cfg is None:
+            raise AppError(msg="Model not found", code=400, status_code=400)
 
         episode = await _get_episode_for_user(db=db, user_id=user_id, episode_id=episode_id)
         if not episode:
@@ -250,7 +196,7 @@ class AISceneStructureService:
         raw = await _chat_completions(
             db=db,
             user_id=user_id,
-            model=model,
+            model_config_id=cfg.id,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -280,10 +226,10 @@ class AISceneStructureService:
 
         start_num = 0
         if mode == "replace":
-            await db.execute(delete(Scene).where(Scene.episode_id == episode.id))
+            await db.execute(delete(Storyboard).where(Storyboard.episode_id == episode.id))
         else:
             max_res = await db.execute(
-                select(func.coalesce(func.max(Scene.scene_number), 0)).where(Scene.episode_id == episode.id)
+                select(func.coalesce(func.max(Storyboard.scene_number), 0)).where(Storyboard.episode_id == episode.id)
             )
             start_num = int(max_res.scalar_one() or 0)
 
@@ -294,17 +240,33 @@ class AISceneStructureService:
         created_count = 0
         for idx, s in enumerate(ordered, start=1):
             num = start_num + idx
-            code = f"EP{episode.episode_number:03d}_SC{num:02d}"
-            row = Scene(
+            
+            # Create a placeholder Storyboard for the Scene
+            # Shot 1 of this scene
+            sc_code = f"EP{episode.episode_number:03d}_SC{num:02d}"
+            shot_code = f"{sc_code}_SH01"
+            
+            row = Storyboard(
                 episode_id=episode.id,
-                scene_code=code,
+                shot_code=shot_code,
+                shot_number=1, # Default to shot 1
+                scene_code=sc_code,
                 scene_number=num,
-                title=(s.title or "").strip() or None,
-                content=(s.content or "").strip() or None,
+                
+                # Scene attributes now live on Storyboard
+                description=(s.content or "").strip() or s.title, # Use content as description
+                # title is not directly on storyboard, maybe put in description or ignore?
+                # Let's prepend title to description if present
+                
                 location=(s.location or "").strip() or None,
                 time_of_day=(s.time_of_day or "").strip() or None,
                 location_type=s.location_type,
             )
+            if s.title and s.content:
+                 row.description = f"[{s.title}] {s.content}"
+            elif s.title:
+                 row.description = f"[{s.title}]"
+            
             db.add(row)
             created_count += 1
 

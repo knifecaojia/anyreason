@@ -20,16 +20,11 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
-      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm-proxy:4000}
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
-      LITELLM_DEFAULT_ALLOWED_MODELS: ${LITELLM_DEFAULT_ALLOWED_MODELS:-mock,deepseek}
-      LITELLM_VIRTUAL_KEY_ALLOWED_MODELS: ${LITELLM_VIRTUAL_KEY_ALLOWED_MODELS:-*}
-      LITELLM_WEBHOOK_SECRET: ${LITELLM_WEBHOOK_SECRET:-}
     volumes:
       - ../fastapi_backend:/app
       - fastapi-venv:/app/.venv
       - ./db_init.py:/app/db_init.py:ro
-    command: ["python", "db_init.py"]
+    command: ["bash", "./start_db_init.sh"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -48,6 +43,8 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-anyreason}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis}@redis:6379/0
+      AUTO_DB_INIT_ON_STARTUP: "false"
+      AUTO_DB_SEED_ON_STARTUP: "false"
       ACCESS_SECRET_KEY: ${ACCESS_SECRET_KEY:-dev-access-secret-change-me}
       RESET_PASSWORD_SECRET_KEY: ${RESET_PASSWORD_SECRET_KEY:-dev-reset-password-secret-change-me}
       VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
@@ -59,11 +56,6 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
-      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm-proxy:4000}
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
-      LITELLM_DEFAULT_ALLOWED_MODELS: ${LITELLM_DEFAULT_ALLOWED_MODELS:-mock,deepseek}
-      LITELLM_VIRTUAL_KEY_ALLOWED_MODELS: ${LITELLM_VIRTUAL_KEY_ALLOWED_MODELS:-*}
-      LITELLM_WEBHOOK_SECRET: ${LITELLM_WEBHOOK_SECRET:-}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -72,6 +64,8 @@ services:
       - ../local-shared-data:/app/shared-data
     command: ["bash", "./start.sh"]
     depends_on:
+      db-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:
@@ -91,6 +85,8 @@ services:
     environment:
       DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-anyreason}
       REDIS_URL: redis://:${REDIS_PASSWORD:-redis}@redis:6379/0
+      AUTO_DB_INIT_ON_STARTUP: "false"
+      AUTO_DB_SEED_ON_STARTUP: "false"
       ACCESS_SECRET_KEY: ${ACCESS_SECRET_KEY:-dev-access-secret-change-me}
       RESET_PASSWORD_SECRET_KEY: ${RESET_PASSWORD_SECRET_KEY:-dev-reset-password-secret-change-me}
       VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
@@ -101,16 +97,13 @@ services:
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
-      LITELLM_BASE_URL: ${LITELLM_BASE_URL:-http://litellm-proxy:4000}
-      LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-change-me}
-      LITELLM_DEFAULT_ALLOWED_MODELS: ${LITELLM_DEFAULT_ALLOWED_MODELS:-mock,deepseek}
-      LITELLM_VIRTUAL_KEY_ALLOWED_MODELS: ${LITELLM_VIRTUAL_KEY_ALLOWED_MODELS:-*}
-      LITELLM_WEBHOOK_SECRET: ${LITELLM_WEBHOOK_SECRET:-}
     volumes:
       - ../fastapi_backend:/app
       - fastapi-venv:/app/.venv
-    command: ["python", "-m", "app.tasks.worker", "--reload"]
+    command: ["bash", "./start_worker.sh"]
     depends_on:
+      db-init:
+        condition: service_completed_successfully
       postgres:
         condition: service_healthy
       redis:

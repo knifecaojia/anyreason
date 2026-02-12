@@ -41,6 +41,14 @@ class TestTasks:
 
         task_id = task["id"]
         res = await test_client.get(
+            f"/api/v1/tasks/{task_id}/events?order=asc&limit=50",
+            headers=authenticated_user["headers"],
+        )
+        assert res.status_code == status.HTTP_200_OK
+        event_types = [e["event_type"] for e in res.json()["data"]]
+        assert "created" in event_types
+
+        res = await test_client.get(
             f"/api/v1/tasks/{task_id}", headers=authenticated_user["headers"]
         )
         assert res.status_code == status.HTTP_200_OK
@@ -65,6 +73,16 @@ class TestTasks:
         )
         assert res.status_code == status.HTTP_200_OK
         assert res.json()["data"]["status"] == "queued"
+
+        res = await test_client.get(
+            f"/api/v1/tasks/{task_id}/events?order=asc&limit=200",
+            headers=authenticated_user["headers"],
+        )
+        assert res.status_code == status.HTTP_200_OK
+        event_types = [e["event_type"] for e in res.json()["data"]]
+        assert "created" in event_types
+        assert "canceled" in event_types
+        assert "retried" in event_types
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_create_task_strips_type_and_entity_type(self, test_client, authenticated_user):

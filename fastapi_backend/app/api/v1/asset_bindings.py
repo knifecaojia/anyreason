@@ -10,7 +10,7 @@ from app.core.exceptions import AppError
 from app.database import User, get_async_session
 from app.models import Asset, AssetBinding, AssetVariant
 from app.repositories import asset_binding_repository
-from app.schemas import AssetBindingBrief, AssetBindingCreateRequest, SceneAssetBindingsResponse, ShotAssetBindingsMapResponse
+from app.schemas import AssetBindingBrief, AssetBindingCreateRequest, StoryboardAssetBindingsResponse
 from app.schemas_response import ResponseBase
 from app.users import current_active_user
 
@@ -44,49 +44,41 @@ async def list_episode_asset_bindings(
     return ResponseBase(code=200, msg="OK", data=[_to_brief(b, a, v) for (b, a, v) in rows])
 
 
-@router.get("/scenes/{scene_id}/asset-bindings", response_model=ResponseBase[SceneAssetBindingsResponse])
-async def list_scene_asset_bindings(
-    scene_id: UUID,
+@router.get("/storyboards/{storyboard_id}/asset-bindings", response_model=ResponseBase[StoryboardAssetBindingsResponse])
+async def list_storyboard_asset_bindings(
+    storyboard_id: UUID,
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ):
-    rows = await asset_binding_repository.list_scene_bindings(db=db, user_id=user.id, scene_id=scene_id)
+    rows = await asset_binding_repository.list_storyboard_bindings(db=db, user_id=user.id, storyboard_id=storyboard_id)
     if rows is None:
-        raise AppError(msg="Scene not found or not authorized", code=404, status_code=404)
-    return ResponseBase(code=200, msg="OK", data=SceneAssetBindingsResponse(scene_id=scene_id, bindings=[_to_brief(b, a, v) for (b, a, v) in rows]))
+        raise AppError(msg="Storyboard not found or not authorized", code=404, status_code=404)
+    return ResponseBase(
+        code=200,
+        msg="OK",
+        data=StoryboardAssetBindingsResponse(
+            storyboard_id=storyboard_id,
+            bindings=[_to_brief(b, a, v) for (b, a, v) in rows],
+        ),
+    )
 
 
-@router.get("/scenes/{scene_id}/shot-asset-bindings", response_model=ResponseBase[ShotAssetBindingsMapResponse])
-async def list_shot_asset_bindings_map(
-    scene_id: UUID,
-    db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
-):
-    mapping = await asset_binding_repository.list_shot_bindings_map_for_scene(db=db, user_id=user.id, scene_id=scene_id)
-    if mapping is None:
-        raise AppError(msg="Scene not found or not authorized", code=404, status_code=404)
-    out: dict[UUID, list[AssetBindingBrief]] = {}
-    for shot_id, rows in mapping.items():
-        out[shot_id] = [_to_brief(b, a, v) for (b, a, v) in rows]
-    return ResponseBase(code=200, msg="OK", data=ShotAssetBindingsMapResponse(scene_id=scene_id, shot_bindings=out))
-
-
-@router.post("/shots/{shot_id}/asset-bindings", response_model=ResponseBase[AssetBindingBrief])
-async def upsert_shot_asset_binding(
-    shot_id: UUID,
+@router.post("/storyboards/{storyboard_id}/asset-bindings", response_model=ResponseBase[AssetBindingBrief])
+async def upsert_storyboard_asset_binding(
+    storyboard_id: UUID,
     body: AssetBindingCreateRequest,
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ):
-    binding = await asset_binding_repository.upsert_shot_binding(
+    binding = await asset_binding_repository.upsert_storyboard_binding(
         db=db,
         user_id=user.id,
-        shot_id=shot_id,
+        storyboard_id=storyboard_id,
         asset_entity_id=body.asset_entity_id,
         asset_variant_id=body.asset_variant_id,
     )
     if not binding:
-        raise AppError(msg="Shot not found or not authorized", code=404, status_code=404)
+        raise AppError(msg="Storyboard not found or not authorized", code=404, status_code=404)
 
     await db.commit()
 

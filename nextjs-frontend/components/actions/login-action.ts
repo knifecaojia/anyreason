@@ -16,6 +16,39 @@ function getSafeNextPath(value: FormDataEntryValue | null) {
   return next;
 }
 
+function getLoginErrorDebugSummary(error: unknown): string {
+  if (!error || typeof error !== "object") return "non_object_error";
+  const err = error as Record<string, unknown>;
+  const parts: string[] = [];
+  const name = err.name;
+  if (typeof name === "string" && name) parts.push(`name=${name}`);
+  const code = err.code;
+  if (typeof code === "string" && code) parts.push(`code=${code}`);
+  const message = err.message;
+  if (typeof message === "string" && message) parts.push(`message=${message.slice(0, 120)}`);
+
+  const resp = err.response as Record<string, unknown> | undefined;
+  if (resp && typeof resp === "object") {
+    const status = resp.status;
+    if (typeof status === "number") parts.push(`status=${status}`);
+    const data = resp.data;
+    const dataType = Array.isArray(data) ? "array" : typeof data;
+    parts.push(`dataType=${dataType}`);
+    if (data && typeof data === "object" && !Array.isArray(data)) {
+      const keys = Object.keys(data as Record<string, unknown>).slice(0, 8).join(",");
+      if (keys) parts.push(`dataKeys=${keys}`);
+    }
+  } else {
+    const cause = err.cause as Record<string, unknown> | undefined;
+    if (cause && typeof cause === "object") {
+      const causeMsg = cause.message;
+      if (typeof causeMsg === "string" && causeMsg) parts.push(`cause=${causeMsg.slice(0, 120)}`);
+    }
+  }
+
+  return parts.join(" | ") || "unknown_shape";
+}
+
 export async function login(prevState: unknown, formData: FormData) {
   const validatedFields = loginSchema.safeParse({
     username: formData.get("username") as string,
@@ -50,8 +83,11 @@ export async function login(prevState: unknown, formData: FormData) {
       path: "/",
     });
   } catch (err) {
+    const msg = getErrorMessage(err);
+    const debug =
+      process.env.NODE_ENV === "production" ? "" : `（${getLoginErrorDebugSummary(err)}）`;
     return {
-      server_validation_error: getErrorMessage(err),
+      server_validation_error: `${msg}${debug}`,
     };
   }
   const nextPath = getSafeNextPath(formData.get("next"));

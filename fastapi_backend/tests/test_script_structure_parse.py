@@ -55,8 +55,8 @@ def test_parse_splits_scenes_within_episode():
     )
     episodes = parse_script_to_episodes(text)
     assert len(episodes) == 1
-    assert [s.scene_number for s in episodes[0].scenes] == [1, 2]
-    assert episodes[0].scenes[0].scene_code == "EP001_SC01"
+    assert [s.scene_number for s in episodes[0].storyboards] == [1, 2]
+    assert episodes[0].storyboards[0].scene_code == "EP001_SC01"
 
 
 def test_parse_supports_chinese_numerals_and_paren_suffix_for_last_episode():
@@ -86,5 +86,23 @@ def test_parse_supports_chinese_numerals_and_paren_suffix_for_scenes():
     )
     episodes = parse_script_to_episodes(text)
     assert len(episodes) == 1
-    assert [s.scene_number for s in episodes[0].scenes] == [10, 11]
-    assert episodes[0].scenes[0].title == "终"
+    assert [s.scene_number for s in episodes[0].storyboards] == [10, 11]
+    assert episodes[0].storyboards[0].title == "终"
+
+
+def test_parse_supports_markdown_bold_wrapping_for_episode_headers():
+    text = "\n".join(
+        [
+            "**第二集：**",
+            "内容A",
+            " **　　第三集：** ",
+            "内容B",
+            "**第5章：收尾**",
+            "内容C",
+        ]
+    )
+    episodes = parse_script_to_episodes(text)
+    assert [e.episode_number for e in episodes] == [2, 3, 5]
+    assert "内容A" in episodes[0].script_full_text
+    assert "内容B" in episodes[1].script_full_text
+    assert "内容C" in episodes[2].script_full_text

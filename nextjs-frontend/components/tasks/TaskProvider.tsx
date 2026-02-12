@@ -15,7 +15,7 @@ const TaskContext = createContext<TaskContextValue | null>(null);
 function getWsUrl(ticket: string) {
   const base =
     process.env.NEXT_PUBLIC_API_BASE_URL ||
-    (process.env.NODE_ENV === "development" ? "http://localhost:8000" : "");
+    (process.env.NODE_ENV === "development" ? "http://127.0.0.1:8000" : "");
   const url = new URL(base);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   url.pathname = "/ws/tasks";

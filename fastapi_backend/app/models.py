@@ -20,7 +20,8 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import ENUM, JSONB, UUID
-from sqlalchemy.orm import DeclarativeBase, relationship
+from sqlalchemy.orm import DeclarativeBase, relationship, backref
+import sqlalchemy.orm
 
 
 asset_type_enum = ENUM(
@@ -50,8 +51,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-    llm_virtual_keys = relationship(
-        "LLMVirtualKey",
+    workspaces = relationship(
+        "WorkspaceMember",
         back_populates="user",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -62,117 +63,62 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
-
-
-class LLMVirtualKey(Base):
-    __tablename__ = "llm_virtual_keys"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-
-    purpose = Column(String(32), nullable=False, server_default=text("'default'"))
-    litellm_key_id = Column(String(128), nullable=True)
-    key_prefix = Column(String(16), nullable=False)
-    key_hash = Column(String(64), nullable=False)
-    encrypted_token = Column(LargeBinary, nullable=True)
-
-    status = Column(String(16), nullable=False, server_default=text("'active'"))
-
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    revoked_at = Column(DateTime(timezone=True), nullable=True)
-    expires_at = Column(DateTime(timezone=True), nullable=True)
-    last_seen_at = Column(DateTime(timezone=True), nullable=True)
-
-    user = relationship("User", back_populates="llm_virtual_keys")
-
-    __table_args__ = (
-        UniqueConstraint("key_hash", name="uq_llm_virtual_keys_key_hash"),
-        Index("idx_llm_virtual_keys_user", "user_id"),
-        Index("idx_llm_virtual_keys_user_status", "user_id", "status"),
-        Index("idx_llm_virtual_keys_created_at", "created_at"),
-        CheckConstraint(
-            "status IN ('active', 'revoked', 'expired')",
-            name="ck_llm_virtual_keys_status",
-        ),
+    credit_account = relationship(
+        "UserCreditAccount",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+    credit_transactions = relationship(
+        "CreditTransaction",
+        back_populates="user",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        foreign_keys="CreditTransaction.user_id",
     )
 
 
-class LLMUsageEvent(Base):
-    __tablename__ = "llm_usage_events"
+class Workspace(Base):
+    __tablename__ = "workspaces"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
-
-    request_id = Column(String(64), nullable=True)
-    model = Column(String(128), nullable=True)
-    endpoint = Column(String(64), nullable=True)
-
-    prompt_tokens = Column(Integer, nullable=False, server_default=text("0"))
-    completion_tokens = Column(Integer, nullable=False, server_default=text("0"))
-    total_tokens = Column(Integer, nullable=False, server_default=text("0"))
-
-    latency_ms = Column(Integer, nullable=True)
-    cost = Column(Numeric(18, 10), nullable=True)
-
-    raw_payload = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    name = Column(String(64), nullable=False)
+    owner_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
-    user = relationship("User")
+    members = relationship(
+        "WorkspaceMember",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    projects = relationship(
+        "Project",
+        back_populates="workspace",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
-        Index("idx_llm_usage_events_user", "user_id"),
-        Index("idx_llm_usage_events_created_at", "created_at"),
-        Index("idx_llm_usage_events_model", "model"),
+        Index("idx_workspaces_owner", "owner_id"),
     )
 
 
-class LLMUsageDaily(Base):
-    __tablename__ = "llm_usage_daily"
+class WorkspaceMember(Base):
+    __tablename__ = "workspace_members"
 
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
-    date = Column(Date, nullable=False)
-    model = Column(String(128), nullable=False)
-
-    prompt_tokens = Column(Integer, nullable=False, server_default=text("0"))
-    completion_tokens = Column(Integer, nullable=False, server_default=text("0"))
-    total_tokens = Column(Integer, nullable=False, server_default=text("0"))
-    request_count = Column(Integer, nullable=False, server_default=text("0"))
-    cost = Column(Numeric(18, 10), nullable=False, server_default=text("0"))
-
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), primary_key=True)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), primary_key=True)
+    role = Column(String(20), nullable=False, server_default=text("'member'"))  # owner, admin, member
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
-    user = relationship("User")
+    workspace = relationship("Workspace", back_populates="members")
+    user = relationship("User", back_populates="workspaces")
 
     __table_args__ = (
-        UniqueConstraint("user_id", "date", "model", name="uq_llm_usage_daily_user_date_model"),
-        Index("idx_llm_usage_daily_user_date", "user_id", "date"),
-    )
-
-
-class LLMCustomService(Base):
-    __tablename__ = "llm_custom_services"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    name = Column(String(128), nullable=False)
-    kind = Column(String(32), nullable=False, server_default=text("'openai_compatible'"))
-    base_url = Column(Text, nullable=False)
-    supported_models = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    created_models = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
-    encrypted_api_key = Column(LargeBinary, nullable=False)
-    enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-
-    __table_args__ = (
-        UniqueConstraint("name", name="uq_llm_custom_services_name"),
-        Index("idx_llm_custom_services_enabled", "enabled"),
-        Index("idx_llm_custom_services_created_at", "created_at"),
-        CheckConstraint(
-            "kind IN ('openai_compatible')",
-            name="ck_llm_custom_services_kind",
-        ),
+        Index("idx_workspace_members_user", "user_id"),
+        CheckConstraint("role IN ('owner', 'admin', 'member')", name="ck_workspace_members_role"),
     )
 
 
@@ -201,6 +147,97 @@ class AIPromptPreset(Base):
     )
 
 
+class AIModelConfig(Base):
+    __tablename__ = "ai_model_configs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    category = Column(String(16), nullable=False)
+    manufacturer = Column(String(64), nullable=False)
+    model = Column(String(128), nullable=False)
+    base_url = Column(Text, nullable=True)
+    encrypted_api_key = Column(LargeBinary, nullable=True)
+    enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    sort_order = Column(Integer, nullable=False, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    bindings = relationship(
+        "AIModelBinding",
+        back_populates="model_config",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("category", "manufacturer", "model", name="uq_ai_model_configs_category_manu_model"),
+        Index("idx_ai_model_configs_category", "category"),
+        Index("idx_ai_model_configs_enabled", "enabled"),
+        Index("idx_ai_model_configs_sort", "category", "sort_order"),
+        CheckConstraint(
+            "category IN ('text', 'image', 'video')",
+            name="ck_ai_model_configs_category",
+        ),
+    )
+
+
+class AIModelBinding(Base):
+    __tablename__ = "ai_model_bindings"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    key = Column(String(64), nullable=False)
+    category = Column(String(16), nullable=False)
+    ai_model_config_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ai_model_configs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    model_config = relationship("AIModelConfig", back_populates="bindings")
+
+    __table_args__ = (
+        UniqueConstraint("key", name="uq_ai_model_bindings_key"),
+        Index("idx_ai_model_bindings_category", "category"),
+        Index("idx_ai_model_bindings_model_config", "ai_model_config_id"),
+        CheckConstraint(
+            "category IN ('text', 'image', 'video')",
+            name="ck_ai_model_bindings_category",
+        ),
+    )
+
+
+class AIUsageEvent(Base):
+    __tablename__ = "ai_usage_events"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+
+    category = Column(String(16), nullable=False)
+    binding_key = Column(String(64), nullable=True)
+    ai_model_config_id = Column(UUID(as_uuid=True), ForeignKey("ai_model_configs.id", ondelete="SET NULL"), nullable=True)
+
+    cost_credits = Column(Integer, nullable=False, server_default=text("0"))
+    latency_ms = Column(Integer, nullable=True)
+    error_code = Column(String(64), nullable=True)
+    raw_payload = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User")
+    model_config = relationship("AIModelConfig")
+
+    __table_args__ = (
+        Index("idx_ai_usage_events_user", "user_id"),
+        Index("idx_ai_usage_events_created_at", "created_at"),
+        Index("idx_ai_usage_events_category", "category"),
+        Index("idx_ai_usage_events_binding_key", "binding_key"),
+        CheckConstraint(
+            "category IN ('text', 'image', 'video')",
+            name="ck_ai_usage_events_category",
+        ),
+    )
+
+
 class Item(Base):
     __tablename__ = "items"
 
@@ -211,6 +248,42 @@ class Item(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("user.id"), nullable=False)
 
     user = relationship("User", back_populates="items")
+
+
+class FileNode(Base):
+    __tablename__ = "file_nodes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True)  # Null for global
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="CASCADE"), nullable=True)  # Null for workspace-level
+    parent_id = Column(UUID(as_uuid=True), ForeignKey("file_nodes.id", ondelete="CASCADE"), nullable=True)
+    
+    name = Column(String(255), nullable=False)
+    is_folder = Column(Boolean, nullable=False, default=False)
+    
+    # For files only
+    minio_bucket = Column(String(255), nullable=True)
+    minio_key = Column(Text, nullable=True)
+    content_type = Column(String(128), nullable=True)
+    size_bytes = Column(Integer, nullable=False, server_default=text("0"))
+    thumb_minio_bucket = Column(String(255), nullable=True)
+    thumb_minio_key = Column(Text, nullable=True)
+    thumb_content_type = Column(String(128), nullable=True)
+    thumb_size_bytes = Column(Integer, nullable=False, server_default=text("0"))
+    
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    created_by = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+
+    children = relationship("FileNode", backref=sqlalchemy.orm.backref("parent", remote_side=[id]))
+    workspace = relationship("Workspace")
+    project = relationship("Project")
+
+    __table_args__ = (
+        Index("idx_file_nodes_parent", "parent_id"),
+        Index("idx_file_nodes_workspace", "workspace_id"),
+        Index("idx_file_nodes_project", "project_id"),
+    )
 
 
 class Script(Base):
@@ -225,12 +298,23 @@ class Script(Base):
 
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
+    aspect_ratio = Column(String(16), nullable=True)
+    animation_style = Column(String(64), nullable=True)
 
     minio_bucket = Column(String(255), nullable=False)
     minio_key = Column(Text, nullable=False)
     original_filename = Column(String(255), nullable=False)
     content_type = Column(String(128), nullable=True)
     size_bytes = Column(Integer, nullable=False, server_default=text("0"))
+    panorama_minio_bucket = Column(String(255), nullable=True)
+    panorama_minio_key = Column(Text, nullable=True)
+    panorama_original_filename = Column(String(255), nullable=True)
+    panorama_content_type = Column(String(128), nullable=True)
+    panorama_size_bytes = Column(Integer, nullable=False, server_default=text("0"))
+    panorama_thumb_minio_bucket = Column(String(255), nullable=True)
+    panorama_thumb_minio_key = Column(Text, nullable=True)
+    panorama_thumb_content_type = Column(String(128), nullable=True)
+    panorama_thumb_size_bytes = Column(Integer, nullable=False, server_default=text("0"))
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     is_deleted = Column(Boolean, nullable=False, server_default=text("false"), default=False)
@@ -249,11 +333,13 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True)
     owner_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
     name = Column(String(255), nullable=False)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
     owner = relationship("User", back_populates="projects")
+    workspace = relationship("Workspace", back_populates="projects")
     episodes = relationship(
         "Episode",
         back_populates="project",
@@ -397,6 +483,16 @@ class Episode(Base):
     title = Column(String(255), nullable=True)
     summary = Column(Text, nullable=True)
     script_full_text = Column(Text, nullable=True)
+    storyboard_root_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    asset_root_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     word_count = Column(Integer, nullable=False, server_default=text("0"))
     start_line = Column(Integer, nullable=True)
@@ -407,8 +503,8 @@ class Episode(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
     project = relationship("Project", back_populates="episodes")
-    scenes = relationship(
-        "Scene",
+    storyboards = relationship(
+        "Storyboard",
         back_populates="episode",
         cascade="all, delete-orphan",
         passive_deletes=True,
@@ -420,89 +516,53 @@ class Episode(Base):
     )
 
 
-class Scene(Base):
-    __tablename__ = "scenes"
+class Storyboard(Base):
+    __tablename__ = "storyboards"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     episode_id = Column(UUID(as_uuid=True), ForeignKey("episodes.id", ondelete="CASCADE"), nullable=True)
 
-    scene_code = Column(String(50), nullable=False)
-    scene_number = Column(Integer, nullable=False)
-    title = Column(String(255), nullable=True)
-
+    # Identification
+    shot_code = Column(String(50), nullable=False)  # e.g., EP01_SC01_SH01
+    shot_number = Column(Integer, nullable=False)
+    
+    # Hierarchy (Virtual Grouping)
+    scene_code = Column(String(50), nullable=True)  # e.g., EP01_SC01
+    scene_number = Column(Integer, nullable=True)
+    
+    # Visual & Narrative
+    shot_type = Column(String(20), nullable=True)
+    camera_move = Column(String(50), nullable=True)
+    narrative_function = Column(String(20), nullable=True)
+    
+    # Location & Time (Flattened from Scene)
     location = Column(String(100), nullable=True)
     location_type = Column(String(10), nullable=True)
     time_of_day = Column(String(50), nullable=True)
-    weather = Column(String(50), nullable=True)
-    mood = Column(String(50), nullable=True)
-
-    z_depth = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
-    content = Column(Text, nullable=True)
-    key_events = Column(JSONB, nullable=True)
-
-    content_start_pos = Column(Integer, nullable=True)
-    content_end_pos = Column(Integer, nullable=True)
-
-    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
-
-    episode = relationship("Episode", back_populates="scenes")
-    shots = relationship(
-        "Shot",
-        back_populates="scene",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-    asset_bindings = relationship("AssetBinding", back_populates="scene")
-
-    __table_args__ = (
-        UniqueConstraint("episode_id", "scene_code", name="uq_scenes_episode_scene_code"),
-        CheckConstraint("location_type IN ('内', '外', '内外')", name="ck_scenes_location_type"),
-    )
-
-
-class Shot(Base):
-    __tablename__ = "shots"
-
-    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    scene_id = Column(UUID(as_uuid=True), ForeignKey("scenes.id", ondelete="CASCADE"), nullable=True)
-
-    shot_code = Column(String(50), nullable=False)
-    shot_number = Column(Integer, nullable=False)
-
-    shot_type = Column(String(20), nullable=True)
-    camera_angle = Column(String(20), nullable=True)
-    camera_move = Column(String(50), nullable=True)
-    filter_style = Column(String(50), nullable=True)
-    narrative_function = Column(String(20), nullable=True)
-    pov_character = Column(String(100), nullable=True)
-
+    
+    # Content
     description = Column(Text, nullable=True)
     dialogue = Column(Text, nullable=True)
-    dialogue_speaker = Column(String(100), nullable=True)
-    sound_effect = Column(String(100), nullable=True)
-
-    active_assets = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
     duration_estimate = Column(Numeric(5, 2), nullable=True)
-
+    
+    # Assets (Reference to FileNode)
+    active_assets = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
-    scene = relationship("Scene", back_populates="shots")
-    asset_relations = relationship(
-        "ShotAssetRelation",
-        back_populates="shot",
-        cascade="all, delete-orphan",
-        passive_deletes=True,
-    )
-    asset_bindings = relationship("AssetBinding", back_populates="shot")
+    episode = relationship("Episode", back_populates="storyboards")
     video_prompts = relationship(
         "VideoPrompt",
-        back_populates="shot",
+        back_populates="storyboard",
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    asset_bindings = relationship("AssetBinding", back_populates="storyboard")
 
     __table_args__ = (
-        UniqueConstraint("scene_id", "shot_code", name="uq_shots_scene_shot_code"),
+        UniqueConstraint("episode_id", "shot_code", name="uq_storyboards_episode_shot_code"),
+        Index("idx_storyboards_episode", "episode_id"),
+        Index("idx_storyboards_scene_group", "episode_id", "scene_number"),
     )
 
 
@@ -510,7 +570,7 @@ class VideoPrompt(Base):
     __tablename__ = "video_prompts"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    shot_id = Column(UUID(as_uuid=True), ForeignKey("shots.id", ondelete="CASCADE"), nullable=True)
+    storyboard_id = Column(UUID(as_uuid=True), ForeignKey("storyboards.id", ondelete="CASCADE"), nullable=True)
 
     prompt_main = Column(Text, nullable=True)
     negative_prompt = Column(Text, nullable=True)
@@ -525,7 +585,7 @@ class VideoPrompt(Base):
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
-    shot = relationship("Shot", back_populates="video_prompts")
+    storyboard = relationship("Storyboard", back_populates="video_prompts")
 
 
 class QCReport(Base):
@@ -551,9 +611,9 @@ class ShotAssetRelation(Base):
     __tablename__ = "shot_asset_relations"
 
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
-    shot_id = Column(
+    storyboard_id = Column(
         UUID(as_uuid=True),
-        ForeignKey("shots.id", ondelete="CASCADE"),
+        ForeignKey("storyboards.id", ondelete="CASCADE"),
         nullable=False,
     )
     asset_entity_id = Column(
@@ -570,14 +630,14 @@ class ShotAssetRelation(Base):
     state = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
-    shot = relationship("Shot", back_populates="asset_relations")
+    storyboard = relationship("Storyboard", backref="asset_relations")
     asset = relationship("Asset", back_populates="shot_relations")
     asset_variant = relationship("AssetVariant", back_populates="shot_relations")
 
     __table_args__ = (
-        UniqueConstraint("shot_id", "asset_entity_id", name="uq_shot_asset_relations_shot_asset"),
+        UniqueConstraint("storyboard_id", "asset_entity_id", name="uq_shot_asset_relations_shot_asset"),
         Index("idx_shot_asset_relations_asset", "asset_entity_id"),
-        Index("idx_shot_asset_relations_shot", "shot_id"),
+        Index("idx_shot_asset_relations_shot", "storyboard_id"),
     )
 
 
@@ -596,8 +656,7 @@ class AssetBinding(Base):
         nullable=True,
     )
     episode_id = Column(UUID(as_uuid=True), ForeignKey("episodes.id", ondelete="CASCADE"), nullable=True)
-    scene_id = Column(UUID(as_uuid=True), ForeignKey("scenes.id", ondelete="CASCADE"), nullable=True)
-    shot_id = Column(UUID(as_uuid=True), ForeignKey("shots.id", ondelete="CASCADE"), nullable=True)
+    storyboard_id = Column(UUID(as_uuid=True), ForeignKey("storyboards.id", ondelete="CASCADE"), nullable=True)
 
     state = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
@@ -605,21 +664,18 @@ class AssetBinding(Base):
     asset = relationship("Asset", back_populates="bindings")
     asset_variant = relationship("AssetVariant")
     episode = relationship("Episode", back_populates="asset_bindings")
-    scene = relationship("Scene", back_populates="asset_bindings")
-    shot = relationship("Shot", back_populates="asset_bindings")
+    storyboard = relationship("Storyboard", back_populates="asset_bindings")
 
     __table_args__ = (
         CheckConstraint(
-            "((episode_id IS NOT NULL)::int + (scene_id IS NOT NULL)::int + (shot_id IS NOT NULL)::int) = 1",
+            "((episode_id IS NOT NULL)::int + (storyboard_id IS NOT NULL)::int) = 1",
             name="ck_asset_bindings_single_target",
         ),
-        UniqueConstraint("shot_id", "asset_entity_id", name="uq_asset_bindings_shot_asset"),
-        UniqueConstraint("scene_id", "asset_entity_id", name="uq_asset_bindings_scene_asset"),
+        UniqueConstraint("storyboard_id", "asset_entity_id", name="uq_asset_bindings_shot_asset"),
         UniqueConstraint("episode_id", "asset_entity_id", name="uq_asset_bindings_episode_asset"),
         Index("idx_asset_bindings_asset", "asset_entity_id"),
         Index("idx_asset_bindings_episode", "episode_id"),
-        Index("idx_asset_bindings_scene", "scene_id"),
-        Index("idx_asset_bindings_shot", "shot_id"),
+        Index("idx_asset_bindings_shot", "storyboard_id"),
     )
 
 
@@ -849,4 +905,80 @@ class TaskEvent(Base):
     __table_args__ = (
         Index("idx_task_events_task", "task_id"),
         Index("idx_task_events_task_created_at", "task_id", "created_at"),
+    )
+
+
+class UserCreditAccount(Base):
+    __tablename__ = "user_credit_accounts"
+
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), primary_key=True)
+    balance = Column(Integer, nullable=False, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User", back_populates="credit_account")
+
+    __table_args__ = (CheckConstraint("balance >= 0", name="ck_user_credit_accounts_balance_nonneg"),)
+
+
+class CreditTransaction(Base):
+    __tablename__ = "credit_transactions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    delta = Column(Integer, nullable=False)
+    balance_after = Column(Integer, nullable=False)
+    reason = Column(String(64), nullable=False)
+    actor_user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    meta = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User", foreign_keys=[user_id], back_populates="credit_transactions")
+    actor = relationship("User", foreign_keys=[actor_user_id])
+
+    __table_args__ = (Index("idx_credit_transactions_user_created_at", "user_id", "created_at"),)
+
+
+class Agent(Base):
+    __tablename__ = "agents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    name = Column(String(128), nullable=False)
+    category = Column(String(16), nullable=False)
+    purpose = Column(String(32), nullable=False, server_default=text("'general'"))
+    ai_model_config_id = Column(UUID(as_uuid=True), ForeignKey("ai_model_configs.id", ondelete="RESTRICT"), nullable=False)
+    capabilities = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    system_prompt = Column(Text, nullable=True)
+    user_prompt_template = Column(Text, nullable=True)
+    credits_per_call = Column(Integer, nullable=False, server_default=text("0"))
+    enabled = Column(Boolean, nullable=False, server_default=text("true"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    model_config = relationship("AIModelConfig")
+
+    __table_args__ = (
+        UniqueConstraint("name", name="uq_agents_name"),
+        CheckConstraint("category IN ('text','image','video')", name="ck_agents_category"),
+        CheckConstraint(
+            "purpose IN ("
+            "'storyboard_extraction',"
+            "'asset_extraction',"
+            "'scene_extraction',"
+            "'character_extraction',"
+            "'prop_extraction',"
+            "'vfx_extraction',"
+            "'scene_creation',"
+            "'prop_creation',"
+            "'character_creation',"
+            "'vfx_creation',"
+            "'general'"
+            ")",
+            name="ck_agents_purpose",
+        ),
+        CheckConstraint("credits_per_call >= 0", name="ck_agents_credits_per_call_nonneg"),
+        Index("idx_agents_category", "category"),
+        Index("idx_agents_purpose", "purpose"),
+        Index("idx_agents_enabled", "enabled"),
+        Index("idx_agents_model_config", "ai_model_config_id"),
     )
