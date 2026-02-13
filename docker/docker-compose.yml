@@ -64,16 +64,17 @@ services:
     restart: unless-stopped
     env_file:
       - ${ANYREASON_ENV_FILE:-.env}
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-redis}"]
+    command: ["/bin/sh", "-lc", "redis-server --appendonly yes --requirepass \"$${REDIS_PASSWORD:-redis}\""]
     ports:
       - "${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a $$REDIS_PASSWORD ping | grep PONG"]
+      test: ["CMD-SHELL", "redis-cli -a \"$${REDIS_PASSWORD:-redis}\" ping | grep -q PONG"]
       interval: 5s
       timeout: 5s
       retries: 10
+      start_period: 5s
 
 volumes:
   pg_data:

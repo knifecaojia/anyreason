@@ -956,6 +956,12 @@ class Agent(Base):
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
     model_config = relationship("AIModelConfig")
+    prompt_versions = relationship(
+        "AgentPromptVersion",
+        back_populates="agent",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
 
     __table_args__ = (
         UniqueConstraint("name", name="uq_agents_name"),
@@ -981,4 +987,202 @@ class Agent(Base):
         Index("idx_agents_purpose", "purpose"),
         Index("idx_agents_enabled", "enabled"),
         Index("idx_agents_model_config", "ai_model_config_id"),
+    )
+
+
+class AgentPromptVersion(Base):
+    __tablename__ = "agent_prompt_versions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    agent_id = Column(UUID(as_uuid=True), ForeignKey("agents.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)
+    system_prompt = Column(Text, nullable=True)
+    user_prompt_template = Column(Text, nullable=True)
+    description = Column(String(255), nullable=True)
+    is_default = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    meta = Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+
+    agent = relationship("Agent", back_populates="prompt_versions")
+    creator = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("agent_id", "version", name="uq_agent_prompt_versions_agent_version"),
+        Index(
+            "uq_agent_prompt_versions_default",
+            "agent_id",
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+        Index("idx_agent_prompt_versions_agent", "agent_id"),
+        Index("idx_agent_prompt_versions_created_at", "created_at"),
+    )
+
+
+class BuiltinAgent(Base):
+    __tablename__ = "builtin_agents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    agent_code = Column(String(64), nullable=False)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    category = Column(String(32), nullable=False)
+    default_ai_model_config_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ai_model_configs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    tools = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    model_config = relationship("AIModelConfig")
+    prompt_versions = relationship(
+        "BuiltinAgentPromptVersion",
+        back_populates="builtin_agent",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("agent_code", name="uq_builtin_agents_agent_code"),
+        Index("idx_builtin_agents_category", "category"),
+        Index("idx_builtin_agents_model_config", "default_ai_model_config_id"),
+    )
+
+
+class BuiltinAgentPromptVersion(Base):
+    __tablename__ = "builtin_agent_prompt_versions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    builtin_agent_id = Column(UUID(as_uuid=True), ForeignKey("builtin_agents.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)
+    system_prompt = Column(Text, nullable=False)
+    ai_model_config_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ai_model_configs.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    description = Column(String(255), nullable=True)
+    is_default = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    created_by = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    meta = Column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+
+    builtin_agent = relationship("BuiltinAgent", back_populates="prompt_versions")
+    model_config = relationship("AIModelConfig")
+    creator = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("builtin_agent_id", "version", name="uq_builtin_agent_prompt_versions_agent_version"),
+        Index(
+            "uq_builtin_agent_prompt_versions_default",
+            "builtin_agent_id",
+            unique=True,
+            postgresql_where=text("is_default"),
+        ),
+        Index("idx_builtin_agent_prompt_versions_agent", "builtin_agent_id"),
+        Index("idx_builtin_agent_prompt_versions_created_at", "created_at"),
+        Index("idx_builtin_agent_prompt_versions_model_config", "ai_model_config_id"),
+    )
+
+
+class BuiltinAgentUserOverride(Base):
+    __tablename__ = "builtin_agent_user_overrides"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    builtin_agent_id = Column(UUID(as_uuid=True), ForeignKey("builtin_agents.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    version = Column(Integer, nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    builtin_agent = relationship("BuiltinAgent")
+    user = relationship("User")
+
+    __table_args__ = (
+        UniqueConstraint("builtin_agent_id", "user_id", name="uq_builtin_agent_user_overrides_agent_user"),
+        Index("idx_builtin_agent_user_overrides_user", "user_id"),
+    )
+
+
+class Scene(Base):
+    __tablename__ = "scenes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    scene_code = Column(String(64), nullable=False)
+    name = Column(String(128), nullable=False)
+    type = Column(String(32), nullable=False)
+    description = Column(Text, nullable=True)
+    builtin_agent_id = Column(UUID(as_uuid=True), ForeignKey("builtin_agents.id", ondelete="SET NULL"), nullable=True)
+    required_tools = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    input_schema = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    output_schema = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    ui_config = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    builtin_agent = relationship("BuiltinAgent")
+
+    __table_args__ = (
+        UniqueConstraint("scene_code", name="uq_scenes_scene_code"),
+        Index("idx_scenes_type", "type"),
+        Index("idx_scenes_builtin_agent", "builtin_agent_id"),
+    )
+
+
+class UserAgent(Base):
+    __tablename__ = "user_agents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True)
+    agent_code = Column(String(64), nullable=True)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    base_builtin_agent_id = Column(UUID(as_uuid=True), ForeignKey("builtin_agents.id", ondelete="SET NULL"), nullable=True)
+    system_prompt = Column(Text, nullable=False)
+    ai_model_config_id = Column(UUID(as_uuid=True), ForeignKey("ai_model_configs.id", ondelete="SET NULL"), nullable=True)
+    temperature = Column(Numeric, nullable=True)
+    tools = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    is_public = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User")
+    workspace = relationship("Workspace")
+    base_builtin_agent = relationship("BuiltinAgent")
+    model_config = relationship("AIModelConfig")
+
+    __table_args__ = (
+        Index("idx_user_agents_user", "user_id"),
+        Index("idx_user_agents_workspace", "workspace_id"),
+        Index("idx_user_agents_public", "is_public"),
+    )
+
+
+class UserApp(Base):
+    __tablename__ = "user_apps"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    workspace_id = Column(UUID(as_uuid=True), ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=True)
+    name = Column(String(128), nullable=False)
+    description = Column(Text, nullable=True)
+    icon = Column(String(128), nullable=True)
+    flow_definition = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    trigger_type = Column(String(32), nullable=False, server_default=text("'manual'"))
+    input_template = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    output_template = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    is_active = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User")
+    workspace = relationship("Workspace")
+
+    __table_args__ = (
+        Index("idx_user_apps_user", "user_id"),
+        Index("idx_user_apps_workspace", "workspace_id"),
+        Index("idx_user_apps_active", "is_active"),
     )

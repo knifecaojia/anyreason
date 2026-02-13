@@ -113,16 +113,28 @@ async def _chat_completions(
     *,
     db: AsyncSession,
     user_id: UUID,
-    model_config_id: UUID,
+    model: str,
     messages: list[dict[str, Any]],
     temperature: float | None,
     max_tokens: int | None,
 ) -> dict[str, Any]:
+    cfg = (
+        await db.execute(
+            select(AIModelConfig).where(
+                AIModelConfig.enabled.is_(True),
+                AIModelConfig.category == "text",
+                AIModelConfig.model == (model or "").strip(),
+            )
+        )
+    ).scalars().first()
+    if cfg is None:
+        raise AppError(msg="Model not found", code=400, status_code=400)
+
     raw = await ai_gateway_service.chat_text(
         db=db,
         user_id=user_id,
         binding_key=None,
-        model_config_id=model_config_id,
+        model_config_id=cfg.id,
         messages=messages,
         attachments=[],
         credits_cost=1,
@@ -172,18 +184,6 @@ class AISceneStructureService:
         temperature: float | None,
         max_tokens: int | None,
     ) -> tuple[str, str, list[AISceneDraft]]:
-        cfg = (
-            await db.execute(
-                select(AIModelConfig).where(
-                    AIModelConfig.enabled.is_(True),
-                    AIModelConfig.category == "text",
-                    AIModelConfig.model == (model or "").strip(),
-                )
-            )
-        ).scalars().first()
-        if cfg is None:
-            raise AppError(msg="Model not found", code=400, status_code=400)
-
         episode = await _get_episode_for_user(db=db, user_id=user_id, episode_id=episode_id)
         if not episode:
             raise AppError(msg="Episode not found or not authorized", code=404, status_code=404)
@@ -196,7 +196,7 @@ class AISceneStructureService:
         raw = await _chat_completions(
             db=db,
             user_id=user_id,
-            model_config_id=cfg.id,
+            model=model,
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,

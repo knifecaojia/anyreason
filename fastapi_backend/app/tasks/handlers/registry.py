@@ -9,6 +9,7 @@ from app.tasks.handlers.episode_scene_structure_preview import EpisodeSceneStruc
 from app.tasks.handlers.freeform_asset_extraction_compare_preview import FreeformAssetExtractionComparePreviewHandler
 from app.tasks.handlers.scene_storyboard_preview import SceneStoryboardPreviewHandler
 from app.tasks.handlers.episode_vfx_agent_apply import EpisodeVfxAgentApplyHandler
+from app.tasks.handlers.user_app_run import UserAppRunHandler
 
 TASK_HANDLER_REGISTRY = {
     NoopTaskHandler.task_type: NoopTaskHandler(),
@@ -22,4 +23,5 @@ TASK_HANDLER_REGISTRY = {
     EpisodeSceneStructurePreviewHandler.task_type: EpisodeSceneStructurePreviewHandler(),
     FreeformAssetExtractionComparePreviewHandler.task_type: FreeformAssetExtractionComparePreviewHandler(),
     SceneStoryboardPreviewHandler.task_type: SceneStoryboardPreviewHandler(),
+    UserAppRunHandler.task_type: UserAppRunHandler(),
 }

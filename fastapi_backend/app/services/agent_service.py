@@ -235,5 +235,22 @@ class AgentService:
 
         return str(output_text), raw
 
+    async def run_dialogue_agent(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        agent_id: UUID,
+        input_text: str,
+        variables: dict[str, Any] | None = None,
+    ) -> tuple[str, dict[str, Any]]:
+        return await self.run_text_agent(
+            db=db,
+            user_id=user_id,
+            agent_id=agent_id,
+            input_text=input_text,
+            variables=variables,
+        )
+
 
 agent_service = AgentService()

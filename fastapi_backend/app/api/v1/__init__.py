@@ -19,6 +19,10 @@ from app.api.v1.scripts import router as scripts_router
 from app.api.v1.tasks import router as tasks_router
 from app.api.v1.users import router as users_router
 from app.api.v1.storage.vfs import router as vfs_router
+from app.api.v1.scenes import router as scenes_router
+from app.api.v1.admin_builtin_agents import router as admin_builtin_agents_router
+from app.api.v1.user_agents import router as user_agents_router
+from app.api.v1.user_apps import router as user_apps_router
 
 
 v1_router = APIRouter()
@@ -41,5 +45,9 @@ v1_router.include_router(credits_router, tags=["credits"])
 v1_router.include_router(agents_router, tags=["agents"])
 v1_router.include_router(episodes_router, tags=["episodes"])
 v1_router.include_router(vfs_router, prefix="/vfs", tags=["vfs"])
+v1_router.include_router(scenes_router, tags=["scenes"])
+v1_router.include_router(admin_builtin_agents_router, tags=["admin"])
+v1_router.include_router(user_agents_router, tags=["user_agents"])
+v1_router.include_router(user_apps_router, tags=["user_apps"])
 
 __all__ = ["v1_router"]

@@ -36,6 +36,8 @@ import type { LucideIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AvatarCropDialog } from "@/components/ui/avatar-crop-dialog";
+import { AgentPromptVersionsDialog } from "@/components/agents/AgentPromptVersionsDialog";
+import { BuiltinPromptVersionDialog } from "@/components/agents/BuiltinPromptVersionDialog";
 import {
   adminCountAuditLogs,
   adminCreatePermission,
@@ -75,6 +77,17 @@ import {
   agentsAdminUpdate,
   type Agent as AgentRow,
 } from "@/components/actions/agent-actions";
+import {
+  builtinAgentAdminActivateVersion,
+  builtinAgentAdminCreateVersion,
+  builtinAgentAdminDeleteVersion,
+  builtinAgentAdminDiffVersions,
+  builtinAgentAdminListVersions,
+  builtinAgentAdminUpdateVersion,
+  builtinAgentsAdminList,
+  type BuiltinAgent,
+  type BuiltinAgentPromptVersion,
+} from "@/components/actions/builtin-agent-actions";
 import {
   creditsAdminAdjustUser,
   creditsAdminGetUser,
@@ -290,6 +303,41 @@ export default function Page() {
     enabled: true,
   });
   const [agentSubmitting, setAgentSubmitting] = useState(false);
+
+  const [agentPromptVersionsOpen, setAgentPromptVersionsOpen] = useState(false);
+  const [agentPromptVersionsAgent, setAgentPromptVersionsAgent] = useState<AgentRow | null>(null);
+
+  const [agentsSubTab, setAgentsSubTab] = useState<"custom" | "builtin">("custom");
+  const [builtinAgents, setBuiltinAgents] = useState<BuiltinAgent[]>([]);
+  const [builtinAgentsLoading, setBuiltinAgentsLoading] = useState(false);
+  const [builtinAgentsError, setBuiltinAgentsError] = useState<string | null>(null);
+  const [selectedBuiltinAgentCode, setSelectedBuiltinAgentCode] = useState<string>("");
+  const [builtinVersions, setBuiltinVersions] = useState<BuiltinAgentPromptVersion[]>([]);
+  const [builtinVersionsLoading, setBuiltinVersionsLoading] = useState(false);
+  const [builtinVersionsError, setBuiltinVersionsError] = useState<string | null>(null);
+
+  const [builtinPromptOpen, setBuiltinPromptOpen] = useState(false);
+  const [builtinPromptSubmitting, setBuiltinPromptSubmitting] = useState(false);
+  const [builtinPromptError, setBuiltinPromptError] = useState<string | null>(null);
+  const [builtinEditingVersion, setBuiltinEditingVersion] = useState<BuiltinAgentPromptVersion | null>(null);
+  const [builtinPromptForm, setBuiltinPromptForm] = useState<{
+    system_prompt: string;
+    ai_model_config_id: string | null;
+    description: string;
+    metaText: string;
+  }>({
+    system_prompt: "",
+    ai_model_config_id: null,
+    description: "",
+    metaText: "{}",
+  });
+
+  const [builtinDiffOpen, setBuiltinDiffOpen] = useState(false);
+  const [builtinDiffLoading, setBuiltinDiffLoading] = useState(false);
+  const [builtinDiffError, setBuiltinDiffError] = useState<string | null>(null);
+  const [builtinDiffFrom, setBuiltinDiffFrom] = useState<number>(1);
+  const [builtinDiffTo, setBuiltinDiffTo] = useState<number>(1);
+  const [builtinDiffText, setBuiltinDiffText] = useState<string>("");
 
   const [creditsOpen, setCreditsOpen] = useState(false);
   const [creditsUser, setCreditsUser] = useState<TeamMember | null>(null);
@@ -529,6 +577,155 @@ export default function Page() {
     }
   };
 
+  const refreshBuiltinAgents = async () => {
+    setBuiltinAgentsLoading(true);
+    setBuiltinAgentsError(null);
+    try {
+      const res = await builtinAgentsAdminList();
+      const list = res.data || [];
+      setBuiltinAgents(list);
+      if (!selectedBuiltinAgentCode && list.length > 0) {
+        setSelectedBuiltinAgentCode(list[0].agent_code);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "加载失败";
+      setBuiltinAgentsError(msg);
+      setBuiltinAgents([]);
+    } finally {
+      setBuiltinAgentsLoading(false);
+    }
+  };
+
+  const refreshBuiltinVersions = async (agentCode: string) => {
+    if (!agentCode) return;
+    setBuiltinVersionsLoading(true);
+    setBuiltinVersionsError(null);
+    try {
+      const res = await builtinAgentAdminListVersions(agentCode);
+      const list = res.data || [];
+      setBuiltinVersions(list);
+      if (list.length > 0) {
+        setBuiltinDiffFrom(list[list.length - 1].version);
+        setBuiltinDiffTo(list[0].version);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "加载失败";
+      setBuiltinVersionsError(msg);
+      setBuiltinVersions([]);
+    } finally {
+      setBuiltinVersionsLoading(false);
+    }
+  };
+
+  const openCreateBuiltinPrompt = () => {
+    setBuiltinEditingVersion(null);
+    setBuiltinPromptError(null);
+    setBuiltinPromptForm({ system_prompt: "", ai_model_config_id: null, description: "", metaText: "{}" });
+    setBuiltinPromptOpen(true);
+  };
+
+  const openEditBuiltinPrompt = (row: BuiltinAgentPromptVersion) => {
+    setBuiltinEditingVersion(row);
+    setBuiltinPromptError(null);
+    setBuiltinPromptForm({
+      system_prompt: row.system_prompt || "",
+      ai_model_config_id: row.ai_model_config_id || null,
+      description: row.description || "",
+      metaText: JSON.stringify(row.meta || {}, null, 2),
+    });
+    setBuiltinPromptOpen(true);
+  };
+
+  const submitBuiltinPrompt = async (payload: {
+    system_prompt: string;
+    ai_model_config_id: string | null;
+    description: string;
+    metaText: string;
+  }) => {
+    if (!selectedBuiltinAgentCode) return;
+    setBuiltinPromptSubmitting(true);
+    setBuiltinPromptError(null);
+    let meta: Record<string, unknown> = {};
+    try {
+      const txt = (payload.metaText || "").trim();
+      meta = txt ? (JSON.parse(txt) as Record<string, unknown>) : {};
+    } catch (_e) {
+      setBuiltinPromptSubmitting(false);
+      setBuiltinPromptError("meta 不是合法 JSON");
+      return;
+    }
+    try {
+      if (builtinEditingVersion) {
+        await builtinAgentAdminUpdateVersion(selectedBuiltinAgentCode, builtinEditingVersion.version, {
+          system_prompt: payload.system_prompt,
+          ai_model_config_id: payload.ai_model_config_id,
+          description: payload.description || null,
+          meta,
+        });
+      } else {
+        await builtinAgentAdminCreateVersion(selectedBuiltinAgentCode, {
+          system_prompt: payload.system_prompt,
+          ai_model_config_id: payload.ai_model_config_id,
+          description: payload.description || null,
+          meta,
+        });
+      }
+      setBuiltinPromptOpen(false);
+      setBuiltinEditingVersion(null);
+      await refreshBuiltinVersions(selectedBuiltinAgentCode);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "保存失败";
+      setBuiltinPromptError(msg);
+    } finally {
+      setBuiltinPromptSubmitting(false);
+    }
+  };
+
+  const activateBuiltinVersion = async (version: number) => {
+    if (!selectedBuiltinAgentCode) return;
+    try {
+      await builtinAgentAdminActivateVersion(selectedBuiltinAgentCode, version);
+      await refreshBuiltinVersions(selectedBuiltinAgentCode);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "操作失败";
+      setBuiltinVersionsError(msg);
+    }
+  };
+
+  const deleteBuiltinVersion = async (version: number) => {
+    if (!selectedBuiltinAgentCode) return;
+    if (!window.confirm(`确认删除 v${version}？`)) return;
+    try {
+      await builtinAgentAdminDeleteVersion(selectedBuiltinAgentCode, version);
+      await refreshBuiltinVersions(selectedBuiltinAgentCode);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "删除失败";
+      setBuiltinVersionsError(msg);
+    }
+  };
+
+  const openBuiltinDiff = () => {
+    setBuiltinDiffError(null);
+    setBuiltinDiffText("");
+    setBuiltinDiffOpen(true);
+  };
+
+  const runBuiltinDiff = async () => {
+    if (!selectedBuiltinAgentCode) return;
+    setBuiltinDiffLoading(true);
+    setBuiltinDiffError(null);
+    try {
+      const res = await builtinAgentAdminDiffVersions(selectedBuiltinAgentCode, builtinDiffFrom, builtinDiffTo);
+      setBuiltinDiffText((res.data as unknown as { diff?: string })?.diff || "");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "对比失败";
+      setBuiltinDiffError(msg);
+      setBuiltinDiffText("");
+    } finally {
+      setBuiltinDiffLoading(false);
+    }
+  };
+
   const openCreateAgentDialog = () => {
     setEditingAgent(null);
     const firstTextCfg = agentModelConfigs.find((c) => c.category === "text");
@@ -697,7 +894,7 @@ export default function Page() {
         } else if (activeSection === "credits") {
           await refreshUsers();
         } else if (activeSection === "agents") {
-          await Promise.all([refreshAgents(), refreshAgentModelConfigs()]);
+          await Promise.all([refreshAgents(), refreshAgentModelConfigs(), refreshBuiltinAgents()]);
         }
       } catch (err: unknown) {
         if (cancelled) return;
@@ -713,6 +910,13 @@ export default function Page() {
       cancelled = true;
     };
   }, [activeSection, auditOffset]);
+
+  useEffect(() => {
+    if (activeSection !== "agents") return;
+    if (agentsSubTab !== "builtin") return;
+    if (!selectedBuiltinAgentCode) return;
+    void refreshBuiltinVersions(selectedBuiltinAgentCode);
+  }, [activeSection, agentsSubTab, selectedBuiltinAgentCode]);
 
   useEffect(() => {
     if (!createUserOpen) return;
@@ -2394,106 +2598,294 @@ export default function Page() {
               <p className="text-textMuted text-sm">配置 Agent 类型、模型与单次消耗积分数。</p>
             </div>
             <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 bg-surfaceHighlight p-1 rounded-lg border border-border">
+                <button
+                  onClick={() => setAgentsSubTab("custom")}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    agentsSubTab === "custom" ? "bg-surface text-textMain shadow-sm border border-border/50" : "text-textMuted hover:text-textMain"
+                  }`}
+                  type="button"
+                >
+                  自定义 Agent
+                </button>
+                <button
+                  onClick={() => setAgentsSubTab("builtin")}
+                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
+                    agentsSubTab === "builtin" ? "bg-surface text-textMain shadow-sm border border-border/50" : "text-textMuted hover:text-textMain"
+                  }`}
+                  type="button"
+                >
+                  内置提示词
+                </button>
+              </div>
               <button
-                onClick={() => void refreshAgents()}
+                onClick={() => {
+                  if (agentsSubTab === "custom") {
+                    void refreshAgents();
+                  } else {
+                    void refreshBuiltinAgents();
+                    if (selectedBuiltinAgentCode) void refreshBuiltinVersions(selectedBuiltinAgentCode);
+                  }
+                }}
                 className="bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2"
                 type="button"
               >
                 <RefreshCw size={16} /> 刷新
               </button>
-              <button
-                onClick={() => openCreateAgentDialog()}
-                className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2"
-                type="button"
-              >
-                <Plus size={16} /> 新建 Agent
-              </button>
+              {agentsSubTab === "custom" && (
+                <button
+                  onClick={() => openCreateAgentDialog()}
+                  className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2"
+                  type="button"
+                >
+                  <Plus size={16} /> 新建 Agent
+                </button>
+              )}
+              {agentsSubTab === "builtin" && (
+                <>
+                  <button
+                    onClick={() => openBuiltinDiff()}
+                    className="bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2"
+                    type="button"
+                    disabled={!selectedBuiltinAgentCode}
+                  >
+                    <Eye size={16} /> 对比版本
+                  </button>
+                  <button
+                    onClick={() => openCreateBuiltinPrompt()}
+                    className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2"
+                    type="button"
+                    disabled={!selectedBuiltinAgentCode}
+                  >
+                    <Plus size={16} /> 新增版本
+                  </button>
+                </>
+              )}
             </div>
           </div>
 
-          {agentsError && (
+          {agentsSubTab === "custom" && agentsError && (
             <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">
               {agentsError}
             </div>
           )}
 
-          <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
-                <tr>
-                  <th className="px-6 py-4">名称</th>
-                  <th className="px-6 py-4">类别</th>
-                  <th className="px-6 py-4">模型</th>
-                  <th className="px-6 py-4">单次消耗</th>
-                  <th className="px-6 py-4">状态</th>
-                  <th className="px-6 py-4 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {agentsLoading && agents.length === 0 && (
+          {agentsSubTab === "custom" && (
+            <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
+              <table className="w-full text-sm text-left">
+                <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
                   <tr>
-                    <td colSpan={6} className="px-6 py-6 text-textMuted">
-                      加载中...
-                    </td>
+                    <th className="px-6 py-4">名称</th>
+                    <th className="px-6 py-4">类别</th>
+                    <th className="px-6 py-4">模型</th>
+                    <th className="px-6 py-4">单次消耗</th>
+                    <th className="px-6 py-4">状态</th>
+                    <th className="px-6 py-4 text-right">操作</th>
                   </tr>
-                )}
-                {!agentsLoading && agents.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-6 py-6 text-textMuted">
-                      暂无 Agent
-                    </td>
-                  </tr>
-                )}
-                {agents.map((a) => (
-                  <tr key={a.id} className="hover:bg-surfaceHighlight/30 transition-colors">
-                    <td className="px-6 py-4 font-bold text-textMain">{a.name}</td>
-                    <td className="px-6 py-4 text-xs text-textMuted font-mono">{a.category}</td>
-                    <td className="px-6 py-4 text-xs text-textMuted font-mono">
-                      {(() => {
-                        const cfgId = (a as unknown as { ai_model_config_id?: string }).ai_model_config_id;
-                        const cfg = agentModelConfigs.find((c) => c.id === cfgId);
-                        return cfg ? `${cfg.manufacturer} · ${cfg.model}` : cfgId || "-";
-                      })()}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-textMain font-mono">{Number(a.credits_per_call || 0)}</td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 ${
-                          a.enabled
-                            ? "bg-green-500/10 text-green-400 border-green-500/20"
-                            : "bg-gray-500/10 text-gray-500 border-gray-500/20"
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${a.enabled ? "bg-green-400" : "bg-gray-500"}`} />
-                        {a.enabled ? "ENABLED" : "DISABLED"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => openEditAgentDialog(a)}
-                          className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain"
-                          type="button"
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {agentsLoading && agents.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-6 text-textMuted">
+                        加载中...
+                      </td>
+                    </tr>
+                  )}
+                  {!agentsLoading && agents.length === 0 && (
+                    <tr>
+                      <td colSpan={6} className="px-6 py-6 text-textMuted">
+                        暂无 Agent
+                      </td>
+                    </tr>
+                  )}
+                  {agents.map((a) => (
+                    <tr key={a.id} className="hover:bg-surfaceHighlight/30 transition-colors">
+                      <td className="px-6 py-4 font-bold text-textMain">{a.name}</td>
+                      <td className="px-6 py-4 text-xs text-textMuted font-mono">{a.category}</td>
+                      <td className="px-6 py-4 text-xs text-textMuted font-mono">
+                        {(() => {
+                          const cfgId = (a as unknown as { ai_model_config_id?: string }).ai_model_config_id;
+                          const cfg = agentModelConfigs.find((c) => c.id === cfgId);
+                          return cfg ? `${cfg.manufacturer} · ${cfg.model}` : cfgId || "-";
+                        })()}
+                      </td>
+                      <td className="px-6 py-4 text-xs text-textMain font-mono">{Number(a.credits_per_call || 0)}</td>
+                      <td className="px-6 py-4">
+                        <span
+                          className={`px-3 py-1 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 ${
+                            a.enabled
+                              ? "bg-green-500/10 text-green-400 border-green-500/20"
+                              : "bg-gray-500/10 text-gray-500 border-gray-500/20"
+                          }`}
                         >
-                          编辑
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (!window.confirm(`确认删除 Agent：${a.name}？`)) return;
-                            void deleteAgent(a.id);
-                          }}
-                          className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs font-bold text-red-400"
-                          type="button"
-                        >
-                          删除
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                          <span className={`w-1.5 h-1.5 rounded-full ${a.enabled ? "bg-green-400" : "bg-gray-500"}`} />
+                          {a.enabled ? "ENABLED" : "DISABLED"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => {
+                              setAgentPromptVersionsAgent(a);
+                              setAgentPromptVersionsOpen(true);
+                            }}
+                            className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain"
+                            type="button"
+                          >
+                            提示词版本
+                          </button>
+                          <button
+                            onClick={() => openEditAgentDialog(a)}
+                            className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain"
+                            type="button"
+                          >
+                            编辑
+                          </button>
+                          <button
+                            onClick={() => {
+                              if (!window.confirm(`确认删除 Agent：${a.name}？`)) return;
+                              void deleteAgent(a.id);
+                            }}
+                            className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs font-bold text-red-400"
+                            type="button"
+                          >
+                            删除
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {agentsSubTab === "builtin" && (
+            <div className="space-y-4">
+              {(builtinAgentsError || builtinVersionsError) && (
+                <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">
+                  {builtinAgentsError || builtinVersionsError}
+                </div>
+              )}
+
+              <div className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="text-sm font-bold text-textMain">内置 Agent</div>
+                  <select
+                    value={selectedBuiltinAgentCode}
+                    onChange={(e) => setSelectedBuiltinAgentCode(e.target.value)}
+                    className="bg-surfaceHighlight border border-border rounded-lg px-3 py-2 text-sm text-textMain outline-none"
+                  >
+                    {builtinAgents.map((a) => (
+                      <option key={a.id} value={a.agent_code}>
+                        {a.agent_code} · {a.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="text-xs text-textMuted">{builtinAgentsLoading ? "加载中..." : `${builtinAgents.length} 个`}</div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-textMuted">模型：随版本</div>
+                  <div className="text-xs text-textMuted">
+                    {(() => {
+                      const row = builtinAgents.find((a) => a.agent_code === selectedBuiltinAgentCode);
+                      const cfgId = row?.default_ai_model_config_id;
+                      const cfg = agentModelConfigs.find((c) => c.id === cfgId);
+                      return cfg ? `兜底：${cfg.manufacturer} · ${cfg.model}` : cfgId ? `兜底：${cfgId}` : "兜底：未设置";
+                    })()}
+                  </div>
+                  <div className="text-xs text-textMuted">提示：修改默认版本会影响未覆盖用户</div>
+                </div>
+              </div>
+
+              <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
+                    <tr>
+                      <th className="px-6 py-4">版本</th>
+                      <th className="px-6 py-4">描述</th>
+                      <th className="px-6 py-4">创建时间</th>
+                      <th className="px-6 py-4">模型</th>
+                      <th className="px-6 py-4">状态</th>
+                      <th className="px-6 py-4 text-right">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {builtinVersionsLoading && builtinVersions.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-6 text-textMuted">
+                          加载中...
+                        </td>
+                      </tr>
+                    )}
+                    {!builtinVersionsLoading && builtinVersions.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-6 text-textMuted">
+                          暂无版本
+                        </td>
+                      </tr>
+                    )}
+                    {builtinVersions.map((v) => (
+                      <tr key={v.id} className="hover:bg-surfaceHighlight/30 transition-colors">
+                        <td className="px-6 py-4 text-xs text-textMain font-mono">v{v.version}</td>
+                        <td className="px-6 py-4 text-xs text-textMuted">{v.description || "-"}</td>
+                        <td className="px-6 py-4 text-xs text-textMuted font-mono">{new Date(v.created_at).toLocaleString()}</td>
+                        <td className="px-6 py-4 text-xs text-textMuted font-mono">
+                          {(() => {
+                            const cfgId = (v as unknown as { ai_model_config_id?: string | null }).ai_model_config_id;
+                            if (!cfgId) return "继承";
+                            const cfg = agentModelConfigs.find((c) => c.id === cfgId);
+                            return cfg ? `${cfg.manufacturer} · ${cfg.model}` : cfgId;
+                          })()}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span
+                            className={`px-3 py-1 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 ${
+                              v.is_default
+                                ? "bg-green-500/10 text-green-400 border-green-500/20"
+                                : "bg-gray-500/10 text-gray-500 border-gray-500/20"
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${v.is_default ? "bg-green-400" : "bg-gray-500"}`} />
+                            {v.is_default ? "DEFAULT" : "VERSION"}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => openEditBuiltinPrompt(v)}
+                              className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain"
+                              type="button"
+                            >
+                              查看/编辑
+                            </button>
+                            {!v.is_default && (
+                              <button
+                                onClick={() => activateBuiltinVersion(v.version)}
+                                className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain"
+                                type="button"
+                              >
+                                设为默认
+                              </button>
+                            )}
+                            {!v.is_default && (
+                              <button
+                                onClick={() => deleteBuiltinVersion(v.version)}
+                                className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs font-bold text-red-400"
+                                type="button"
+                              >
+                                删除
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -2592,6 +2984,106 @@ export default function Page() {
                   </div>
                 ))}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AgentPromptVersionsDialog
+        open={agentPromptVersionsOpen}
+        agent={agentPromptVersionsAgent as unknown as AgentRow | null}
+        onClose={() => {
+          setAgentPromptVersionsOpen(false);
+          setAgentPromptVersionsAgent(null);
+        }}
+      />
+
+      <BuiltinPromptVersionDialog
+        open={builtinPromptOpen}
+        agentCode={selectedBuiltinAgentCode}
+        editingVersion={builtinEditingVersion}
+        initialSystemPrompt={builtinPromptForm.system_prompt}
+        initialModelConfigId={builtinPromptForm.ai_model_config_id}
+        initialDescription={builtinPromptForm.description}
+        initialMetaText={builtinPromptForm.metaText}
+        modelConfigs={agentModelConfigs}
+        submitting={builtinPromptSubmitting}
+        error={builtinPromptError}
+        onClose={() => {
+          setBuiltinPromptOpen(false);
+          setBuiltinPromptError(null);
+        }}
+        onSubmit={(payload) => void submitBuiltinPrompt(payload)}
+      />
+
+      {builtinDiffOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl bg-surface border border-border rounded-2xl p-6 space-y-4 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="text-lg font-bold text-textMain">版本对比</div>
+                <div className="text-sm text-textMuted mt-1">{selectedBuiltinAgentCode || "-"}</div>
+              </div>
+              <button
+                onClick={() => {
+                  setBuiltinDiffOpen(false);
+                  setBuiltinDiffError(null);
+                }}
+                className="w-9 h-9 rounded-lg bg-surfaceHighlight border border-border flex items-center justify-center text-textMuted hover:text-textMain"
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {builtinDiffError && (
+              <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-3 text-sm">{builtinDiffError}</div>
+            )}
+
+            <div className="flex items-end justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className="space-y-1">
+                  <div className="text-xs text-textMuted">from</div>
+                  <select
+                    value={String(builtinDiffFrom)}
+                    onChange={(e) => setBuiltinDiffFrom(Number(e.target.value))}
+                    className="bg-surfaceHighlight border border-border rounded-lg px-3 py-2 text-sm text-textMain outline-none"
+                  >
+                    {builtinVersions.map((v) => (
+                      <option key={`from-${v.id}`} value={String(v.version)}>
+                        v{v.version}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs text-textMuted">to</div>
+                  <select
+                    value={String(builtinDiffTo)}
+                    onChange={(e) => setBuiltinDiffTo(Number(e.target.value))}
+                    className="bg-surfaceHighlight border border-border rounded-lg px-3 py-2 text-sm text-textMain outline-none"
+                  >
+                    {builtinVersions.map((v) => (
+                      <option key={`to-${v.id}`} value={String(v.version)}>
+                        v{v.version}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button
+                  onClick={() => void runBuiltinDiff()}
+                  disabled={builtinDiffLoading || builtinVersions.length === 0}
+                  className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-sm font-bold transition-all disabled:opacity-50"
+                  type="button"
+                >
+                  {builtinDiffLoading ? "对比中..." : "生成 Diff"}
+                </button>
+              </div>
+              <div className="text-xs text-textMuted">统一 diff（unified diff）</div>
+            </div>
+
+            <div className="bg-surfaceHighlight/40 border border-border rounded-xl overflow-hidden">
+              <pre className="max-h-[420px] overflow-auto p-4 text-xs text-textMain font-mono whitespace-pre-wrap">{builtinDiffText || ""}</pre>
             </div>
           </div>
         </div>

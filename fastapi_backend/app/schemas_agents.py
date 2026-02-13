@@ -76,3 +76,42 @@ class AgentRunResponse(BaseModel):
     raw: dict[str, Any] = Field(default_factory=dict)
 
     model_config = {"protected_namespaces": ()}
+
+
+class AgentPromptVersionRead(BaseModel):
+    id: UUID
+    agent_id: UUID
+    version: int
+    system_prompt: str | None = None
+    user_prompt_template: str | None = None
+    description: str | None = None
+    is_default: bool
+    created_by: UUID | None = None
+    created_at: datetime
+    meta: dict = Field(default_factory=dict)
+
+    model_config = {"from_attributes": True, "protected_namespaces": ()}
+
+
+class AgentPromptVersionCreate(BaseModel):
+    system_prompt: str | None = None
+    user_prompt_template: str | None = None
+    description: str | None = None
+    meta: dict = Field(default_factory=dict)
+
+    model_config = {"protected_namespaces": ()}
+
+
+class AgentPromptVersionUpdate(BaseModel):
+    system_prompt: str | None = None
+    user_prompt_template: str | None = None
+    description: str | None = None
+    meta: dict | None = None
+
+    model_config = {"protected_namespaces": ()}
+
+
+class AgentPromptDiffResponse(BaseModel):
+    diff: str
+
+    model_config = {"protected_namespaces": ()}

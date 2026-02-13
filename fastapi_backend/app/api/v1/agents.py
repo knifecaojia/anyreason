@@ -14,12 +14,17 @@ from app.rbac import require_permissions
 from app.schemas_agents import (
     AgentCreateRequest,
     AgentListRead,
+    AgentPromptDiffResponse,
+    AgentPromptVersionCreate,
+    AgentPromptVersionRead,
+    AgentPromptVersionUpdate,
     AgentRead,
     AgentRunRequest,
     AgentRunResponse,
     AgentUpdateRequest,
 )
 from app.schemas_response import ResponseBase
+from app.services.agent_prompt_version_service import agent_prompt_version_service
 from app.services.agent_service import agent_service
 from app.users import current_active_user
 
@@ -164,3 +169,162 @@ async def run_agent(
     )
 
     return ResponseBase(code=200, msg="OK", data=AgentRunResponse(output_text=str(output_text), raw=raw))
+
+
+@router.get(
+    "/admin/{agent_id}/prompt-versions",
+    response_model=ResponseBase[list[AgentPromptVersionRead]],
+    dependencies=[Depends(require_permissions(["system.agents"]))],
+)
+async def admin_list_agent_prompt_versions(
+    agent_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+) -> ResponseBase[list[AgentPromptVersionRead]]:
+    rows = await agent_prompt_version_service.list_versions(db=db, agent_id=agent_id)
+    return ResponseBase(code=200, msg="OK", data=[AgentPromptVersionRead.model_validate(r) for r in rows])
+
+
+@router.post(
+    "/admin/{agent_id}/prompt-versions",
+    response_model=ResponseBase[AgentPromptVersionRead],
+    dependencies=[Depends(require_permissions(["system.agents"]))],
+)
+async def admin_create_agent_prompt_version(
+    request: Request,
+    agent_id: UUID,
+    body: AgentPromptVersionCreate,
+    db: AsyncSession = Depends(get_async_session),
+    actor: User = Depends(require_permissions(["system.agents"])),
+) -> ResponseBase[AgentPromptVersionRead]:
+    row = await agent_prompt_version_service.create_version(
+        db=db,
+        agent_id=agent_id,
+        system_prompt=body.system_prompt,
+        user_prompt_template=body.user_prompt_template,
+        description=body.description,
+        meta=body.meta,
+        created_by=actor.id,
+    )
+    await write_audit_log(
+        session=db,
+        request=request,
+        actor_user_id=actor.id,
+        action="agent.prompt_version.create",
+        resource_type="agent",
+        resource_id=agent_id,
+        meta={"agent_id": str(agent_id), "version": row.version},
+    )
+    return ResponseBase(code=200, msg="OK", data=AgentPromptVersionRead.model_validate(row))
+
+
+@router.put(
+    "/admin/{agent_id}/prompt-versions/{version}",
+    response_model=ResponseBase[AgentPromptVersionRead],
+    dependencies=[Depends(require_permissions(["system.agents"]))],
+)
+async def admin_update_agent_prompt_version(
+    request: Request,
+    agent_id: UUID,
+    version: int,
+    body: AgentPromptVersionUpdate,
+    db: AsyncSession = Depends(get_async_session),
+    actor: User = Depends(require_permissions(["system.agents"])),
+) -> ResponseBase[AgentPromptVersionRead]:
+    try:
+        row = await agent_prompt_version_service.update_version(
+            db=db,
+            agent_id=agent_id,
+            version=version,
+            system_prompt=body.system_prompt,
+            user_prompt_template=body.user_prompt_template,
+            description=body.description,
+            meta=body.meta,
+        )
+    except ValueError as e:
+        raise AppError(str(e))
+    await write_audit_log(
+        session=db,
+        request=request,
+        actor_user_id=actor.id,
+        action="agent.prompt_version.update",
+        resource_type="agent",
+        resource_id=agent_id,
+        meta={"agent_id": str(agent_id), "version": version},
+    )
+    return ResponseBase(code=200, msg="OK", data=AgentPromptVersionRead.model_validate(row))
+
+
+@router.delete(
+    "/admin/{agent_id}/prompt-versions/{version}",
+    response_model=ResponseBase[dict],
+    dependencies=[Depends(require_permissions(["system.agents"]))],
+)
+async def admin_delete_agent_prompt_version(
+    request: Request,
+    agent_id: UUID,
+    version: int,
+    db: AsyncSession = Depends(get_async_session),
+    actor: User = Depends(require_permissions(["system.agents"])),
+) -> ResponseBase[dict]:
+    try:
+        await agent_prompt_version_service.delete_version(db=db, agent_id=agent_id, version=version)
+    except ValueError as e:
+        raise AppError(str(e))
+    await write_audit_log(
+        session=db,
+        request=request,
+        actor_user_id=actor.id,
+        action="agent.prompt_version.delete",
+        resource_type="agent",
+        resource_id=agent_id,
+        meta={"agent_id": str(agent_id), "version": version},
+    )
+    return ResponseBase(code=200, msg="OK", data={"ok": True})
+
+
+@router.post(
+    "/admin/{agent_id}/prompt-versions/{version}/activate",
+    response_model=ResponseBase[AgentPromptVersionRead],
+    dependencies=[Depends(require_permissions(["system.agents"]))],
+)
+async def admin_activate_agent_prompt_version(
+    request: Request,
+    agent_id: UUID,
+    version: int,
+    db: AsyncSession = Depends(get_async_session),
+    actor: User = Depends(require_permissions(["system.agents"])),
+) -> ResponseBase[AgentPromptVersionRead]:
+    try:
+        row = await agent_prompt_version_service.activate_version(db=db, agent_id=agent_id, version=version)
+    except ValueError as e:
+        raise AppError(str(e))
+    await write_audit_log(
+        session=db,
+        request=request,
+        actor_user_id=actor.id,
+        action="agent.prompt_version.activate",
+        resource_type="agent",
+        resource_id=agent_id,
+        meta={"agent_id": str(agent_id), "version": version},
+    )
+    return ResponseBase(code=200, msg="OK", data=AgentPromptVersionRead.model_validate(row))
+
+
+@router.get(
+    "/admin/{agent_id}/prompt-versions/diff",
+    response_model=ResponseBase[AgentPromptDiffResponse],
+    dependencies=[Depends(require_permissions(["system.agents"]))],
+)
+async def admin_diff_agent_prompt_versions(
+    agent_id: UUID,
+    from_version: int,
+    to_version: int,
+    db: AsyncSession = Depends(get_async_session),
+) -> ResponseBase[AgentPromptDiffResponse]:
+    try:
+        diff = await agent_prompt_version_service.diff_versions(
+            db=db, agent_id=agent_id, from_version=from_version, to_version=to_version
+        )
+    except ValueError as e:
+        raise AppError(str(e))
+    return ResponseBase(code=200, msg="OK", data=AgentPromptDiffResponse(diff=diff))

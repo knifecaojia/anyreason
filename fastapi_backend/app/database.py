@@ -16,8 +16,16 @@ from sqlalchemy import NullPool
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from .config import settings
-from .models import Base, Permission, Role, RolePermission, User, UserRole
+from .models import (
+    Base,
+    Permission,
+    Role,
+    RolePermission,
+    User,
+    UserRole,
+)
 from app.services.credit_service import credit_service
+from app.services.agent_platform_seed_service import seed_agent_platform_assets
 
 
 logger = logging.getLogger("app.database")
@@ -270,6 +278,20 @@ async def ensure_builtin_permissions() -> None:
     logger.info("db:seed_permissions start")
     await asyncio.wait_for(_run(), timeout=30)
     logger.info("db:seed_permissions done")
+
+
+async def ensure_builtin_agent_platform_assets(*, force: bool = False) -> None:
+    if os.getenv("PYTEST_CURRENT_TEST") and not force:
+        return
+
+    async def _run() -> None:
+        async with async_session_maker() as session:
+            await seed_agent_platform_assets(session=session)
+            await session.commit()
+
+    logger.info("db:seed_agent_platform start")
+    await asyncio.wait_for(_run(), timeout=30)
+    logger.info("db:seed_agent_platform done")
 
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:

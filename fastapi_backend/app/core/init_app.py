@@ -17,7 +17,13 @@ from app.api.router import api_router
 from app.config import settings
 from app.core.exceptions import AppError, app_error_handler, unhandled_exception_handler
 from app.core.middlewares import RequestLoggingMiddleware, SecurityHeadersMiddleware
-from app.database import create_db_and_tables, ensure_builtin_permissions, ensure_builtin_roles, ensure_default_admin
+from app.database import (
+    create_db_and_tables,
+    ensure_builtin_agent_platform_assets,
+    ensure_builtin_permissions,
+    ensure_builtin_roles,
+    ensure_default_admin,
+)
 from app.log import setup_logging
 from app.users import current_active_superuser
 from app.utils import simple_generate_unique_route_id
@@ -35,6 +41,7 @@ async def lifespan(app: FastAPI):
         if settings.AUTO_DB_SEED_ON_STARTUP:
             await ensure_builtin_roles()
             await ensure_builtin_permissions()
+            await ensure_builtin_agent_platform_assets()
             await ensure_default_admin()
 
     manager = TaskWebSocketManager()

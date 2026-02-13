@@ -62,6 +62,19 @@ export type Agent = {
   updated_at: string;
 };
 
+export type AgentPromptVersion = {
+  id: string;
+  agent_id: string;
+  version: number;
+  system_prompt?: string | null;
+  user_prompt_template?: string | null;
+  description?: string | null;
+  is_default: boolean;
+  created_by?: string | null;
+  created_at: string;
+  meta: Record<string, unknown>;
+};
+
 export async function agentsAdminList() {
   return authedFetch<ApiResponse<Agent[]>>({ path: "/api/v1/agents/admin" });
 }
@@ -96,5 +109,65 @@ export async function agentsAdminDelete(agentId: string) {
   return authedFetch<ApiResponse<{ deleted: boolean }>>({
     method: "DELETE",
     path: `/api/v1/agents/admin/${encodeURIComponent(agentId)}`,
+  });
+}
+
+export async function agentAdminListPromptVersions(agentId: string) {
+  return authedFetch<ApiResponse<AgentPromptVersion[]>>({
+    path: `/api/v1/agents/admin/${encodeURIComponent(agentId)}/prompt-versions`,
+  });
+}
+
+export async function agentAdminCreatePromptVersion(
+  agentId: string,
+  input: {
+    system_prompt?: string | null;
+    user_prompt_template?: string | null;
+    description?: string | null;
+    meta?: Record<string, unknown>;
+  }
+) {
+  return authedFetch<ApiResponse<AgentPromptVersion>>({
+    method: "POST",
+    path: `/api/v1/agents/admin/${encodeURIComponent(agentId)}/prompt-versions`,
+    body: input,
+  });
+}
+
+export async function agentAdminUpdatePromptVersion(
+  agentId: string,
+  version: number,
+  input: {
+    system_prompt?: string | null;
+    user_prompt_template?: string | null;
+    description?: string | null;
+    meta?: Record<string, unknown> | null;
+  }
+) {
+  return authedFetch<ApiResponse<AgentPromptVersion>>({
+    method: "PUT",
+    path: `/api/v1/agents/admin/${encodeURIComponent(agentId)}/prompt-versions/${encodeURIComponent(String(version))}`,
+    body: input,
+  });
+}
+
+export async function agentAdminDeletePromptVersion(agentId: string, version: number) {
+  return authedFetch<ApiResponse<{ ok: boolean }>>({
+    method: "DELETE",
+    path: `/api/v1/agents/admin/${encodeURIComponent(agentId)}/prompt-versions/${encodeURIComponent(String(version))}`,
+  });
+}
+
+export async function agentAdminActivatePromptVersion(agentId: string, version: number) {
+  return authedFetch<ApiResponse<AgentPromptVersion>>({
+    method: "POST",
+    path: `/api/v1/agents/admin/${encodeURIComponent(agentId)}/prompt-versions/${encodeURIComponent(String(version))}/activate`,
+  });
+}
+
+export async function agentAdminDiffPromptVersions(agentId: string, fromVersion: number, toVersion: number) {
+  return authedFetch<ApiResponse<{ diff: string }>>({
+    path: `/api/v1/agents/admin/${encodeURIComponent(agentId)}/prompt-versions/diff`,
+    query: { from_version: fromVersion, to_version: toVersion },
   });
 }

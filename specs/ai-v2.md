@@ -16,7 +16,7 @@
 * 构建 **内置专家 Agent 库** （7大专家）：提示词支持多版本管理、A/B 测试、热更新
 * 定义 **标准场景（Scene）** ：普通对话、剧本分集、资产提取、场景创建等（系统级，不可删除）
 * 支持 **用户自定义应用（App）** ：通过组合内置 Agent + 用户自定义 Agent，构建个性化工作流
-* 保持技术栈：PydanticAI + FastAPI + Celery + PostgreSQL
+* 保持技术栈：PydanticAI + FastAPI + ![1770941122247](image/ai-v2/1770941122247.png) + PostgreSQL
 
 ---
 
