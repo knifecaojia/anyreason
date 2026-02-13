@@ -1414,7 +1414,7 @@ export default function Page() {
       </div>
 
       {activeSection === "models" && (
-        <div className="max-w-5xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
+        <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
           <div className="flex justify-between items-end border-b border-border pb-6">
             <div>
               <h2 className="text-2xl font-bold text-textMain mb-2">AI 模型配置</h2>
@@ -2137,7 +2137,7 @@ export default function Page() {
       )}
 
       {activeSection === "roles" && (
-        <div className="max-w-5xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
+        <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
           <div className="flex justify-between items-end border-b border-border pb-6">
             <div>
               <h2 className="text-2xl font-bold text-textMain mb-2">角色管理</h2>
