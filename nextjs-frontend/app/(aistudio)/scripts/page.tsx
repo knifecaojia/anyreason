@@ -236,6 +236,10 @@ export default function Page() {
   const [editorScope, setEditorScope] = useState<"FULL" | "EPISODE">("FULL");
   const [episodeScriptDraft, setEpisodeScriptDraft] = useState("");
   const [episodeSaving, setEpisodeSaving] = useState(false);
+  const [contextPreview, setContextPreview] = useState<{ counts: Record<string, number> } | null>(null);
+  const [contextPreviewLoading, setContextPreviewLoading] = useState(false);
+  const [contextPreviewError, setContextPreviewError] = useState<string | null>(null);
+  const [contextPreviewRefreshKey, setContextPreviewRefreshKey] = useState(0);
 
   const [pickerMode, setPickerMode] = useState<PickerMode>(null);
   const [assetDialogOpen, setAssetDialogOpen] = useState(false);
@@ -380,6 +384,38 @@ export default function Page() {
       cancelled = true;
     };
   }, [activeEpisode?.id]);
+
+  useEffect(() => {
+    if (!isWriteMode || !scriptId) {
+      setContextPreview(null);
+      setContextPreviewLoading(false);
+      setContextPreviewError(null);
+      return;
+    }
+    let cancelled = false;
+    setContextPreviewLoading(true);
+    setContextPreviewError(null);
+    void (async () => {
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(scriptId)}/context/preview`, { cache: "no-store" });
+        if (!res.ok) {
+          if (!cancelled) setContextPreviewError(await res.text());
+          if (!cancelled) setContextPreviewLoading(false);
+          return;
+        }
+        const json = (await res.json()) as { data?: { counts?: Record<string, number> } };
+        const counts = json.data?.counts && typeof json.data.counts === "object" ? json.data.counts : {};
+        if (!cancelled) setContextPreview({ counts });
+        if (!cancelled) setContextPreviewLoading(false);
+      } catch (e) {
+        if (!cancelled) setContextPreviewError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) setContextPreviewLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isWriteMode, scriptId, contextPreviewRefreshKey]);
 
   const resetCreateScript = () => {
     setCreateScriptTitle("");
@@ -1559,7 +1595,23 @@ export default function Page() {
           {writePane === "editor" && (
             <div className="rounded-2xl border border-border bg-surface overflow-hidden">
               <div className="px-5 py-4 border-b border-border bg-surfaceHighlight/30 flex flex-col md:flex-row md:items-center justify-between gap-3">
-                <div className="font-bold text-sm">剧本编辑</div>
+                <div className="space-y-1">
+                  <div className="font-bold text-sm">剧本编辑</div>
+                  <div className="flex items-center gap-2 text-[11px] text-textMuted flex-wrap">
+                    <div className="px-2 py-0.5 rounded-full border border-border bg-background/30">
+                      上下文：角色 {contextPreview?.counts?.character ?? 0} · 道具 {contextPreview?.counts?.prop ?? 0} · 地点 {contextPreview?.counts?.location ?? 0} · 特效 {contextPreview?.counts?.vfx ?? 0}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setContextPreviewRefreshKey((x) => x + 1)}
+                      className="px-2 py-0.5 rounded-full border border-border bg-background/30 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors disabled:opacity-50"
+                      disabled={contextPreviewLoading || !scriptId}
+                      title={contextPreviewError || ""}
+                    >
+                      {contextPreviewLoading ? "刷新中..." : "刷新上下文"}
+                    </button>
+                  </div>
+                </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   <div className="flex items-center rounded-lg border border-border overflow-hidden bg-surface/60">
                     <button

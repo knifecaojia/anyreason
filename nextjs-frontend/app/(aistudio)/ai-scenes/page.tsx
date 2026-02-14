@@ -127,16 +127,73 @@ function PlanCard(props: { plan: ApplyPlan }) {
   const renderAssetCreate = () => {
     const assets = Array.isArray(inputs?.assets) ? (inputs.assets as any[]) : [];
     const counts = preview?.counts && typeof preview.counts === "object" ? (preview.counts as Record<string, number>) : null;
+    const files = Array.isArray(preview?.files) ? (preview.files as any[]) : [];
+    const rawOutputText = String(preview?.raw_output_text || "");
     return (
       <div className="space-y-2">
-        <div className="text-[11px] text-textMuted">将写入 VFS：/资产/（角色|道具|地点|特效）/*.json（预览，不落库）</div>
+        <div className="text-[11px] text-textMuted">将写入 VFS：/资产/（角色|道具|地点|特效）/*.md（并保留 .json 过渡）（预览，不落库）</div>
+        {rawOutputText && (
+          <details className="px-3 py-2 rounded-md bg-background border border-border">
+            <summary className="cursor-pointer text-sm font-bold text-textMain">Raw 输出（Markdown 原文）</summary>
+            <div className="mt-2 space-y-2">
+              <button
+                type="button"
+                onClick={() => copyText(rawOutputText)}
+                className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+              >
+                复制原文
+              </button>
+              <pre className="w-full max-h-[260px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs whitespace-pre-wrap">
+                {rawOutputText}
+              </pre>
+            </div>
+          </details>
+        )}
         {counts && (
           <div className="text-xs text-textMuted">
             统计：character {counts.character || 0} · prop {counts.prop || 0} · location {counts.location || 0} · vfx {counts.vfx || 0}
           </div>
         )}
         {assets.length === 0 && <div className="text-sm text-textMuted">没有 assets 输入。</div>}
-        {assets.length > 0 && (
+        {files.length > 0 && (
+          <div className="space-y-2">
+            {files.slice(0, 20).map((f, idx) => {
+              const filename = String(f?.filename || "");
+              const name = String(f?.name || "");
+              const type = String(f?.type || "");
+              const md = String(f?.content_md || "");
+              return (
+                <details key={`${filename}-${idx}`} className="px-3 py-2 rounded-md bg-background border border-border">
+                  <summary className="cursor-pointer text-sm font-bold text-textMain">
+                    {type} · {name} {filename ? `· ${filename}` : ""}
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => copyText(md)}
+                        className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+                      >
+                        复制 Markdown
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => copyText(prettyJson(f))}
+                        className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+                      >
+                        复制预览对象
+                      </button>
+                    </div>
+                    <pre className="w-full max-h-[260px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs whitespace-pre-wrap">
+                      {md || "（空）"}
+                    </pre>
+                  </div>
+                </details>
+              );
+            })}
+          </div>
+        )}
+        {files.length === 0 && assets.length > 0 && (
           <details className="px-3 py-2 rounded-md bg-background border border-border">
             <summary className="cursor-pointer text-sm font-bold text-textMain">查看资产 JSON（{assets.length}）</summary>
             <div className="mt-2 space-y-2">
@@ -151,6 +208,62 @@ function PlanCard(props: { plan: ApplyPlan }) {
                 {prettyJson(assets)}
               </pre>
             </div>
+          </details>
+        )}
+      </div>
+    );
+  };
+
+  const renderAssetDocUpsert = () => {
+    const assetType = String(inputs?.asset_type || "");
+    const assetName = String(inputs?.asset_name || "");
+    const filename = String(inputs?.filename || "");
+    const matchType = String(inputs?.match_type || "");
+    const confidence = Number(inputs?.confidence || 0);
+    const contentMd = String(inputs?.content_md || "");
+    const reasonMd = String(inputs?.reason_md || "");
+    const diffMd = String(inputs?.diff_md || "");
+    return (
+      <div className="space-y-2">
+        <div className="text-[11px] text-textMuted">将写入 VFS：/资产/{assetType}/{filename || "*.md"}（预览，不落库）</div>
+        <div className="text-xs text-textMuted">
+          {assetType} · {assetName} · {matchType || "-"} · confidence {Number.isFinite(confidence) ? confidence : 0}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => copyText(contentMd)}
+            className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+          >
+            复制 Markdown
+          </button>
+          <button
+            type="button"
+            onClick={() => copyText(prettyJson(inputs))}
+            className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+          >
+            复制输入对象
+          </button>
+        </div>
+        <details className="px-3 py-2 rounded-md bg-background border border-border">
+          <summary className="cursor-pointer text-sm font-bold text-textMain">内容（Markdown）</summary>
+          <pre className="mt-2 w-full max-h-[260px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs whitespace-pre-wrap">
+            {contentMd || "（空）"}
+          </pre>
+        </details>
+        {(reasonMd || diffMd) && (
+          <details className="px-3 py-2 rounded-md bg-background border border-border">
+            <summary className="cursor-pointer text-sm font-bold text-textMain">判定理由 / Diff</summary>
+            {reasonMd && (
+              <pre className="mt-2 w-full max-h-[200px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs whitespace-pre-wrap">
+                {reasonMd}
+              </pre>
+            )}
+            {diffMd && (
+              <pre className="mt-2 w-full max-h-[200px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs whitespace-pre-wrap">
+                {diffMd}
+              </pre>
+            )}
           </details>
         )}
       </div>
@@ -192,7 +305,13 @@ function PlanCard(props: { plan: ApplyPlan }) {
   };
 
   const detail =
-    plan.kind === "episode_save" ? renderEpisodeSave() : plan.kind === "asset_create" ? renderAssetCreate() : renderAssetBind();
+    plan.kind === "episode_save"
+      ? renderEpisodeSave()
+      : plan.kind === "asset_create"
+        ? renderAssetCreate()
+        : plan.kind === "asset_doc_upsert"
+          ? renderAssetDocUpsert()
+          : renderAssetBind();
 
   return (
     <details className="px-3 py-2 rounded-md bg-surfaceHighlight/40 border border-border">
@@ -208,6 +327,7 @@ function PlanCard(props: { plan: ApplyPlan }) {
 function ChatDialog(props: {
   open: boolean;
   onClose: () => void;
+  onReset: () => void;
   scriptText: string;
   setScriptText: (v: string) => void;
   scripts: ScriptRead[];
@@ -217,12 +337,18 @@ function ChatDialog(props: {
   onSelectScript: (scriptId: string) => void;
   onSelectEpisode: (episodeId: string) => void;
   onInsertEpisodeText: () => void;
+  contextPreview: { counts: Record<string, number> } | null;
+  contextPreviewLoading: boolean;
+  contextPreviewError: string | null;
+  contextExcludeTypes: string[];
+  setContextExcludeTypes: (v: string[]) => void;
   messages: AISceneTestChatMessage[];
   onSend: (text: string) => Promise<void>;
   sending: boolean;
   error: string | null;
   plans: ApplyPlan[];
   traceEvents: Array<Record<string, unknown>>;
+  archive: any | null;
   taskId: string | null;
   taskStatus: string | null;
   taskProgress: number;
@@ -232,6 +358,7 @@ function ChatDialog(props: {
   const {
     open,
     onClose,
+    onReset,
     scriptText,
     setScriptText,
     scripts,
@@ -241,12 +368,18 @@ function ChatDialog(props: {
     onSelectScript,
     onSelectEpisode,
     onInsertEpisodeText,
+    contextPreview,
+    contextPreviewLoading,
+    contextPreviewError,
+    contextExcludeTypes,
+    setContextExcludeTypes,
     messages,
     onSend,
     sending,
     error,
     plans,
     traceEvents,
+    archive,
     taskId,
     taskStatus,
     taskProgress,
@@ -254,7 +387,7 @@ function ChatDialog(props: {
     onRetryTask,
   } = props;
   const [input, setInput] = useState("");
-  const [rightTab, setRightTab] = useState<"trace" | "plans">("trace");
+  const [rightTab, setRightTab] = useState<"trace" | "plans" | "archive">("trace");
 
   useEffect(() => {
     if (!open) return;
@@ -276,6 +409,19 @@ function ChatDialog(props: {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={sending || taskStatus === "running" || taskStatus === "queued"}
+              onClick={() => {
+                setInput("");
+                setRightTab("trace");
+                onReset();
+              }}
+              className="px-3 py-2 rounded-lg border border-border bg-surfaceHighlight hover:bg-surface disabled:opacity-60"
+              title={taskStatus === "running" || taskStatus === "queued" ? "任务执行中，请先取消或等待结束" : ""}
+            >
+              新建
+            </button>
             <button
               type="button"
               disabled={!taskId || taskStatus !== "running"}
@@ -323,6 +469,69 @@ function ChatDialog(props: {
                 剧本文本（粘贴）
               </summary>
               <div className="p-4 space-y-2">
+                <div className="flex items-center justify-between gap-3 px-3 py-2 rounded-md bg-surfaceHighlight/40 border border-border">
+                  <div className="text-[11px] text-textMuted">
+                    上下文（资产库）：
+                    {contextPreviewLoading
+                      ? "加载中..."
+                      : `角色 ${contextPreview?.counts?.character ?? 0} · 道具 ${contextPreview?.counts?.prop ?? 0} · 地点 ${contextPreview?.counts?.location ?? 0} · 特效 ${contextPreview?.counts?.vfx ?? 0}`}
+                  </div>
+                  <div className="flex items-center gap-2 text-[11px] text-textMuted">
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={!contextExcludeTypes.includes("character")}
+                        onChange={(e) => {
+                          const next = new Set(contextExcludeTypes);
+                          if (e.target.checked) next.delete("character");
+                          else next.add("character");
+                          setContextExcludeTypes(Array.from(next));
+                        }}
+                      />
+                      角色
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={!contextExcludeTypes.includes("prop")}
+                        onChange={(e) => {
+                          const next = new Set(contextExcludeTypes);
+                          if (e.target.checked) next.delete("prop");
+                          else next.add("prop");
+                          setContextExcludeTypes(Array.from(next));
+                        }}
+                      />
+                      道具
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={!contextExcludeTypes.includes("location")}
+                        onChange={(e) => {
+                          const next = new Set(contextExcludeTypes);
+                          if (e.target.checked) next.delete("location");
+                          else next.add("location");
+                          setContextExcludeTypes(Array.from(next));
+                        }}
+                      />
+                      地点
+                    </label>
+                    <label className="flex items-center gap-1">
+                      <input
+                        type="checkbox"
+                        checked={!contextExcludeTypes.includes("vfx")}
+                        onChange={(e) => {
+                          const next = new Set(contextExcludeTypes);
+                          if (e.target.checked) next.delete("vfx");
+                          else next.add("vfx");
+                          setContextExcludeTypes(Array.from(next));
+                        }}
+                      />
+                      特效
+                    </label>
+                  </div>
+                </div>
+                {contextPreviewError && <div className="text-[11px] text-red-400">{contextPreviewError}</div>}
                 <div className="grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_minmax(0,2fr)_minmax(0,1fr)] gap-2">
                   <label className="space-y-1">
                     <div className="text-[11px] text-textMuted">选择剧本</div>
@@ -450,6 +659,13 @@ function ChatDialog(props: {
                   >
                     结果 {plans.length ? `(${plans.length})` : ""}
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => setRightTab("archive")}
+                    className={`px-3 py-1.5 rounded-md text-sm border ${rightTab === "archive" ? "bg-surfaceHighlight border-border" : "border-transparent text-textMuted hover:text-textMain"}`}
+                  >
+                    归档 {archive ? "(1)" : ""}
+                  </button>
                 </div>
 
                 {rightTab === "trace" && (
@@ -497,6 +713,20 @@ function ChatDialog(props: {
                     )}
                   </div>
                 )}
+
+                {rightTab === "archive" && (
+                  <div className="space-y-2 max-h-[calc(100dvh-22rem)] overflow-auto pr-1">
+                    {!archive && <div className="text-sm text-textMuted">暂无归档信息（选择剧本并运行后会生成 AI/ 归档）。</div>}
+                    {archive && (
+                      <details open className="pt-2">
+                        <summary className="text-sm cursor-pointer text-textMain">AI 运行归档</summary>
+                        <pre className="mt-2 w-full max-h-[420px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs">
+                          {prettyJson(archive)}
+                        </pre>
+                      </details>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -537,11 +767,17 @@ export default function AIScenesPage() {
   const [chatMessages, setChatMessages] = useState<AISceneTestChatMessage[]>([]);
   const [chatPlans, setChatPlans] = useState<ApplyPlan[]>([]);
   const [chatTraceEvents, setChatTraceEvents] = useState<Array<Record<string, unknown>>>([]);
+  const [chatArchive, setChatArchive] = useState<any | null>(null);
   const [chatSubmitting, setChatSubmitting] = useState(false);
   const [chatError, setChatError] = useState<string | null>(null);
   const [chatTaskId, setChatTaskId] = useState<string | null>(null);
   const [chatTaskStatus, setChatTaskStatus] = useState<string | null>(null);
   const [chatTaskProgress, setChatTaskProgress] = useState<number>(0);
+
+  const [contextPreview, setContextPreview] = useState<{ counts: Record<string, number> } | null>(null);
+  const [contextPreviewLoading, setContextPreviewLoading] = useState(false);
+  const [contextPreviewError, setContextPreviewError] = useState<string | null>(null);
+  const [contextExcludeTypes, setContextExcludeTypes] = useState<string[]>([]);
 
   const [modelConfigs, setModelConfigs] = useState<AIModelConfig[]>([]);
 
@@ -601,8 +837,10 @@ export default function AIScenesPage() {
     setChatTaskProgress(0);
     setChatPlans([]);
     setChatTraceEvents([]);
+    setChatArchive(null);
     setChatMessages([]);
     setChatError(null);
+    chatSeenEventSignaturesRef.current = new Set();
     try {
       window.localStorage.removeItem("aiScenes.chatTaskId");
     } catch {
@@ -638,10 +876,14 @@ export default function AIScenesPage() {
       const mc = await aiAdminListModelConfigs("text");
       setModelConfigs(mc.data || []);
 
-      const first = (data?.agents || [])[0];
-      if (!mainAgentCode && first) {
-        setMainAgentCode(first.agent_code);
-        setMainAgentVersion(pickDefaultVersion(first));
+      const list = data?.agents || [];
+      const preferred =
+        list.find((a) => a.agent_code === "script_expert") ||
+        list.find((a) => String(a.name || "").includes("剧本专家")) ||
+        list[0];
+      if (!mainAgentCode && preferred) {
+        setMainAgentCode(preferred.agent_code);
+        setMainAgentVersion(pickDefaultVersion(preferred));
       }
 
       const scriptsRes = await listScripts(1, 50);
@@ -656,6 +898,41 @@ export default function AIScenesPage() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => {
+    if (!selectedScriptId) {
+      setContextPreview(null);
+      setContextPreviewLoading(false);
+      setContextPreviewError(null);
+      return;
+    }
+    let cancelled = false;
+    setContextPreviewLoading(true);
+    setContextPreviewError(null);
+    const excludeTypes = contextExcludeTypes.join(",");
+    void (async () => {
+      try {
+        const qs = excludeTypes ? `?exclude_types=${encodeURIComponent(excludeTypes)}` : "";
+        const res = await fetch(`/api/projects/${encodeURIComponent(selectedScriptId)}/context/preview${qs}`, { cache: "no-store" });
+        const text = await res.text();
+        if (!res.ok) {
+          if (!cancelled) setContextPreviewError(text || res.statusText);
+          if (!cancelled) setContextPreviewLoading(false);
+          return;
+        }
+        const json = (text ? (JSON.parse(text) as { data?: { counts?: Record<string, number> } }) : {}) as { data?: { counts?: Record<string, number> } };
+        const counts = json.data?.counts && typeof json.data.counts === "object" ? json.data.counts : {};
+        if (!cancelled) setContextPreview({ counts });
+        if (!cancelled) setContextPreviewLoading(false);
+      } catch (e) {
+        if (!cancelled) setContextPreviewError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) setContextPreviewLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [contextExcludeTypes, selectedScriptId]);
 
   useEffect(() => {
     if (!mainAgent) return;
@@ -682,8 +959,10 @@ export default function AIScenesPage() {
             const out = String(r.output_text || "");
             const plans = Array.isArray(r.plans) ? (r.plans as ApplyPlan[]) : [];
             const traces = Array.isArray(r.trace_events) ? (r.trace_events as Array<Record<string, unknown>>) : [];
+            const archive = r.archive ?? null;
             setChatPlans(plans);
             setChatTraceEvents(traces);
+            setChatArchive(archive);
             if (out) {
               setChatMessages((prev) => {
                 const arr = [...prev];
@@ -772,8 +1051,10 @@ export default function AIScenesPage() {
             const out = String(r.output_text || "");
             const plans = Array.isArray(r.plans) ? (r.plans as ApplyPlan[]) : [];
             const traces = Array.isArray(r.trace_events) ? (r.trace_events as Array<Record<string, unknown>>) : [];
+            const archive = r.archive ?? null;
             setChatPlans(plans);
             if (traces.length) setChatTraceEvents(traces);
+            setChatArchive(archive);
             if (out) {
               setChatMessages((prev) => {
                 const arr = [...prev];
@@ -948,6 +1229,7 @@ export default function AIScenesPage() {
     setChatError(null);
     setChatPlans([]);
     setChatTraceEvents([]);
+    setChatArchive(null);
     setChatTaskId(null);
     setChatTaskStatus(null);
     setChatTaskProgress(0);
@@ -965,6 +1247,8 @@ export default function AIScenesPage() {
             tool_ids: toolIds,
             script_text: scriptText,
             messages: sendMessages,
+            project_id: selectedScriptId || null,
+            context_exclude_types: contextExcludeTypes,
           },
         }),
       });
@@ -1337,6 +1621,7 @@ export default function AIScenesPage() {
       <ChatDialog
         open={chatOpen}
         onClose={() => setChatOpen(false)}
+        onReset={clearChatTask}
         scriptText={scriptText}
         setScriptText={setScriptText}
         scripts={scripts}
@@ -1349,12 +1634,18 @@ export default function AIScenesPage() {
         }}
         onSelectEpisode={(id) => setSelectedEpisodeId(id)}
         onInsertEpisodeText={insertSelectedEpisodeText}
+        contextPreview={contextPreview}
+        contextPreviewLoading={contextPreviewLoading}
+        contextPreviewError={contextPreviewError}
+        contextExcludeTypes={contextExcludeTypes}
+        setContextExcludeTypes={setContextExcludeTypes}
         messages={chatMessages}
         onSend={sendChat}
         sending={chatSubmitting || chatRunning}
         error={chatError}
         plans={chatPlans}
         traceEvents={chatTraceEvents}
+        archive={chatArchive}
         taskId={chatTaskId}
         taskStatus={chatTaskStatus}
         taskProgress={chatTaskProgress}

@@ -17,8 +17,9 @@ from app.models import Project
 from app.scene_engine.scenes.episode_characters import EpisodeCharacterExtractInput, run_episode_characters
 from app.scene_engine.scenes.script_split import ScriptSplitOutput
 from app.services.agent_factory import resolve_builtin_agent
-from app.vfs_docs import AssetDocV1, EpisodeAssetBindingV1, EpisodeBindingsDocV1
-from app.vfs_layout import asset_filename, bindings_filename, episode_filename
+from app.vfs_docs import AssetDocV1, AssetDocV2, EpisodeAssetBindingV1, EpisodeBindingsDocV1
+from app.vfs_layout import asset_doc_filename, asset_filename, bindings_filename, episode_filename
+from app.vfs_renderers.asset_doc_renderer import render_asset_doc_md
 
 
 class EpisodeDoc(BaseModel):
@@ -155,7 +156,7 @@ class DedupCandidate(BaseModel):
     reason: str
 
 
-async def asset_deduplicator_preview(ctx: RunContext[ChatboxDeps], assets: list[AssetDocV1]) -> list[DedupCandidate]:
+async def asset_deduplicator_preview(ctx: RunContext[ChatboxDeps], assets: list[AssetDocV1 | AssetDocV2]) -> list[DedupCandidate]:
     _ = ctx
     out: list[DedupCandidate] = []
     for i in range(len(assets)):
@@ -181,7 +182,7 @@ async def asset_deduplicator_preview(ctx: RunContext[ChatboxDeps], assets: list[
 async def asset_create(
     ctx: RunContext[ChatboxDeps],
     project_id: UUID,
-    assets: list[AssetDocV1],
+    assets: list[AssetDocV1 | AssetDocV2],
     dry_run: bool = True,
 ) -> ApplyPlan:
     project = await ctx.deps.db.get(Project, project_id)
@@ -192,8 +193,28 @@ async def asset_create(
     counts: dict[str, int] = {"character": 0, "prop": 0, "location": 0, "vfx": 0}
     for a in assets:
         counts[a.type] = counts.get(a.type, 0) + 1
-        filename = asset_filename(asset_type=a.type, name=a.name, asset_id=None)
-        planned_files.append({"type": a.type, "name": a.name, "filename": filename})
+        filename = asset_doc_filename(asset_type=a.type, name=a.name, asset_id=None)
+        content_md = ""
+        if isinstance(a, AssetDocV2):
+            content_md = render_asset_doc_md(doc=a)
+        else:
+            details_md_parts: list[str] = []
+            if a.description:
+                details_md_parts.append(a.description.strip())
+            if a.meta:
+                details_md_parts.append("```json")
+                details_md_parts.append(json.dumps(a.meta, ensure_ascii=False, indent=2))
+                details_md_parts.append("```")
+            v2 = AssetDocV2(
+                type=a.type,
+                name=a.name,
+                keywords=list(a.keywords or []),
+                first_appearance_episode=a.first_appearance_episode,
+                details_md="\n\n".join([p for p in details_md_parts if p]).strip() + ("\n" if details_md_parts else ""),
+                provenance={"source_tool_id": "asset_create"},
+            )
+            content_md = render_asset_doc_md(doc=v2)
+        planned_files.append({"type": a.type, "name": a.name, "filename": filename, "content_md": content_md})
 
     plan = ApplyPlan(
         kind="asset_create",
@@ -281,4 +302,51 @@ async def episode_save(
     if dry_run:
         return plan
 
+    return plan
+
+
+async def asset_variant_decide(
+    ctx: RunContext[ChatboxDeps],
+    project_id: UUID,
+    asset_type: str,
+    asset_name: str,
+    content_md: str,
+    match_type: str = "same_asset_new_variant",
+    confidence: float = 0.8,
+    reason_md: str = "",
+    diff_md: str = "",
+    node_id: str | None = None,
+    dry_run: bool = True,
+) -> ApplyPlan:
+    project = await ctx.deps.db.get(Project, project_id)
+    if project is None:
+        raise ValueError("project_not_found")
+
+    filename = asset_doc_filename(asset_type=asset_type, name=asset_name, asset_id=None)
+    plan = ApplyPlan(
+        kind="asset_doc_upsert",
+        tool_id="asset_doc_upsert",
+        inputs={
+            "project_id": str(project_id),
+            "asset_type": asset_type,
+            "asset_name": asset_name,
+            "node_id": node_id,
+            "content_md": content_md,
+            "match_type": match_type,
+            "confidence": float(confidence),
+            "reason_md": reason_md,
+            "diff_md": diff_md,
+            "filename": filename,
+        },
+        preview={
+            "dry_run": bool(dry_run),
+            "asset_type": asset_type,
+            "asset_name": asset_name,
+            "filename": filename,
+            "match_type": match_type,
+            "confidence": float(confidence),
+        },
+    )
+    if dry_run:
+        return plan
     return plan

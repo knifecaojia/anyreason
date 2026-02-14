@@ -38,6 +38,12 @@ def asset_filename(*, asset_type: str, name: str, asset_id: str | None = None) -
     return f"{asset_type}_{base}.json"
 
 
+def asset_doc_filename(*, asset_type: str, name: str, asset_id: str | None = None) -> str:
+    base = safe_filename(name)
+    if asset_id:
+        return f"{asset_id}_{base}.md"
+    return f"{asset_type}_{base}.md"
+
+
 def bindings_filename(*, episode_number: int) -> str:
     return f"EP{int(episode_number):03d}_bindings.json"
-

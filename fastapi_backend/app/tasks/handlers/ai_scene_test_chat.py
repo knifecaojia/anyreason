@@ -31,14 +31,15 @@ class AiSceneTestChatHandler(BaseTaskHandler):
         output_text: str = ""
         plans: list = []
         trace_events: list[dict[str, Any]] = []
+        archive: dict[str, Any] | None = None
         started_at = time.monotonic()
         last_cancel_check = started_at
 
         async def run_in_background():
-            nonlocal output_text, plans, trace_events
+            nonlocal output_text, plans, trace_events, archive
             bg_session_maker = async_sessionmaker(bind=async_engine, expire_on_commit=False)
             async with bg_session_maker() as bg_db:
-                output_text, plans, trace_events = await run_scene_test_chat(
+                output_text, plans, trace_events, archive = await run_scene_test_chat(
                     body=body,
                     db=bg_db,
                     user_id=task.user_id,
@@ -103,4 +104,5 @@ class AiSceneTestChatHandler(BaseTaskHandler):
             "output_text": output_text,
             "plans": plans_json,
             "trace_events": trace_events,
+            "archive": archive,
         }

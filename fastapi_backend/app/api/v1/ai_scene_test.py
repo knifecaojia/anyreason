@@ -65,14 +65,14 @@ async def _run_scene_test_chat(
     db: AsyncSession,
     user: User,
     trace_queue: asyncio.Queue | None = None,
-) -> tuple[str, list]:
-    output_text, plans, _trace = await run_scene_test_chat(
+) -> tuple[str, list, dict | None]:
+    output_text, plans, _trace, archive = await run_scene_test_chat(
         body=body,
         db=db,
         user_id=user.id,
         trace_queue=trace_queue,
     )
-    return output_text, plans
+    return output_text, plans, archive
 
 
 @router.post(
@@ -85,11 +85,11 @@ async def admin_ai_scene_test_chat(
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ) -> ResponseBase[AISceneTestChatResponse]:
-    output_text, plans = await _run_scene_test_chat(body=body, db=db, user=user, trace_queue=None)
+    output_text, plans, archive = await _run_scene_test_chat(body=body, db=db, user=user, trace_queue=None)
     return ResponseBase(
         code=200,
         msg="OK",
-        data=AISceneTestChatResponse(output_text=output_text, plans=plans),
+        data=AISceneTestChatResponse(output_text=output_text, plans=plans, archive=archive),
     )
 
 
@@ -108,11 +108,12 @@ async def admin_ai_scene_test_chat_stream(
         yield f"data: {json.dumps({'type': 'start'}, ensure_ascii=False)}\n\n".encode("utf-8")
         output_text = ""
         plans: list = []
+        archive: dict | None = None
         last_sent_at = time.monotonic()
 
         async def run_in_background():
-            nonlocal output_text, plans
-            output_text, plans = await _run_scene_test_chat(body=body, db=db, user=user, trace_queue=trace_queue)
+            nonlocal output_text, plans, archive
+            output_text, plans, archive = await _run_scene_test_chat(body=body, db=db, user=user, trace_queue=trace_queue)
 
         task = asyncio.create_task(run_in_background())
 
@@ -142,7 +143,9 @@ async def admin_ai_scene_test_chat_stream(
             yield f"data: {json.dumps({'type': 'delta', 'delta': delta}, ensure_ascii=False)}\n\n".encode("utf-8")
             await asyncio.sleep(0)
 
-        yield f"data: {json.dumps({'type': 'plans', 'plans': [p.model_dump() for p in plans]}, ensure_ascii=False)}\n\n".encode("utf-8")
+        yield f"data: {json.dumps({'type': 'plans', 'plans': [p.model_dump() for p in plans]}, ensure_ascii=False)}\n\n".encode('utf-8')
+        if archive:
+            yield f"data: {json.dumps({'type': 'archive', 'archive': archive}, ensure_ascii=False)}\n\n".encode('utf-8')
         yield f"data: {json.dumps({'type': 'done', 'output_text': output_text}, ensure_ascii=False)}\n\n".encode("utf-8")
 
     return StreamingResponse(

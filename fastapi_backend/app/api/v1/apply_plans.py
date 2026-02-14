@@ -12,18 +12,21 @@ from app.ai_tools.apply_plan import ApplyPlan
 from app.database import User, get_async_session
 from app.models import Episode, FileNode, Project
 from app.schemas_response import ResponseBase
+from app.services.apply_plan_normalize_service import normalize_apply_plan
 from app.services.storage.vfs_service import vfs_service
 from app.users import current_active_user
-from app.vfs_docs import AssetDocV1, EpisodeBindingsDocV1
+from app.vfs_docs import AssetDocV1, AssetDocV2, EpisodeBindingsDocV1
 from app.vfs_layout import (
     ASSETS_FOLDER_NAME,
     ASSET_TYPE_FOLDER_NAMES,
     BINDINGS_FOLDER_NAME,
     EPISODES_FOLDER_NAME,
+    asset_doc_filename,
     asset_filename,
     bindings_filename,
     episode_filename,
 )
+from app.vfs_renderers.asset_doc_renderer import render_asset_doc_md
 
 
 router = APIRouter(prefix="/apply-plans")
@@ -87,6 +90,25 @@ async def _get_or_create_child_folder(
     return created.id
 
 
+def _asset_v1_to_v2(v1: AssetDocV1, *, provenance: dict) -> AssetDocV2:
+    pieces: list[str] = []
+    if v1.description:
+        pieces.append(v1.description.strip())
+    if v1.meta:
+        pieces.append("```json")
+        pieces.append(json.dumps(v1.meta, ensure_ascii=False, indent=2))
+        pieces.append("```")
+    details_md = "\n\n".join([p for p in pieces if p]).strip() + ("\n" if pieces else "")
+    return AssetDocV2(
+        type=v1.type,
+        name=v1.name,
+        keywords=list(v1.keywords or []),
+        first_appearance_episode=v1.first_appearance_episode,
+        details_md=details_md,
+        provenance=dict(provenance or {}),
+    )
+
+
 @router.post("/execute", response_model=ResponseBase[dict])
 async def api_execute_apply_plan(
     body: ApplyExecuteRequest,
@@ -111,6 +133,14 @@ async def api_execute_apply_plan(
         raise HTTPException(status_code=404, detail="project_not_found")
     if project.owner_id and project.owner_id != user.id:
         raise HTTPException(status_code=404, detail="project_not_found")
+
+    normalized = normalize_apply_plan(plan)
+    plan = normalized.plan
+    provenance = normalized.provenance
+    if provenance:
+        merged = dict(plan.preview or {})
+        merged["provenance"] = provenance
+        plan.preview = merged
 
     if plan.kind == "episode_save" and plan.tool_id == "episode_save":
         episodes = (plan.inputs or {}).get("episodes") or []
@@ -157,17 +187,28 @@ async def api_execute_apply_plan(
                 matched[0].episode_doc_node_id = node.id
 
         await db.commit()
-        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_nodes})
+        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_nodes, "provenance": provenance})
 
     if plan.kind == "asset_create" and plan.tool_id == "asset_create":
         assets_raw = (plan.inputs or {}).get("assets") or []
         if not isinstance(assets_raw, list):
             raise HTTPException(status_code=400, detail="invalid_assets")
-        assets: list[AssetDocV1] = []
+        assets_v2: list[AssetDocV2] = []
+        assets_json_payloads: list[dict] = []
         for a in assets_raw:
             if not isinstance(a, dict):
                 continue
-            assets.append(AssetDocV1.model_validate(a))
+            if int(a.get("version") or 0) == 2 or "details_md" in a:
+                v2 = AssetDocV2.model_validate(a)
+                if provenance and not v2.provenance:
+                    v2.provenance = dict(provenance)
+                assets_v2.append(v2)
+                assets_json_payloads.append(v2.model_dump())
+            else:
+                v1 = AssetDocV1.model_validate(a)
+                v2 = _asset_v1_to_v2(v1, provenance=provenance)
+                assets_v2.append(v2)
+                assets_json_payloads.append(v1.model_dump())
 
         assets_root_id = await _get_or_create_root_folder(
             db=db,
@@ -177,7 +218,7 @@ async def api_execute_apply_plan(
         )
 
         created_nodes: list[dict] = []
-        for a in assets:
+        for idx, a in enumerate(assets_v2):
             folder_name = ASSET_TYPE_FOLDER_NAMES.get(a.type)
             if not folder_name:
                 continue
@@ -188,20 +229,41 @@ async def api_execute_apply_plan(
                 parent_id=assets_root_id,
                 name=folder_name,
             )
-            filename = asset_filename(asset_type=a.type, name=a.name, asset_id=None)
-            content = json.dumps(a.model_dump(), ensure_ascii=False, indent=2)
-            node = await vfs_service.create_text_file(
+            md_filename = asset_doc_filename(asset_type=a.type, name=a.name, asset_id=None)
+            md_content = render_asset_doc_md(doc=a)
+            md_node = await vfs_service.upsert_text_file(
                 db=db,
                 user_id=user.id,
-                name=filename,
-                content=content,
+                name=md_filename,
+                content=md_content,
+                parent_id=type_folder_id,
+                workspace_id=None,
+                project_id=project_id,
+                content_type="text/markdown; charset=utf-8",
+            )
+            json_payload = assets_json_payloads[idx] if idx < len(assets_json_payloads) else a.model_dump()
+            json_filename = asset_filename(asset_type=a.type, name=a.name, asset_id=None)
+            json_node = await vfs_service.upsert_text_file(
+                db=db,
+                user_id=user.id,
+                name=json_filename,
+                content=json.dumps(json_payload, ensure_ascii=False, indent=2),
                 parent_id=type_folder_id,
                 workspace_id=None,
                 project_id=project_id,
                 content_type="application/json; charset=utf-8",
             )
-            created_nodes.append({"type": a.type, "name": a.name, "node_id": str(node.id), "filename": filename})
-        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_nodes})
+            created_nodes.append(
+                {
+                    "type": a.type,
+                    "name": a.name,
+                    "md_node_id": str(md_node.id),
+                    "md_filename": md_filename,
+                    "json_node_id": str(json_node.id),
+                    "json_filename": json_filename,
+                }
+            )
+        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_nodes, "provenance": provenance})
 
     if plan.kind == "asset_bind" and plan.tool_id == "asset_bind":
         episode_number = int((plan.inputs or {}).get("episode_number") or 0)
@@ -228,6 +290,70 @@ async def api_execute_apply_plan(
             project_id=project_id,
             content_type="application/json; charset=utf-8",
         )
-        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": [{"episode_number": episode_number, "node_id": str(node.id), "filename": filename}]})
+        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": [{"episode_number": episode_number, "node_id": str(node.id), "filename": filename}], "provenance": provenance})
+
+    if plan.kind == "asset_doc_upsert" and plan.tool_id == "asset_doc_upsert":
+        raw_type = str((plan.inputs or {}).get("asset_type") or "").strip()
+        raw_name = str((plan.inputs or {}).get("asset_name") or "").strip()
+        content_md = str((plan.inputs or {}).get("content_md") or "")
+        node_id_raw = (plan.inputs or {}).get("node_id")
+        match_type = str((plan.inputs or {}).get("match_type") or "").strip()
+        confidence = float((plan.inputs or {}).get("confidence") or 0.0)
+        reason_md = str((plan.inputs or {}).get("reason_md") or "")
+        diff_md = str((plan.inputs or {}).get("diff_md") or "")
+
+        if not raw_type or not raw_name:
+            raise HTTPException(status_code=400, detail="invalid_asset_ref")
+
+        assets_root_id = await _get_or_create_root_folder(
+            db=db,
+            user_id=user.id,
+            project_id=project_id,
+            name=ASSETS_FOLDER_NAME,
+        )
+        folder_name = ASSET_TYPE_FOLDER_NAMES.get(raw_type)
+        if not folder_name:
+            raise HTTPException(status_code=400, detail="invalid_asset_type")
+        type_folder_id = await _get_or_create_child_folder(
+            db=db,
+            user_id=user.id,
+            project_id=project_id,
+            parent_id=assets_root_id,
+            name=folder_name,
+        )
+
+        filename = asset_doc_filename(asset_type=raw_type, name=raw_name, asset_id=None)
+        parent_id = type_folder_id
+        if node_id_raw:
+            try:
+                node_uuid = UUID(str(node_id_raw))
+            except Exception:
+                raise HTTPException(status_code=400, detail="invalid_node_id")
+            node = await db.get(FileNode, node_uuid)
+            if not node or node.is_folder or not node.parent_id:
+                raise HTTPException(status_code=404, detail="node_not_found")
+            filename = node.name or filename
+            parent_id = node.parent_id
+
+        written = await vfs_service.upsert_text_file(
+            db=db,
+            user_id=user.id,
+            name=filename,
+            content=(content_md or "").rstrip() + "\n",
+            parent_id=parent_id,
+            workspace_id=None,
+            project_id=project_id,
+            content_type="text/markdown; charset=utf-8",
+        )
+        return ResponseBase(
+            code=200,
+            msg="OK",
+            data={
+                "plan_id": str(plan.id),
+                "created": [{"node_id": str(written.id), "filename": written.name}],
+                "decision": {"match_type": match_type, "confidence": confidence, "reason_md": reason_md, "diff_md": diff_md},
+                "provenance": provenance,
+            },
+        )
 
     raise HTTPException(status_code=400, detail="unsupported_plan")

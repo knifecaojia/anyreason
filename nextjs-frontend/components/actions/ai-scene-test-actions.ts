@@ -54,7 +54,7 @@ export type AISceneTestOptions = { agents: AISceneTestAgentOption[]; tools: AISc
 
 export type ApplyPlan = {
   id: string;
-  kind: "episode_save" | "asset_create" | "asset_bind";
+  kind: "episode_save" | "asset_create" | "asset_bind" | "asset_doc_upsert";
   tool_id: string;
   inputs: Record<string, unknown>;
   preview: Record<string, unknown>;
@@ -62,7 +62,7 @@ export type ApplyPlan = {
 
 export type AISceneTestChatMessage = { role: "user" | "assistant" | "system"; content: string };
 
-export type AISceneTestChatResponse = { output_text: string; plans: ApplyPlan[] };
+export type AISceneTestChatResponse = { output_text: string; plans: ApplyPlan[]; archive?: any };
 
 export async function aiAdminSceneTestOptions() {
   return authedFetch<ApiResponse<AISceneTestOptions>>({
@@ -76,6 +76,8 @@ export async function aiAdminSceneTestChat(input: {
   tool_ids: string[];
   script_text: string;
   messages: AISceneTestChatMessage[];
+  project_id?: string | null;
+  context_exclude_types?: string[];
 }) {
   return authedFetch<ApiResponse<AISceneTestChatResponse>>({
     method: "POST",
@@ -83,4 +85,3 @@ export async function aiAdminSceneTestChat(input: {
     body: input,
   });
 }
-

@@ -7,7 +7,7 @@ import type { Task, TaskEventPayload, TaskStatus } from "@/lib/tasks/types";
 type TaskContextValue = {
   tasks: Task[];
   upsertTask: (task: Task) => void;
-  refreshTasks: (opts?: { status?: TaskStatus[] }) => Promise<void>;
+  refreshTasks: (opts?: { status?: TaskStatus[]; page?: number; size?: number }) => Promise<{ items: Task[]; page: number; size: number }>;
   subscribeTask: (taskId: string, handler: (ev: TaskEventPayload) => void) => () => void;
 };
 
@@ -55,10 +55,12 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     setTasksById((prev) => ({ ...prev, [task.id]: task }));
   }, []);
 
-  const refreshTasks = useCallback(async (opts?: { status?: TaskStatus[] }) => {
+  const refreshTasks = useCallback(async (opts?: { status?: TaskStatus[]; page?: number; size?: number }) => {
+    const page = opts?.page && opts.page > 0 ? String(opts.page) : "1";
+    const size = opts?.size && opts.size > 0 ? String(opts.size) : "50";
     const params = new URLSearchParams();
-    params.set("page", "1");
-    params.set("size", "50");
+    params.set("page", page);
+    params.set("size", size);
     if (opts?.status?.length) {
       params.set("status", opts.status.join(","));
     }
@@ -69,6 +71,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       for (const t of items) next[t.id] = t;
       return next;
     });
+    return { items, page: parseInt(page, 10), size: parseInt(size, 10) };
   }, []);
 
   const subscribeTask = useCallback((taskId: string, handler: (ev: TaskEventPayload) => void) => {

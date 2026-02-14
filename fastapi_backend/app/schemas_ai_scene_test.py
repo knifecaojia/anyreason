@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 from app.ai_tools.apply_plan import ApplyPlan
@@ -46,9 +48,11 @@ class AISceneTestChatRequest(BaseModel):
     tool_ids: list[str] = Field(default_factory=list)
     script_text: str = Field(default="", description="用户粘贴的剧本文本")
     messages: list[AISceneTestChatMessage] = Field(default_factory=list)
+    project_id: UUID | None = Field(default=None, description="可选：用于上下文注入与归档的项目 ID")
+    context_exclude_types: list[str] = Field(default_factory=list, description="可选：上下文注入排除的资产类型")
 
 
 class AISceneTestChatResponse(BaseModel):
     output_text: str
     plans: list[ApplyPlan] = Field(default_factory=list)
-
+    archive: dict | None = None

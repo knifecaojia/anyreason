@@ -26,6 +26,16 @@ class AssetDocV1(BaseModel):
     meta: dict = Field(default_factory=dict)
 
 
+class AssetDocV2(BaseModel):
+    version: Literal[2] = 2
+    type: AssetType
+    name: str = Field(min_length=1)
+    keywords: list[str] = Field(default_factory=list)
+    first_appearance_episode: int | None = Field(default=None, ge=1)
+    details_md: str = ""
+    provenance: dict = Field(default_factory=dict)
+
+
 class EpisodeAssetBindingV1(BaseModel):
     episode_number: int = Field(ge=1)
     asset_type: AssetType
@@ -38,4 +48,3 @@ class EpisodeBindingsDocV1(BaseModel):
     version: Literal[1] = 1
     episode_number: int = Field(ge=1)
     bindings: list[EpisodeAssetBindingV1] = Field(default_factory=list)
-

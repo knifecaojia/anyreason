@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ListTodo } from "lucide-react";
 
 import { useTasks } from "@/components/tasks/TaskProvider";
@@ -35,23 +35,40 @@ function FilterButton({
 
 export default function Page() {
   const { tasks, refreshTasks, upsertTask } = useTasks();
-  const [filter, setFilter] = useState<Filter>("active");
+  const [filter, setFilter] = useState<Filter>("all");
   const [busy, setBusy] = useState(false);
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
+  const pageSize = 50;
 
   const visible = useMemo(() => {
     return filterTasks(tasks, filter);
   }, [filter, tasks]);
 
-  const refresh = async () => {
+  const refresh = async (opts?: { page?: number }) => {
     setBusy(true);
     try {
-      if (filter === "active") await refreshTasks({ status: ["queued", "running"] });
-      else if (filter === "all") await refreshTasks();
-      else await refreshTasks({ status: [filter] });
+      const nextPage = opts?.page && opts.page > 0 ? opts.page : 1;
+      let res: { items: Task[]; page: number; size: number };
+      if (filter === "active") res = await refreshTasks({ status: ["queued", "running"], page: nextPage, size: pageSize });
+      else if (filter === "all") res = await refreshTasks({ page: nextPage, size: pageSize });
+      else res = await refreshTasks({ status: [filter], page: nextPage, size: pageSize });
+      if (nextPage === 1) {
+        setPage(1);
+        setHasMore(res.items.length >= pageSize);
+      } else {
+        setPage(nextPage);
+        if (res.items.length < pageSize) setHasMore(false);
+      }
     } finally {
       setBusy(false);
     }
   };
+
+  useEffect(() => {
+    setHasMore(true);
+    void refresh({ page: 1 });
+  }, [filter]);
 
   const cancelTask = async (taskId: string) => {
     setBusy(true);
@@ -127,6 +144,17 @@ export default function Page() {
         onCancel={(id) => void cancelTask(id)}
         onRetry={(id) => void retryTask(id)}
       />
+
+      <div className="flex items-center justify-center">
+        <button
+          type="button"
+          disabled={busy || !hasMore}
+          onClick={() => void refresh({ page: page + 1 })}
+          className="px-4 py-2 rounded-xl bg-surface border border-border text-xs font-bold text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors disabled:opacity-50"
+        >
+          {!hasMore ? "没有更多了" : busy ? "加载中..." : "加载更多"}
+        </button>
+      </div>
     </div>
   );
 }
