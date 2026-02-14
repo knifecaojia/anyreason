@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from collections.abc import AsyncIterator
 from typing import Any
 from uuid import UUID
 
@@ -12,6 +13,7 @@ from app.ai_gateway.types import ResolvedModelConfig
 from app.config import settings
 from app.core.exceptions import AppError
 from app.crypto import build_fernet
+from app.log import logger
 from app.models import AIModelBinding, AIModelConfig, AIUsageEvent
 from app.services.credit_service import credit_service
 
@@ -177,6 +179,15 @@ class AIGatewayService:
             raise
         except Exception as e:
             error_code = "upstream_error"
+            logger.bind(
+                context={
+                    "category": "text",
+                    "binding_key": resolved_binding_key,
+                    "manufacturer": cfg.manufacturer,
+                    "model": cfg.model,
+                    "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                }
+            ).exception("ai_gateway.chat_text_failed")
             if consumed_credits > 0:
                 await credit_service.adjust_balance(
                     db=db,
@@ -207,6 +218,122 @@ class AIGatewayService:
                         "has_attachments": bool(attachments),
                         "refunded": bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None),
                         "result_keys": list(raw.keys()) if isinstance(raw, dict) else [],
+                    },
+                )
+            )
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
+
+    async def chat_text_stream(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        binding_key: str | None,
+        model_config_id: UUID | None,
+        messages: list[dict[str, Any]],
+        attachments: list[dict[str, Any]],
+        credits_cost: int = 1,
+    ) -> AsyncIterator[dict[str, Any]]:
+        cfg, cfg_id, resolved_binding_key = await self._resolve_model_config(
+            db=db,
+            category="text",
+            binding_key=binding_key,
+            model_config_id=model_config_id,
+            default_binding_key="chatbox",
+        )
+
+        credits_cost = int(credits_cost or 0)
+        consumed_credits = 0
+        if credits_cost > 0:
+            await credit_service.adjust_balance(
+                db=db,
+                user_id=user_id,
+                delta=-credits_cost,
+                reason="ai.consume",
+                actor_user_id=None,
+                meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                allow_negative=False,
+            )
+            await db.commit()
+            consumed_credits = credits_cost
+
+        started = time.perf_counter()
+        error_code: str | None = None
+        emitted_any = False
+        output_parts: list[str] = []
+        try:
+            provider = provider_factory.get_text_provider(manufacturer=cfg.manufacturer)
+            merged_messages = _merge_attachments(messages, attachments)
+            async for delta in provider.chat_completions_stream(cfg=cfg, messages=merged_messages, timeout_seconds=60.0):
+                emitted_any = True
+                output_parts.append(delta)
+                yield {"type": "delta", "delta": delta}
+            yield {"type": "done", "output_text": "".join(output_parts)}
+        except AppError as e:
+            error_code = "app_error"
+            if consumed_credits > 0:
+                await credit_service.adjust_balance(
+                    db=db,
+                    user_id=user_id,
+                    delta=consumed_credits,
+                    reason="ai.refund",
+                    actor_user_id=None,
+                    meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    allow_negative=False,
+                )
+                await db.commit()
+                consumed_credits = 0
+            if emitted_any:
+                yield {"type": "error", "message": str(e.msg), "code": int(e.code or 500)}
+                return
+            raise
+        except Exception as e:
+            error_code = "upstream_error"
+            logger.bind(
+                context={
+                    "category": "text",
+                    "binding_key": resolved_binding_key,
+                    "manufacturer": cfg.manufacturer,
+                    "model": cfg.model,
+                    "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                }
+            ).exception("ai_gateway.chat_text_stream_failed")
+            if consumed_credits > 0:
+                await credit_service.adjust_balance(
+                    db=db,
+                    user_id=user_id,
+                    delta=consumed_credits,
+                    reason="ai.refund",
+                    actor_user_id=None,
+                    meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    allow_negative=False,
+                )
+                await db.commit()
+                consumed_credits = 0
+            if emitted_any:
+                yield {"type": "error", "message": str(e), "code": 502}
+                return
+            raise AppError(msg="AI chat failed", code=502, status_code=502, data=str(e))
+        finally:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            db.add(
+                AIUsageEvent(
+                    user_id=user_id,
+                    category="text",
+                    binding_key=resolved_binding_key,
+                    ai_model_config_id=cfg_id,
+                    cost_credits=consumed_credits,
+                    latency_ms=latency_ms,
+                    error_code=error_code,
+                    raw_payload={
+                        "manufacturer": cfg.manufacturer,
+                        "model": cfg.model,
+                        "has_attachments": bool(attachments),
+                        "refunded": bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None),
+                        "output_chars": sum(len(x) for x in output_parts),
                     },
                 )
             )

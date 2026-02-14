@@ -35,6 +35,7 @@ export const config = {
     "/projects/:path*",
     "/scripts/:path*",
     "/extraction/:path*",
+    "/ai-scenes/:path*",
     "/assets/:path*",
     "/storyboard/:path*",
     "/studio/:path*",

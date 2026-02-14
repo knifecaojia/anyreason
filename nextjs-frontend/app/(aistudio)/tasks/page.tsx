@@ -5,7 +5,7 @@ import { ListTodo } from "lucide-react";
 
 import { useTasks } from "@/components/tasks/TaskProvider";
 import { TaskList, filterTasks } from "@/components/tasks/TaskList";
-import type { TaskStatus } from "@/lib/tasks/types";
+import type { Task, TaskStatus } from "@/lib/tasks/types";
 
 type Filter = "all" | "active" | TaskStatus;
 
@@ -34,7 +34,7 @@ function FilterButton({
 }
 
 export default function Page() {
-  const { tasks, refreshTasks } = useTasks();
+  const { tasks, refreshTasks, upsertTask } = useTasks();
   const [filter, setFilter] = useState<Filter>("active");
   const [busy, setBusy] = useState(false);
 
@@ -58,6 +58,12 @@ export default function Page() {
     try {
       const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/cancel`, { method: "POST", cache: "no-store" });
       if (!res.ok) throw new Error(await res.text());
+      try {
+        const body = (await res.json()) as { data?: Task };
+        if (body?.data) upsertTask(body.data);
+      } catch {
+        return;
+      }
       await refresh();
     } finally {
       setBusy(false);
@@ -69,6 +75,12 @@ export default function Page() {
     try {
       const res = await fetch(`/api/tasks/${encodeURIComponent(taskId)}/retry`, { method: "POST", cache: "no-store" });
       if (!res.ok) throw new Error(await res.text());
+      try {
+        const body = (await res.json()) as { data?: Task };
+        if (body?.data) upsertTask(body.data);
+      } catch {
+        return;
+      }
       await refresh();
     } finally {
       setBusy(false);

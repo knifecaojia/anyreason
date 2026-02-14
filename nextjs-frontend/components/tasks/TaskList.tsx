@@ -25,6 +25,13 @@ function statusColor(status: Task["status"]) {
 }
 
 function getContinueHref(t: Task) {
+  if (t.type === TASK_TYPES.aiSceneTestChat) {
+    const to = new URL("/ai-scenes", "http://local");
+    to.searchParams.set("chatTaskId", t.id);
+    to.searchParams.set("openChat", "1");
+    return `${to.pathname}?${to.searchParams.toString()}`;
+  }
+
   const input = (t.input_json || {}) as Record<string, unknown>;
   const scriptId = typeof input.script_id === "string" && input.script_id ? input.script_id : null;
   if (!scriptId) return null;
@@ -182,13 +189,13 @@ export function TaskList({
                   {(() => {
                     const href = getContinueHref(t);
                     if (!href) return null;
-                    if (t.status !== "succeeded") return null;
+                    if (t.type !== TASK_TYPES.aiSceneTestChat && t.status !== "succeeded") return null;
                     return (
                       <Link
                         href={href}
                         className="px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/25 text-xs font-bold text-primary hover:border-primary/50 hover:bg-primary/15 transition-colors"
                       >
-                        继续
+                        {t.type === TASK_TYPES.aiSceneTestChat ? "查看" : "继续"}
                       </Link>
                     );
                   })()}

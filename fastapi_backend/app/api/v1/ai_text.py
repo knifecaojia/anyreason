@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_gateway import ai_gateway_service
@@ -36,3 +38,29 @@ async def ai_text_chat(
         output_text = ""
     return ResponseBase(code=200, msg="OK", data=AITextChatResponse(output_text=str(output_text), raw=raw))
 
+
+@router.post("/ai/text/chat/stream")
+async def ai_text_chat_stream(
+    body: AITextChatRequest,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+    attachments = [a.model_dump() for a in body.attachments]
+
+    async def iterator():
+        async for evt in ai_gateway_service.chat_text_stream(
+            db=db,
+            user_id=user.id,
+            binding_key=body.binding_key,
+            model_config_id=body.model_config_id,
+            messages=messages,
+            attachments=attachments,
+        ):
+            yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n".encode("utf-8")
+
+    return StreamingResponse(
+        iterator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

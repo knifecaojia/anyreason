@@ -95,6 +95,13 @@ SCENE_SEEDS: list[SceneSeed] = [
         builtin_agent_code="episode_expert",
     ),
     SceneSeed(
+        scene_code="episode_characters",
+        name="角色提取（剧集）",
+        type="process",
+        description="从指定剧集的剧本文本中提取角色列表",
+        builtin_agent_code="character_expert",
+    ),
+    SceneSeed(
         scene_code="asset_extract",
         name="资产提取",
         type="process",
@@ -123,7 +130,15 @@ async def seed_agent_platform_assets(*, session: AsyncSession) -> None:
     agents_by_code = {a.agent_code: a for a in agent_rows}
 
     for seed in BUILTIN_AGENT_SEEDS:
-        if seed.agent_code in agents_by_code:
+        existing = agents_by_code.get(seed.agent_code)
+        if existing is not None:
+            if not (getattr(existing, "name", None) or "").strip():
+                existing.name = seed.name
+            if not (getattr(existing, "description", None) or "").strip():
+                existing.description = seed.description
+            if not (getattr(existing, "category", None) or "").strip():
+                existing.category = seed.category
+            session.add(existing)
             continue
         a = BuiltinAgent(
             agent_code=seed.agent_code,

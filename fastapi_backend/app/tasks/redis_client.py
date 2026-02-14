@@ -10,4 +10,11 @@ from app.config import settings
 
 @lru_cache(maxsize=1)
 def get_redis() -> Redis:
-    return from_url(settings.REDIS_URL, decode_responses=True)
+    return from_url(
+        settings.REDIS_URL,
+        decode_responses=True,
+        socket_connect_timeout=2,
+        socket_timeout=15,
+        retry_on_timeout=True,
+        health_check_interval=30,
+    )

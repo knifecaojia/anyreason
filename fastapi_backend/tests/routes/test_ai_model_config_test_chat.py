@@ -50,6 +50,47 @@ async def test_admin_model_config_test_chat_ok(test_client, authenticated_superu
 
 
 @pytest.mark.asyncio
+async def test_admin_model_config_test_chat_stream_ok(test_client, authenticated_superuser, monkeypatch):
+    class _DummyProvider:
+        async def chat_completions_stream(self, *, cfg, messages, timeout_seconds):
+            _ = (cfg, messages, timeout_seconds)
+            yield "po"
+            yield "ng"
+
+    from app.ai_gateway.factory import provider_factory
+
+    monkeypatch.setattr(provider_factory, "get_text_provider", lambda *, manufacturer: _DummyProvider())
+
+    res = await test_client.post(
+        "/api/v1/ai/admin/model-configs",
+        headers=authenticated_superuser["headers"],
+        json={
+            "category": "text",
+            "manufacturer": "openai",
+            "model": "gpt-4o-mini",
+            "base_url": "https://api.openai.com/v1",
+            "api_key": "sk-test",
+            "enabled": True,
+            "sort_order": 0,
+        },
+    )
+    assert res.status_code == 200
+    model_config_id = res.json()["data"]["id"]
+
+    res = await test_client.post(
+        f"/api/v1/ai/admin/model-configs/{model_config_id}/test-chat/stream",
+        headers=authenticated_superuser["headers"],
+        json={"messages": [{"role": "user", "content": "ping"}]},
+    )
+    assert res.status_code == 200
+    body = res.text
+    assert '"type": "delta"' in body
+    assert '"type": "done"' in body
+    assert "po" in body
+    assert "ng" in body
+
+
+@pytest.mark.asyncio
 async def test_admin_model_config_test_chat_missing_api_key(test_client, authenticated_superuser):
     res = await test_client.post(
         "/api/v1/ai/admin/model-configs",

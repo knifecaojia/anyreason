@@ -19,7 +19,7 @@ async def handle_task_ws(*, websocket: WebSocket, manager: TaskWebSocketManager)
     try:
         while True:
             await websocket.receive()
-    except WebSocketDisconnect:
+    except (WebSocketDisconnect, RuntimeError):
         pass
     finally:
         await manager.disconnect(user_id=user_id, websocket=websocket)

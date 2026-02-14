@@ -409,9 +409,23 @@ async def get_script_stats(
 @router.post("/{script_id}/structure", response_model=ResponseBase[ScriptHierarchyRead])
 async def structure_script(
     script_id: UUID,
+    force: bool = Query(False),
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ):
+    if not force:
+        episodes_count = int(
+            (
+                await db.execute(
+                    select(func.count()).select_from(Episode).where(Episode.project_id == script_id)
+                )
+            ).scalar_one()
+            or 0
+        )
+        if episodes_count > 0:
+            data = await _build_script_hierarchy(db=db, script_id=script_id)
+            return ResponseBase(code=200, msg="OK", data=data)
+
     await script_structure_service.structure_script(db=db, user_id=user.id, script_id=script_id)
     data = await _build_script_hierarchy(db=db, script_id=script_id)
     return ResponseBase(code=200, msg="OK", data=data)

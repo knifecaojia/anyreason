@@ -10,6 +10,8 @@ from app.tasks.handlers.freeform_asset_extraction_compare_preview import Freefor
 from app.tasks.handlers.scene_storyboard_preview import SceneStoryboardPreviewHandler
 from app.tasks.handlers.episode_vfx_agent_apply import EpisodeVfxAgentApplyHandler
 from app.tasks.handlers.user_app_run import UserAppRunHandler
+from app.tasks.handlers.ai_scene_test_chat import AiSceneTestChatHandler
+from app.tasks.handlers.episode_doc_backfill import EpisodeDocBackfillHandler
 
 TASK_HANDLER_REGISTRY = {
     NoopTaskHandler.task_type: NoopTaskHandler(),
@@ -24,4 +26,6 @@ TASK_HANDLER_REGISTRY = {
     FreeformAssetExtractionComparePreviewHandler.task_type: FreeformAssetExtractionComparePreviewHandler(),
     SceneStoryboardPreviewHandler.task_type: SceneStoryboardPreviewHandler(),
     UserAppRunHandler.task_type: UserAppRunHandler(),
+    AiSceneTestChatHandler.task_type: AiSceneTestChatHandler(),
+    EpisodeDocBackfillHandler.task_type: EpisodeDocBackfillHandler(),
 }

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_gateway import ai_gateway_service
@@ -83,6 +85,37 @@ async def admin_test_model_config_chat(
         code=200,
         msg="OK",
         data=AdminAIModelConfigTestChatResponse(output_text=str(output_text), raw=raw),
+    )
+
+
+@router.post(
+    "/ai/admin/model-configs/{model_config_id}/test-chat/stream",
+    dependencies=[Depends(require_permissions(["system.ai_models"]))],
+)
+async def admin_test_model_config_chat_stream(
+    model_config_id: UUID,
+    body: AdminAIModelConfigTestChatRequest,
+    db: AsyncSession = Depends(get_async_session),
+    actor: User = Depends(require_permissions(["system.ai_models"])),
+):
+    messages = [{"role": m.role, "content": m.content} for m in body.messages]
+
+    async def iterator():
+        async for evt in ai_gateway_service.chat_text_stream(
+            db=db,
+            user_id=actor.id,
+            binding_key=None,
+            model_config_id=model_config_id,
+            messages=messages,
+            attachments=[],
+            credits_cost=0,
+        ):
+            yield f"data: {json.dumps(evt, ensure_ascii=False)}\n\n".encode("utf-8")
+
+    return StreamingResponse(
+        iterator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

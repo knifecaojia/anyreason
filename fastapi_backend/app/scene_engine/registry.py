@@ -9,6 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import BuiltinAgent, Scene
+from app.scene_engine.scenes.chat import ChatInput, ChatOutput, run_chat
+from app.scene_engine.scenes.episode_characters import (
+    EpisodeCharacterExtractInput,
+    EpisodeCharacterExtractOutput,
+    run_episode_characters,
+)
 from app.scene_engine.scenes.script_split import ScriptSplitInput, ScriptSplitOutput, run_script_split
 
 
@@ -33,6 +39,18 @@ class SceneDefinition:
 
 
 SCENE_DEFINITIONS: dict[str, SceneDefinition] = {
+    "chat": SceneDefinition(
+        scene_code="chat",
+        input_model=ChatInput,
+        output_model=ChatOutput,
+        run=run_chat,
+    ),
+    "episode_characters": SceneDefinition(
+        scene_code="episode_characters",
+        input_model=EpisodeCharacterExtractInput,
+        output_model=EpisodeCharacterExtractOutput,
+        run=run_episode_characters,
+    ),
     "script_split": SceneDefinition(
         scene_code="script_split",
         input_model=ScriptSplitInput,
@@ -80,4 +98,3 @@ async def run_scene(
         raise ValueError("scene_not_found")
     input_obj = definition.input_model.model_validate(payload)
     return await definition.run(db=db, user_id=user_id, payload=input_obj)
-

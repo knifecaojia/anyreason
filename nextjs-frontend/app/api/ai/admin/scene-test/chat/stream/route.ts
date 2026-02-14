@@ -1,0 +1,34 @@
+"use server";
+
+import { cookies } from "next/headers";
+import { NextResponse } from "next/server";
+
+function getApiBaseUrl() {
+  return process.env.INTERNAL_API_BASE_URL || process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
+}
+
+export async function POST(request: Request) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("accessToken")?.value;
+  if (!token) return new NextResponse("unauthorized", { status: 401 });
+
+  const upstreamUrl = new URL("/api/v1/ai/admin/scene-test/chat/stream", getApiBaseUrl()).toString();
+  const upstream = await fetch(upstreamUrl, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": request.headers.get("content-type") || "application/json",
+    },
+    body: await request.text(),
+    cache: "no-store",
+  });
+
+  return new NextResponse(upstream.body, {
+    status: upstream.status,
+    headers: {
+      "content-type": upstream.headers.get("content-type") || "text/event-stream; charset=utf-8",
+      "cache-control": "no-cache",
+    },
+  });
+}
+

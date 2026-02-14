@@ -3,59 +3,36 @@ from __future__ import annotations
 import asyncio
 import os
 import sys
-import traceback
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import select
-
 from app.config import settings
-from app.database import async_session_maker
-from app.models import Task
-from app.tasks.handlers.registry import TASK_HANDLER_REGISTRY
 from app.tasks.redis_client import get_redis
-from app.tasks.reporter import TaskReporter
+from app.tasks.process_task import process_task
 
 
-async def _process_task(*, task_id: UUID) -> None:
-    async with async_session_maker() as db:
-        res = await db.execute(select(Task).where(Task.id == task_id))
-        task = res.scalars().first()
-        if task is None:
-            return
-        if task.status != "queued":
-            return
-
-        reporter = TaskReporter(db=db, task=task)
-        await reporter.log(message="任务开始执行", level="info", payload={"task_type": str(task.type or "").strip()})
-        await reporter.set_running()
-
-        raw_type = str(task.type or "")
-        task_type = raw_type.strip()
-        handler = TASK_HANDLER_REGISTRY.get(task_type)
-        if handler is None:
-            known = ", ".join(sorted(TASK_HANDLER_REGISTRY.keys()))
-            await reporter.fail(
-                error=f"Unknown task type: {raw_type!r}. Known: {known}",
-                details={"task_type": raw_type, "known": list(sorted(TASK_HANDLER_REGISTRY.keys()))},
-            )
-            return
-
-        try:
-            await reporter.log(message="进入任务处理器", level="info", payload={"handler": handler.__class__.__name__, "task_type": task_type})
-            result = await handler.run(db=db, task=reporter.task, reporter=reporter)
-        except Exception as e:
-            tb = traceback.format_exc()
-            await reporter.fail(error=str(e), details={"exception_type": type(e).__name__, "traceback": tb[-20000:]})
-            return
-
-        await reporter.succeed(result_json=result or {})
+def _load_task_handler_registry():
+    try:
+        from app.tasks.handlers.registry import TASK_HANDLER_REGISTRY
+    except ModuleNotFoundError as e:
+        missing = getattr(e, "name", None) or "unknown"
+        print(f"[task-worker] import failed: missing module {missing!r}", flush=True)
+        print("[task-worker] fix:", flush=True)
+        print("  1) cd fastapi_backend", flush=True)
+        print("  2) uv sync", flush=True)
+        print("  3) uv run python -m app.tasks.worker --reload", flush=True)
+        raise
+    return TASK_HANDLER_REGISTRY
 
 
 async def _worker_loop() -> None:
     r = get_redis()
     while True:
-        item = await r.brpop(settings.TASK_QUEUE_KEY, timeout=5)
+        try:
+            item = await r.brpop(settings.TASK_QUEUE_KEY, timeout=5)
+        except Exception:
+            await asyncio.sleep(0.5)
+            continue
         if not item:
             continue
         _queue, raw_id = item
@@ -63,7 +40,7 @@ async def _worker_loop() -> None:
             task_id = UUID(str(raw_id))
         except Exception:
             continue
-        await _process_task(task_id=task_id)
+        await process_task(task_id=task_id)
 
 
 def _run_worker() -> None:
@@ -71,8 +48,9 @@ def _run_worker() -> None:
 
 
 def main() -> None:
+    registry = _load_task_handler_registry()
     now = datetime.now(timezone.utc).isoformat()
-    known = ", ".join(sorted(TASK_HANDLER_REGISTRY.keys()))
+    known = ", ".join(sorted(registry.keys()))
     print(f"[task-worker] starting at {now}", flush=True)
     print(f"[task-worker] known task types: {known}", flush=True)
     reload_enabled = ("--reload" in sys.argv) or (os.getenv("TASK_WORKER_RELOAD", "").strip() == "1")

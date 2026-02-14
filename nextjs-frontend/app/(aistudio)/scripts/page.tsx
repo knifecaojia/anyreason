@@ -158,6 +158,7 @@ export default function Page() {
   const [episodes, setEpisodes] = useState<EpisodeRow[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
   const [episodesError, setEpisodesError] = useState<string | null>(null);
+  const [hierarchyLoadedScriptId, setHierarchyLoadedScriptId] = useState<string | null>(null);
   const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
   const [writePane, setWritePane] = useState<"dashboard" | "episodes" | "assets" | "editor">(initialPane);
   const [scriptStats, setScriptStats] = useState<ScriptStats | null>(null);
@@ -273,6 +274,7 @@ export default function Page() {
     const list = Array.isArray(json.data?.episodes) ? json.data?.episodes : [];
     setEpisodes(list);
     setEpisodesLoading(false);
+    setHierarchyLoadedScriptId(targetScriptId);
     if (list.length > 0) setActiveEpisodeId((prev) => prev ?? list[0].id);
   };
 
@@ -318,8 +320,10 @@ export default function Page() {
     if (!isWriteMode || !scriptId) {
       setEpisodes([]);
       setActiveEpisodeId(null);
+      setHierarchyLoadedScriptId(null);
       return;
     }
+    setHierarchyLoadedScriptId(null);
     void refreshHierarchy(scriptId);
   }, [isWriteMode, scriptId]);
 
@@ -336,6 +340,7 @@ export default function Page() {
   useEffect(() => {
     if (!isWriteMode || !scriptId) return;
     if (episodesLoading) return;
+    if (hierarchyLoadedScriptId !== scriptId) return;
     if (episodes.length > 0) return;
     if (autoStructuredRef.current.has(scriptId)) return;
     autoStructuredRef.current.add(scriptId);
@@ -353,11 +358,27 @@ export default function Page() {
     })().finally(() => {
       setTasksRunning((prev) => prev.filter((t) => t.id !== "structure"));
     });
-  }, [isWriteMode, scriptId, episodesLoading, episodes.length]);
+  }, [isWriteMode, scriptId, episodesLoading, episodes.length, hierarchyLoadedScriptId]);
 
   useEffect(() => {
     if (!activeEpisode) return;
-    setEpisodeScriptDraft(activeEpisode.script_full_text || "");
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/doc`, { cache: "no-store" });
+        if (res.ok) {
+          const json = (await res.json()) as { data?: { content_md?: string } };
+          const md = json.data?.content_md;
+          const fallback = activeEpisode.script_full_text || "";
+          if (!cancelled) setEpisodeScriptDraft(md ?? fallback);
+          return;
+        }
+      } catch {}
+      if (!cancelled) setEpisodeScriptDraft(activeEpisode.script_full_text || "");
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, [activeEpisode?.id]);
 
   const resetCreateScript = () => {
@@ -534,10 +555,10 @@ export default function Page() {
     if (!activeEpisode) return;
     setEpisodeSaving(true);
     setTaskError(null);
-    const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}`, {
-      method: "PATCH",
+    const res = await fetch(`/api/episodes/${encodeURIComponent(activeEpisode.id)}/doc`, {
+      method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ script_full_text: episodeScriptDraft }),
+      body: JSON.stringify({ content_md: episodeScriptDraft }),
     });
     if (!res.ok) {
       setEpisodeSaving(false);
@@ -581,7 +602,7 @@ export default function Page() {
     setTaskError(null);
     setTasksRunning((prev) => (prev.some((t) => t.id === "structure") ? prev : [...prev, { id: "structure", label: "自动化分集" }]));
     try {
-      const res = await fetch(`/api/scripts/${encodeURIComponent(scriptId)}/structure`, { method: "POST" });
+      const res = await fetch(`/api/scripts/${encodeURIComponent(scriptId)}/structure?force=1`, { method: "POST" });
       if (!res.ok) {
         setTaskError(await res.text());
         return;

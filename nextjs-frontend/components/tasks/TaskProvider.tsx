@@ -8,9 +8,22 @@ type TaskContextValue = {
   tasks: Task[];
   upsertTask: (task: Task) => void;
   refreshTasks: (opts?: { status?: TaskStatus[] }) => Promise<void>;
+  subscribeTask: (taskId: string, handler: (ev: TaskEventPayload) => void) => () => void;
 };
 
 const TaskContext = createContext<TaskContextValue | null>(null);
+
+export function shouldRefetchTaskOnEvent(eventType: string) {
+  return (
+    eventType === "created" ||
+    eventType === "running" ||
+    eventType === "progress" ||
+    eventType === "succeeded" ||
+    eventType === "failed" ||
+    eventType === "canceled" ||
+    eventType === "retried"
+  );
+}
 
 function getWsUrl(ticket: string) {
   const base =
@@ -36,6 +49,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<number | null>(null);
   const connectRef = useRef<(() => Promise<void>) | null>(null);
+  const listenersByTaskIdRef = useRef<Map<string, Set<(ev: TaskEventPayload) => void>>>(new Map());
 
   const upsertTask = useCallback((task: Task) => {
     setTasksById((prev) => ({ ...prev, [task.id]: task }));
@@ -55,6 +69,21 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       for (const t of items) next[t.id] = t;
       return next;
     });
+  }, []);
+
+  const subscribeTask = useCallback((taskId: string, handler: (ev: TaskEventPayload) => void) => {
+    const id = String(taskId || "").trim();
+    if (!id) return () => {};
+    const map = listenersByTaskIdRef.current;
+    const set = map.get(id) || new Set();
+    set.add(handler);
+    map.set(id, set);
+    return () => {
+      const s = map.get(id);
+      if (!s) return;
+      s.delete(handler);
+      if (s.size === 0) map.delete(id);
+    };
   }, []);
 
   const connect = useCallback(async () => {
@@ -77,17 +106,18 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       }
       if (!payload?.task_id) return;
 
-      if (payload.event_type === "failed") {
-        try {
-          const res = await fetchJson<{ data?: Task }>(`/api/tasks/${payload.task_id}`);
-          if (res?.data) upsertTask(res.data);
-        } catch {
-          return;
+      const listeners = listenersByTaskIdRef.current.get(payload.task_id);
+      if (listeners && listeners.size) {
+        for (const fn of listeners) {
+          try {
+            fn(payload);
+          } catch {
+            continue;
+          }
         }
-        return;
       }
 
-      if (payload.event_type === "running" || payload.event_type === "progress" || payload.event_type === "succeeded") {
+      if (shouldRefetchTaskOnEvent(payload.event_type)) {
         try {
           const res = await fetchJson<{ data?: Task }>(`/api/tasks/${payload.task_id}`);
           if (res?.data) upsertTask(res.data);
@@ -114,6 +144,7 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
       wsRef.current?.close();
       wsRef.current = null;
       connectRef.current = null;
+      listenersByTaskIdRef.current.clear();
     };
   }, [connect, refreshTasks]);
 
@@ -121,7 +152,10 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     return Object.values(tasksById).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));
   }, [tasksById]);
 
-  const value = useMemo<TaskContextValue>(() => ({ tasks, upsertTask, refreshTasks }), [refreshTasks, tasks, upsertTask]);
+  const value = useMemo<TaskContextValue>(
+    () => ({ tasks, upsertTask, refreshTasks, subscribeTask }),
+    [refreshTasks, subscribeTask, tasks, upsertTask]
+  );
 
   return <TaskContext.Provider value={value}>{children}</TaskContext.Provider>;
 }

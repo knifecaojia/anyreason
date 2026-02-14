@@ -15,7 +15,12 @@ export async function POST(_request: Request, ctx: { params: Promise<{ scriptId:
     return new NextResponse("unauthorized", { status: 401 });
   }
 
-  const upstream = await fetch(new URL(`/api/v1/scripts/${encodeURIComponent(scriptId)}/structure`, getApiBaseUrl()).toString(), {
+  const requestUrl = new URL(_request.url);
+  const upstreamUrl = new URL(`/api/v1/scripts/${encodeURIComponent(scriptId)}/structure`, getApiBaseUrl());
+  const force = requestUrl.searchParams.get("force");
+  if (force) upstreamUrl.searchParams.set("force", force);
+
+  const upstream = await fetch(upstreamUrl.toString(), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
     cache: "no-store",

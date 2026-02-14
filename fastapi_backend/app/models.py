@@ -483,6 +483,11 @@ class Episode(Base):
     title = Column(String(255), nullable=True)
     summary = Column(Text, nullable=True)
     script_full_text = Column(Text, nullable=True)
+    episode_doc_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     storyboard_root_node_id = Column(
         UUID(as_uuid=True),
         ForeignKey("file_nodes.id", ondelete="SET NULL"),

@@ -985,19 +985,78 @@ export default function Page() {
     }
 
     const nextMessages: AIChatMessage[] = [...modelTestMessages, { role: "user", content }];
-    setModelTestMessages(nextMessages);
+    setModelTestMessages([...nextMessages, { role: "assistant", content: "" }]);
     setModelTestInput("");
     setModelTestSubmitting(true);
     setModelTestError(null);
     try {
-      const res = await aiAdminTestChat(modelTestModelConfigId, nextMessages);
-      const data = res.data;
-      const outputText = (data?.output_text || "").trim();
-      setModelTestLastRaw(data?.raw || null);
-      setModelTestMessages([
-        ...nextMessages,
-        { role: "assistant", content: outputText || "（空响应）" },
-      ]);
+      const resp = await fetch(`/api/ai/admin/model-configs/${modelTestModelConfigId}/test-chat/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: nextMessages }),
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(t || resp.statusText);
+      }
+      if (!resp.body) {
+        throw new Error("流式响应不可用");
+      }
+
+      setModelTestLastRaw(null);
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let buffer = "";
+      let acc = "";
+
+      const flushEvent = (payload: any) => {
+        if (!payload || typeof payload !== "object") return;
+        if (payload.type === "delta") {
+          const d = typeof payload.delta === "string" ? payload.delta : "";
+          if (!d) return;
+          acc += d;
+          setModelTestMessages((prev) => {
+            if (prev.length === 0) return prev;
+            const out = prev.slice();
+            const last = out[out.length - 1];
+            if (last?.role === "assistant") out[out.length - 1] = { role: "assistant", content: acc };
+            return out;
+          });
+        } else if (payload.type === "done") {
+          const finalText = (acc || payload.output_text || "").trim();
+          setModelTestMessages((prev) => {
+            if (prev.length === 0) return prev;
+            const out = prev.slice();
+            const last = out[out.length - 1];
+            if (last?.role === "assistant") out[out.length - 1] = { role: "assistant", content: finalText || "（空响应）" };
+            return out;
+          });
+        } else if (payload.type === "error") {
+          const msg = typeof payload.message === "string" ? payload.message : "请求失败";
+          setModelTestError(msg);
+        }
+      };
+
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const parts = buffer.split("\n\n");
+        buffer = parts.pop() || "";
+        for (const part of parts) {
+          const lines = part.split("\n");
+          for (const line of lines) {
+            if (!line.startsWith("data:")) continue;
+            const raw = line.slice(5).trim();
+            if (!raw) continue;
+            try {
+              flushEvent(JSON.parse(raw));
+            } catch {
+              continue;
+            }
+          }
+        }
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "请求失败";
       setModelTestError(msg);

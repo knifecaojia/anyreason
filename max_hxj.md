@@ -182,7 +182,90 @@
 
 ---
 
+## 3.6）剧集内容：DB 与 VFS 的“双栖”存储（以及为什么你会感觉有点拧巴）
+
+很多人第一次看这个仓库会困惑：**同样是“剧集”，为什么既在数据库里，又在 VFS（虚拟文件系统）里？**
+
+你可以把它类比成：
+- **数据库**像“索引卡片盒”：适合筛选、排序、联表、做权限与任务流状态管理
+- **VFS（file_nodes + MinIO）**像“文件柜”：适合放“人类可读、可版本化、可导出”的正文与产物
+
+当前实现里，这两套系统都存在，但负责的东西不完全一致。
+
+### A. 数据库里到底存了什么（episodes / storyboards）
+
+以 `episodes` 表为例（后端 [models.py](file:///f:/animate-serial/apps/anyreason/fastapi_backend/app/models.py)）：
+- `episode_code / episode_number / title`：这类是稳定索引与展示字段
+- `start_line / end_line / word_count`：用于“源码映射”（从上传的剧本全文里切片）
+- `script_full_text`：**把该集的剧本文本直接存入 DB**，便于 UI/Agent 直接读
+- `storyboard_root_node_id / asset_root_node_id`：**把“该集 AI 产物输出目录”挂到 VFS 的节点**
+
+再往下一级：
+- `storyboards` 表存的是“镜头条目”的结构化结果（shot_code、scene_number、description 等）
+
+把这块串起来的关键流程是 [script_structure_service.py](file:///f:/animate-serial/apps/anyreason/fastapi_backend/app/services/script_structure_service.py)：
+1) 剧本文件先上传到 MinIO（scripts 表里存 bucket/key）
+2) 后端把 MinIO 文本读出来，解析成分集
+3) 分集写入 `episodes`，并“删旧重建”对应的 `storyboards`
+
+### B. VFS 里到底存了什么（分集/资产/绑定/故事板）
+
+VFS 的核心是 `file_nodes` 表（“目录树”）+ MinIO（“文件内容”），见 [models.py](file:///f:/animate-serial/apps/anyreason/fastapi_backend/app/models.py) 与 [vfs_service.py](file:///f:/animate-serial/apps/anyreason/fastapi_backend/app/services/storage/vfs_service.py)。
+
+目前主要有两类写入路径：
+
+**1）Apply Plan（Chatbox 的“预览落库”工具链）写入**
+
+后端入口是 [apply_plans.py](file:///f:/animate-serial/apps/anyreason/fastapi_backend/app/api/v1/apply_plans.py)，会在项目根目录创建/复用三棵树：
+- `分集/`：写 `EPxxx*.md`
+- `资产/`：按“角色/道具/地点/特效”子目录写 `*.json`
+- `绑定/`：写 `EPxxx_bindings.json`
+
+这些文件对应的“文档结构”在 [vfs_docs.py](file:///f:/animate-serial/apps/anyreason/fastapi_backend/app/vfs_docs.py)。
+
+**2）异步 Task（Agent Apply）写入**
+
+例如故事板 apply：[episode_storyboard_agent_apply.py](file:///f:/animate-serial/apps/anyreason/fastapi_backend/app/tasks/handlers/episode_storyboard_agent_apply.py)
+- 先确保 `episode.storyboard_root_node_id` 指向一个 VFS 文件夹
+- 调用 Agent 生成多个 Markdown 对象（用 `---` 分隔）
+- 每个对象写成一个 `001_xxx.md` 文件
+
+资产相关 apply（多处复用的工具函数在 [episode_asset_apply_utils.py](file:///f:/animate-serial/apps/anyreason/fastapi_backend/app/tasks/handlers/episode_asset_apply_utils.py)）也类似。
+
+### C. 这里“拧巴”的点是什么（也是你提到的“结构化不一致”的根源之一）
+
+当前现状本质上是：  
+**数据库里有一份“可查询的结构化文本（script_full_text/storyboards）”，VFS 里又在生成另一套“面向人类阅读/导出”的文档。**
+
+这会带来三个典型问题：
+1) **单一事实来源（SSOT）不清晰**：到底以 DB 为准还是以 Markdown 为准？
+2) **产物散落**：Apply Plan 的“分集/资产/绑定”是一套目录；Task 的“故事板/资产”是另一套目录（并且以 node_id 绑定，不一定有统一的可视层级）
+3) **AI 一旦不稳定，结构化表就会痛苦**：解析/约束会变成“和模型输出对抗”的工作
+
+这也正好解释了你提的倾向：把“正文”统一成 Markdown，把 DB 降级成轻量 meta/索引。
+
+---
+
+## 3.7）更合理的 Dry Run：让 AI 先把“要写什么”摆在桌面上
+
+仓库里其实已经有一个很有价值的设计：**ApplyPlan**（见 [apply_plan.py](file:///f:/animate-serial/apps/anyreason/fastapi_backend/app/ai_tools/apply_plan.py)）。
+
+它的意义是：  
+让 Agent 先产出一个“写入计划”（包含 preview），人类看完觉得对，再调用后端执行写入。
+
+目前的问题主要不在后端，而在“预览怎么呈现”。为此我补了一步：在前端的 **AI 场景测试**页面，把每个 plan 的关键信息（文件名/内容/可复制文本）展开显示，避免只能看一个大 JSON 才知道写入了什么。
+
+对应页面位置：  
+- [ai-scenes/page.tsx](file:///f:/animate-serial/apps/anyreason/nextjs-frontend/app/(aistudio)/ai-scenes/page.tsx)
+
+这套 Dry Run 流程建议固定成 3 段式：
+1) **提取（Preview Task）**：只跑预览 handler（比如资产提取预览），把 raw 输出和结构化结果都返回
+2) **计划（ApplyPlan dry_run）**：把“将写入哪些文件、文件名是什么、内容长什么样”组成 plan.preview
+3) **应用（Execute）**：用户确认后再写入 VFS（并在 UI 明确提示“会覆盖哪些文件/会新增哪些文件”）
+
 ## 4）运行方式：两条路（都保留）
+
+### 路 A：一键起全栈（推荐）
 
 ### 路 A：一键起全栈（推荐）
 

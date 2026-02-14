@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from uuid import UUID
 
@@ -29,14 +30,16 @@ class TaskService:
         await task_repository.create_task_event(
             db=db, task_id=task.id, event_type="created", payload={"status": task.status}
         )
-        await publish_task_event(
-            payload={
-                "user_id": str(task.user_id),
-                "task_id": str(task.id),
-                "event_type": "created",
-                "status": task.status,
-                "progress": int(task.progress or 0),
-            }
+        asyncio.create_task(
+            publish_task_event(
+                payload={
+                    "user_id": str(task.user_id),
+                    "task_id": str(task.id),
+                    "event_type": "created",
+                    "status": task.status,
+                    "progress": int(task.progress or 0),
+                }
+            )
         )
         await enqueue_task(task_id=task.id)
         return task
@@ -95,14 +98,16 @@ class TaskService:
         await task_repository.create_task_event(
             db=db, task_id=task.id, event_type="canceled", payload={"status": task.status}
         )
-        await publish_task_event(
-            payload={
-                "user_id": str(task.user_id),
-                "task_id": str(task.id),
-                "event_type": "canceled",
-                "status": task.status,
-                "progress": int(task.progress or 0),
-            }
+        asyncio.create_task(
+            publish_task_event(
+                payload={
+                    "user_id": str(task.user_id),
+                    "task_id": str(task.id),
+                    "event_type": "canceled",
+                    "status": task.status,
+                    "progress": int(task.progress or 0),
+                }
+            )
         )
         return task
 
@@ -123,14 +128,16 @@ class TaskService:
         await task_repository.create_task_event(
             db=db, task_id=task.id, event_type="retried", payload={"status": task.status}
         )
-        await publish_task_event(
-            payload={
-                "user_id": str(task.user_id),
-                "task_id": str(task.id),
-                "event_type": "retried",
-                "status": task.status,
-                "progress": int(task.progress or 0),
-            }
+        asyncio.create_task(
+            publish_task_event(
+                payload={
+                    "user_id": str(task.user_id),
+                    "task_id": str(task.id),
+                    "event_type": "retried",
+                    "status": task.status,
+                    "progress": int(task.progress or 0),
+                }
+            )
         )
         await enqueue_task(task_id=task.id)
         return task

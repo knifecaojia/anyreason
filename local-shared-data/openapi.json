@@ -5448,6 +5448,52 @@
         }
       }
     },
+    "/api/v1/apply-plans/execute": {
+      "post": {
+        "tags": [
+          "apply_plans"
+        ],
+        "summary": "Api Execute Apply Plan",
+        "operationId": "api_execute_apply_plan",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ApplyExecuteRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/admin/builtin-agents": {
       "get": {
         "tags": [
@@ -9694,6 +9740,60 @@
         },
         "type": "object",
         "title": "AgentUpdateRequest"
+      },
+      "ApplyExecuteRequest": {
+        "properties": {
+          "plan": {
+            "$ref": "#/components/schemas/ApplyPlan"
+          },
+          "confirm": {
+            "type": "boolean",
+            "title": "Confirm",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "plan"
+        ],
+        "title": "ApplyExecuteRequest"
+      },
+      "ApplyPlan": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "episode_save",
+              "asset_create",
+              "asset_bind"
+            ],
+            "title": "Kind"
+          },
+          "tool_id": {
+            "type": "string",
+            "title": "Tool Id"
+          },
+          "inputs": {
+            "type": "object",
+            "title": "Inputs"
+          },
+          "preview": {
+            "type": "object",
+            "title": "Preview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "kind",
+          "tool_id",
+          "inputs"
+        ],
+        "title": "ApplyPlan"
       },
       "AssetBindingBrief": {
         "properties": {
