@@ -25,14 +25,17 @@ def test_parse_supports_chinese_episode_headers():
         [
             "第2集：风起",
             "内容A",
+            "第3卷：新篇",
+            "内容X",
             "第10话 - 终章",
             "内容B",
         ]
     )
     episodes = parse_script_to_episodes(text)
-    assert [e.episode_number for e in episodes] == [2, 10]
+    assert [e.episode_number for e in episodes] == [2, 3, 10]
     assert episodes[0].title == "风起"
-    assert episodes[1].title == "终章"
+    assert episodes[1].title == "新篇"
+    assert episodes[2].title == "终章"
 
 
 def test_parse_fallback_when_no_episode_header():

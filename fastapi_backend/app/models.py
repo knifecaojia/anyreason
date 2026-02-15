@@ -562,6 +562,12 @@ class Storyboard(Base):
         cascade="all, delete-orphan",
         passive_deletes=True,
     )
+    image_prompts = relationship(
+        "ImagePrompt",
+        back_populates="storyboard",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
     asset_bindings = relationship("AssetBinding", back_populates="storyboard")
 
     __table_args__ = (
@@ -591,6 +597,27 @@ class VideoPrompt(Base):
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
     storyboard = relationship("Storyboard", back_populates="video_prompts")
+
+
+class ImagePrompt(Base):
+    __tablename__ = "image_prompts"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    storyboard_id = Column(UUID(as_uuid=True), ForeignKey("storyboards.id", ondelete="CASCADE"), nullable=True)
+
+    prompt_main = Column(Text, nullable=True)
+    negative_prompt = Column(Text, nullable=True)
+    style_model = Column(String(50), nullable=True)
+    aspect_ratio = Column(String(10), nullable=True)
+
+    character_prompts = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    camera_settings = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+
+    generation_notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    storyboard = relationship("Storyboard", back_populates="image_prompts")
 
 
 class QCReport(Base):

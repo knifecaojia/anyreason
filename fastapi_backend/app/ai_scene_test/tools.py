@@ -5,23 +5,27 @@ import json
 import re
 from pathlib import Path
 from typing import Any, Literal
+from uuid import UUID
 
 from pydantic import BaseModel, Field, field_validator
 from pydantic_ai import RunContext
 from pydantic_ai.models.openai import OpenAIChatModel
 from pydantic_ai.providers.openai import OpenAIProvider
+from sqlalchemy import select
 
 from app.ai_runtime.pydanticai_model_factory import resolve_text_model_for_pydantic_ai
 from app.ai_scene_test.deps import SceneTestDeps
 from app.ai_scene_test.service import resolve_builtin_agent_version
 from app.ai_tools.apply_plan import ApplyPlan
 from app.scene_engine.scenes.script_split import ScriptSplitOutput
+from app.schemas import AIShotDraft
 from app.services.context_builder_service import build_project_asset_context_bundle
 from app.services.pydanticai_debug_log import (
     create_pydanticai_debug_logger,
     create_pydanticai_debug_logger_for_path,
     is_pydanticai_debug_enabled,
 )
+from app.models import Episode, Storyboard
 from app.vfs_docs import AssetDocV1, AssetDocV2, EpisodeDocV1
 from app.vfs_layout import asset_doc_filename, episode_filename
 from app.vfs_renderers.asset_doc_renderer import render_asset_doc_md
@@ -594,3 +598,278 @@ async def preview_extract_locations(ctx: RunContext[SceneTestDeps]) -> ApplyPlan
 
 async def preview_extract_vfx(ctx: RunContext[SceneTestDeps]) -> ApplyPlan:
     return await _preview_asset_extraction(ctx=ctx, agent_code="vfx_expert", asset_type="vfx")
+
+
+class _StoryboardShotsOutput(BaseModel):
+    shots: list[AIShotDraft] = Field(default_factory=list)
+
+
+async def preview_storyboard_apply(
+    ctx: RunContext[SceneTestDeps],
+    storyboard_id: str,
+    mode: Literal["replace", "append"] = "replace",
+) -> ApplyPlan:
+    await _emit(
+        ctx,
+        {
+            "type": "tool_start",
+            "tool_id": "preview_storyboard_apply",
+            "label": "分镜创建预览",
+            "storyboard_id": storyboard_id,
+            "mode": mode,
+        },
+    )
+    if not ctx.deps.project_id:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "project_id_required"})
+        return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "project_id_required"})
+
+    try:
+        sb_uuid = UUID(str(storyboard_id))
+    except Exception:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "invalid_storyboard_id"})
+        return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "invalid_storyboard_id"})
+
+    row = (
+        await ctx.deps.db.execute(
+            select(Storyboard, Episode).join(Episode, Storyboard.episode_id == Episode.id).where(Storyboard.id == sb_uuid)
+        )
+    ).first()
+    if not row:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "storyboard_not_found"})
+        return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "storyboard_not_found"})
+    storyboard, episode = row
+    if episode.project_id != ctx.deps.project_id:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "project_mismatch"})
+        return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "project_mismatch"})
+
+    scene_info = "\n".join(
+        [
+            "<SCENE>",
+            f"scene_code: {storyboard.scene_code or ''}",
+            f"scene_number: {int(storyboard.scene_number or 0)}",
+            f"location: {storyboard.location or ''}",
+            f"time_of_day: {storyboard.time_of_day or ''}",
+            "</SCENE>",
+            "",
+            "<SCENE_SCRIPT>",
+            (storyboard.description or "").strip(),
+            "</SCENE_SCRIPT>",
+        ]
+    ).strip()
+
+    version = _pick_version(ctx, "storyboard_expert", 1)
+    out = await _run_structured_agent(
+        ctx=ctx,
+        agent_code="storyboard_expert",
+        version=version,
+        output_type=_StoryboardShotsOutput,
+        user_text=scene_info,
+        extra_instructions=(
+            "请将分场剧本拆解成镜头列表。\n"
+            "要求：shots 至少 1 条；description 必须具体可拍；active_assets 尽量列出出镜资产名称或关键词。\n"
+            "字段不确定用 null；不要输出解释文本。"
+        ),
+    )
+    shots_out = _StoryboardShotsOutput.model_validate(out)
+    shots = list(shots_out.shots or [])
+    if not shots:
+        shots = [AIShotDraft(description=(storyboard.description or "").strip() or None)]
+
+    plan = ApplyPlan(
+        kind="storyboard_apply",
+        tool_id="preview_storyboard_apply",
+        inputs={
+            "project_id": str(ctx.deps.project_id),
+            "storyboard_id": str(sb_uuid),
+            "mode": mode,
+            "shots": [s.model_dump() for s in shots],
+        },
+        preview={
+            "count": len(shots),
+            "episode_number": int(episode.episode_number or 0),
+            "scene_number": int(storyboard.scene_number or 0),
+        },
+    )
+    ctx.deps.plans.append(plan)
+    await _emit(
+        ctx,
+        {
+            "type": "tool_done",
+            "tool_id": "preview_storyboard_apply",
+            "label": "分镜创建预览",
+            "preview": {"count": len(shots)},
+        },
+    )
+    return plan
+
+
+class _ImagePromptDraft(BaseModel):
+    prompt_main: str = Field(default="")
+    negative_prompt: str | None = None
+    style_model: str | None = None
+    aspect_ratio: str | None = None
+    character_prompts: list[dict[str, Any]] = Field(default_factory=list)
+    camera_settings: dict[str, Any] = Field(default_factory=dict)
+    generation_notes: str | None = None
+
+
+async def preview_image_prompt(ctx: RunContext[SceneTestDeps], storyboard_id: str) -> ApplyPlan:
+    await _emit(
+        ctx,
+        {
+            "type": "tool_start",
+            "tool_id": "preview_image_prompt",
+            "label": "分镜生图提示词预览",
+            "storyboard_id": storyboard_id,
+        },
+    )
+    if not ctx.deps.project_id:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_image_prompt", "message": "project_id_required"})
+        return ApplyPlan(kind="image_prompt_upsert", tool_id="preview_image_prompt", inputs={}, preview={"error": "project_id_required"})
+
+    try:
+        sb_uuid = UUID(str(storyboard_id))
+    except Exception:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_image_prompt", "message": "invalid_storyboard_id"})
+        return ApplyPlan(kind="image_prompt_upsert", tool_id="preview_image_prompt", inputs={}, preview={"error": "invalid_storyboard_id"})
+
+    row = (
+        await ctx.deps.db.execute(
+            select(Storyboard, Episode).join(Episode, Storyboard.episode_id == Episode.id).where(Storyboard.id == sb_uuid)
+        )
+    ).first()
+    if not row:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_image_prompt", "message": "storyboard_not_found"})
+        return ApplyPlan(kind="image_prompt_upsert", tool_id="preview_image_prompt", inputs={}, preview={"error": "storyboard_not_found"})
+    storyboard, episode = row
+    if episode.project_id != ctx.deps.project_id:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_image_prompt", "message": "project_mismatch"})
+        return ApplyPlan(kind="image_prompt_upsert", tool_id="preview_image_prompt", inputs={}, preview={"error": "project_mismatch"})
+
+    user_text = "\n\n".join(
+        [
+            "镜头信息：",
+            f"shot_code: {storyboard.shot_code}",
+            f"shot_type: {storyboard.shot_type or ''}",
+            f"camera_move: {storyboard.camera_move or ''}",
+            "画面描述：",
+            (storyboard.description or "").strip(),
+            "对白：",
+            (storyboard.dialogue or "").strip(),
+        ]
+    ).strip()
+
+    version = _pick_version(ctx, "image_prompt_expert", 1)
+    out = await _run_structured_agent(
+        ctx=ctx,
+        agent_code="image_prompt_expert",
+        version=version,
+        output_type=_ImagePromptDraft,
+        user_text=user_text,
+        extra_instructions="请输出用于生图的提示词结构（prompt_main 必填），并尽量给出 negative_prompt 与 camera_settings。",
+    )
+    draft = _ImagePromptDraft.model_validate(out)
+    plan = ApplyPlan(
+        kind="image_prompt_upsert",
+        tool_id="preview_image_prompt",
+        inputs={
+            "project_id": str(ctx.deps.project_id),
+            "prompts": [
+                {
+                    "storyboard_id": str(sb_uuid),
+                    **draft.model_dump(),
+                }
+            ],
+        },
+        preview={
+            "episode_number": int(episode.episode_number or 0),
+            "shot_code": storyboard.shot_code,
+            "prompt_main": draft.prompt_main,
+        },
+    )
+    ctx.deps.plans.append(plan)
+    await _emit(ctx, {"type": "tool_done", "tool_id": "preview_image_prompt", "label": "分镜生图提示词预览"})
+    return plan
+
+
+class _VideoPromptDraft(_ImagePromptDraft):
+    duration: float | None = None
+
+
+async def preview_video_prompt(ctx: RunContext[SceneTestDeps], storyboard_id: str) -> ApplyPlan:
+    await _emit(
+        ctx,
+        {
+            "type": "tool_start",
+            "tool_id": "preview_video_prompt",
+            "label": "分镜生视频提示词预览",
+            "storyboard_id": storyboard_id,
+        },
+    )
+    if not ctx.deps.project_id:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_video_prompt", "message": "project_id_required"})
+        return ApplyPlan(kind="video_prompt_upsert", tool_id="preview_video_prompt", inputs={}, preview={"error": "project_id_required"})
+
+    try:
+        sb_uuid = UUID(str(storyboard_id))
+    except Exception:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_video_prompt", "message": "invalid_storyboard_id"})
+        return ApplyPlan(kind="video_prompt_upsert", tool_id="preview_video_prompt", inputs={}, preview={"error": "invalid_storyboard_id"})
+
+    row = (
+        await ctx.deps.db.execute(
+            select(Storyboard, Episode).join(Episode, Storyboard.episode_id == Episode.id).where(Storyboard.id == sb_uuid)
+        )
+    ).first()
+    if not row:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_video_prompt", "message": "storyboard_not_found"})
+        return ApplyPlan(kind="video_prompt_upsert", tool_id="preview_video_prompt", inputs={}, preview={"error": "storyboard_not_found"})
+    storyboard, episode = row
+    if episode.project_id != ctx.deps.project_id:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_video_prompt", "message": "project_mismatch"})
+        return ApplyPlan(kind="video_prompt_upsert", tool_id="preview_video_prompt", inputs={}, preview={"error": "project_mismatch"})
+
+    user_text = "\n\n".join(
+        [
+            "镜头信息：",
+            f"shot_code: {storyboard.shot_code}",
+            f"shot_type: {storyboard.shot_type or ''}",
+            f"camera_move: {storyboard.camera_move or ''}",
+            "画面描述：",
+            (storyboard.description or "").strip(),
+            "对白：",
+            (storyboard.dialogue or "").strip(),
+        ]
+    ).strip()
+
+    version = _pick_version(ctx, "video_prompt_expert", 1)
+    out = await _run_structured_agent(
+        ctx=ctx,
+        agent_code="video_prompt_expert",
+        version=version,
+        output_type=_VideoPromptDraft,
+        user_text=user_text,
+        extra_instructions="请输出用于生视频的提示词结构（prompt_main 必填），并尽量给出 negative_prompt、camera_settings 与 duration。",
+    )
+    draft = _VideoPromptDraft.model_validate(out)
+    plan = ApplyPlan(
+        kind="video_prompt_upsert",
+        tool_id="preview_video_prompt",
+        inputs={
+            "project_id": str(ctx.deps.project_id),
+            "prompts": [
+                {
+                    "storyboard_id": str(sb_uuid),
+                    **draft.model_dump(),
+                }
+            ],
+        },
+        preview={
+            "episode_number": int(episode.episode_number or 0),
+            "shot_code": storyboard.shot_code,
+            "prompt_main": draft.prompt_main,
+        },
+    )
+    ctx.deps.plans.append(plan)
+    await _emit(ctx, {"type": "tool_done", "tool_id": "preview_video_prompt", "label": "分镜生视频提示词预览"})
+    return plan

@@ -87,6 +87,31 @@ export async function aiAdminUpdateScene(sceneCode: string, patch: Partial<{
   });
 }
 
+export async function aiAdminCreateScene(body: {
+  scene_code: string;
+  name: string;
+  type: string;
+  description?: string | null;
+  builtin_agent_code?: string | null;
+  required_tools?: string[];
+  input_schema?: Record<string, unknown>;
+  output_schema?: Record<string, unknown>;
+  ui_config?: Record<string, unknown>;
+}) {
+  return authedFetch<ApiResponse<AdminAIScene>>({
+    method: "POST",
+    path: "/api/v1/ai/admin/scenes",
+    body,
+  });
+}
+
+export async function aiAdminDeleteScene(sceneCode: string) {
+  return authedFetch<ApiResponse<{ deleted: boolean }>>({
+    method: "DELETE",
+    path: `/api/v1/ai/admin/scenes/${encodeURIComponent(sceneCode)}`,
+  });
+}
+
 export async function aiSceneRun(sceneCode: string, payload: Record<string, unknown>) {
   return authedFetch<ApiResponse<Record<string, unknown>>>({
     method: "POST",
@@ -94,4 +119,3 @@ export async function aiSceneRun(sceneCode: string, payload: Record<string, unkn
     body: payload,
   });
 }
-

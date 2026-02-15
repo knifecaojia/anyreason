@@ -5,6 +5,13 @@ import { AlertCircle, MessageSquare, RefreshCw, Settings2, Wrench } from "lucide
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { aiAdminListModelConfigs, type AIModelConfig } from "@/components/actions/ai-model-actions";
+import {
+  aiAdminCreateScene,
+  aiAdminDeleteScene,
+  aiAdminListScenes,
+  aiAdminUpdateScene,
+  type AdminAIScene,
+} from "@/components/actions/ai-scene-actions";
 import { aiAdminSceneTestOptions, type AISceneTestAgentOption, type AISceneTestChatMessage, type ApplyPlan } from "@/components/actions/ai-scene-test-actions";
 import {
   builtinAgentAdminCreateVersion,
@@ -36,6 +43,85 @@ function pickDefaultVersion(agent: AISceneTestAgentOption | null): number {
   if (!agent) return 1;
   const d = (agent.versions || []).find((v) => v.is_default);
   return d ? d.version : (agent.versions?.[0]?.version || 1);
+}
+
+function TabButton(props: { active: boolean; label: string; onClick: () => void }) {
+  const { active, label, onClick } = props;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`px-3 py-2 rounded-md text-sm font-bold transition-colors ${
+        active ? "bg-surfaceHighlight border border-border text-textMain" : "text-textMuted hover:text-textMain"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function pad2(n: number) {
+  return String(n).padStart(2, "0");
+}
+
+function nowTag() {
+  const d = new Date();
+  const yyyy = String(d.getFullYear());
+  const mm = pad2(d.getMonth() + 1);
+  const dd = pad2(d.getDate());
+  const hh = pad2(d.getHours());
+  const mi = pad2(d.getMinutes());
+  const ss = pad2(d.getSeconds());
+  return `${yyyy}${mm}${dd}_${hh}${mi}${ss}`;
+}
+
+function slugifyAscii(input: string) {
+  const s = String(input || "").trim().toLowerCase();
+  if (!s) return "";
+  return s
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+/, "")
+    .replace(/_+$/, "")
+    .replace(/_+/g, "_")
+    .slice(0, 64);
+}
+
+function uniqueSceneCode(base: string, existing: Set<string>) {
+  const normalized = base.trim().toLowerCase();
+  if (!existing.has(normalized)) return normalized;
+  for (let i = 2; i < 10_000; i++) {
+    const candidate = `${normalized}_${i}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return `${normalized}_${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function generateSceneCode(params: { name?: string; existing: Set<string> }) {
+  const hinted = slugifyAscii(params.name || "");
+  const base = hinted || `scene_${nowTag()}_${Math.random().toString(36).slice(2, 6)}`;
+  return uniqueSceneCode(base, params.existing);
+}
+
+type SceneDraft = {
+  scene_code: string;
+  name: string;
+  type: string;
+  description: string;
+  builtin_agent_code: string;
+  required_tools_text: string;
+  ui_config_text: string;
+};
+
+function emptySceneDraft(): SceneDraft {
+  return {
+    scene_code: "",
+    name: "",
+    type: "chat",
+    description: "",
+    builtin_agent_code: "script_expert",
+    required_tools_text: "[]",
+    ui_config_text: "{}",
+  };
 }
 
 function planSummary(plan: ApplyPlan) {
@@ -328,14 +414,16 @@ function ChatDialog(props: {
   open: boolean;
   onClose: () => void;
   onReset: () => void;
+  sceneCode: string;
+  sceneName: string;
   scriptText: string;
   setScriptText: (v: string) => void;
   scripts: ScriptRead[];
   episodes: EpisodeRead[];
   selectedScriptId: string;
-  selectedEpisodeId: string;
+  selectedEpisodeIds: string[];
   onSelectScript: (scriptId: string) => void;
-  onSelectEpisode: (episodeId: string) => void;
+  onSelectEpisodes: (episodeIds: string[]) => void;
   onInsertEpisodeText: () => void;
   contextPreview: { counts: Record<string, number> } | null;
   contextPreviewLoading: boolean;
@@ -359,14 +447,16 @@ function ChatDialog(props: {
     open,
     onClose,
     onReset,
+    sceneCode,
+    sceneName,
     scriptText,
     setScriptText,
     scripts,
     episodes,
     selectedScriptId,
-    selectedEpisodeId,
+    selectedEpisodeIds,
     onSelectScript,
-    onSelectEpisode,
+    onSelectEpisodes,
     onInsertEpisodeText,
     contextPreview,
     contextPreviewLoading,
@@ -402,6 +492,9 @@ function ChatDialog(props: {
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <div className="min-w-0">
             <div className="text-lg font-bold">AI 场景测试</div>
+            <div className="text-[11px] text-textMuted truncate">
+              {sceneCode ? `场景：${sceneName ? `${sceneName} · ` : ""}${sceneCode}` : "场景：未选择"}
+            </div>
             <div className="text-[11px] text-textMuted truncate">
               {taskId
                 ? `任务：${taskId} · ${taskStatus || "-"} · ${taskProgress}%${taskStatus === "queued" ? "（排队中）" : ""}`
@@ -548,28 +641,73 @@ function ChatDialog(props: {
                       ))}
                     </select>
                   </label>
-                  <label className="space-y-1">
-                    <div className="text-[11px] text-textMuted">选择剧集</div>
-                    <select
-                      className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm"
-                      value={selectedEpisodeId}
-                      onChange={(e) => onSelectEpisode(e.target.value)}
-                      disabled={!selectedScriptId}
-                    >
-                      <option value="">（不选择）</option>
-                      {episodes.map((ep) => (
-                        <option key={ep.id} value={ep.id}>
-                          EP{String(ep.episode_number).padStart(3, "0")} {ep.title || ""}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <div className="space-y-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-textMuted">选择剧集（可多选）</div>
+                      <div className="text-[11px] text-textMuted">
+                        已选 {selectedEpisodeIds.length}/{episodes.length || 0}
+                      </div>
+                    </div>
+                    <details className="rounded-md bg-background border border-border">
+                      <summary className="cursor-pointer select-none px-3 py-2 text-sm">
+                        {selectedEpisodeIds.length === 0
+                          ? "（不选择）"
+                          : selectedEpisodeIds.length === episodes.length
+                            ? "已全选"
+                            : `已选择 ${selectedEpisodeIds.length} 项`}
+                      </summary>
+                      <div className="p-3 space-y-2 border-t border-border">
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            disabled={!selectedScriptId || episodes.length === 0}
+                            onClick={() => onSelectEpisodes(episodes.map((e) => e.id))}
+                            className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface disabled:opacity-60"
+                          >
+                            全选
+                          </button>
+                          <button
+                            type="button"
+                            disabled={!selectedScriptId || selectedEpisodeIds.length === 0}
+                            onClick={() => onSelectEpisodes([])}
+                            className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface disabled:opacity-60"
+                          >
+                            清空
+                          </button>
+                        </div>
+                        <div className="max-h-[220px] overflow-auto space-y-1">
+                          {episodes.length === 0 && <div className="text-xs text-textMuted">暂无剧集</div>}
+                          {episodes.map((ep) => {
+                            const checked = selectedEpisodeIds.includes(ep.id);
+                            return (
+                              <label key={ep.id} className="flex items-center gap-2 text-sm">
+                                <input
+                                  type="checkbox"
+                                  checked={checked}
+                                  disabled={!selectedScriptId}
+                                  onChange={(e) => {
+                                    const next = new Set(selectedEpisodeIds);
+                                    if (e.target.checked) next.add(ep.id);
+                                    else next.delete(ep.id);
+                                    onSelectEpisodes(Array.from(next));
+                                  }}
+                                />
+                                <span className="truncate">
+                                  EP{String(ep.episode_number).padStart(3, "0")} {ep.title || ""}
+                                </span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </details>
+                  </div>
                   <div className="space-y-1">
                     <div className="text-[11px] text-textMuted">插入</div>
                     <button
                       type="button"
                       onClick={onInsertEpisodeText}
-                      disabled={!selectedEpisodeId}
+                      disabled={selectedEpisodeIds.length === 0}
                       className="w-full px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface disabled:opacity-60"
                     >
                       插入到文本
@@ -748,19 +886,20 @@ export default function AIScenesPage() {
   const [agents, setAgents] = useState<AISceneTestAgentOption[]>([]);
   const [tools, setTools] = useState<Array<{ tool_id: string; label: string; uses_agent_codes: string[] }>>([]);
 
-  const [mainAgentCode, setMainAgentCode] = useState<string>("");
+  const [mainAgentCode, setMainAgentCode] = useState<string>("script_expert");
   const [mainAgentVersion, setMainAgentVersion] = useState<number>(1);
 
   const [subAgentCodes, setSubAgentCodes] = useState<string[]>([]);
   const [subAgentVersions, setSubAgentVersions] = useState<Record<string, number>>({});
 
   const [toolIds, setToolIds] = useState<string[]>(["preview_script_split", "preview_extract_characters"]);
+  const [sideTab, setSideTab] = useState<"tools" | "run">("tools");
 
   const [scriptText, setScriptText] = useState<string>("");
   const [scripts, setScripts] = useState<ScriptRead[]>([]);
   const [selectedScriptId, setSelectedScriptId] = useState<string>("");
   const [episodes, setEpisodes] = useState<EpisodeRead[]>([]);
-  const [selectedEpisodeId, setSelectedEpisodeId] = useState<string>("");
+  const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<string[]>([]);
 
   const chatSeenEventSignaturesRef = useRef<Set<string>>(new Set());
   const [chatOpen, setChatOpen] = useState(false);
@@ -781,6 +920,13 @@ export default function AIScenesPage() {
 
   const [modelConfigs, setModelConfigs] = useState<AIModelConfig[]>([]);
 
+  const [adminScenes, setAdminScenes] = useState<AdminAIScene[]>([]);
+  const [sceneMode, setSceneMode] = useState<"edit" | "create">("edit");
+  const [sceneFilter, setSceneFilter] = useState("");
+  const [sceneDraft, setSceneDraft] = useState<SceneDraft>(() => emptySceneDraft());
+  const [sceneSubmitting, setSceneSubmitting] = useState(false);
+  const [sceneError, setSceneError] = useState<string | null>(null);
+
   const [builtinVersionsByCode, setBuiltinVersionsByCode] = useState<Record<string, BuiltinAgentPromptVersion[]>>({});
   const [promptEditorOpen, setPromptEditorOpen] = useState(false);
   const [promptEditorAgentCode, setPromptEditorAgentCode] = useState("");
@@ -794,6 +940,7 @@ export default function AIScenesPage() {
 
   const mainAgent = useMemo(() => agents.find((a) => a.agent_code === mainAgentCode) || null, [agents, mainAgentCode]);
   const mainAgentVersions = useMemo(() => (mainAgent?.versions || []).map((v) => v.version).sort((a, b) => b - a), [mainAgent]);
+  const existingSceneCodes = useMemo(() => new Set(adminScenes.map((s) => String(s.scene_code || "").trim().toLowerCase()).filter(Boolean)), [adminScenes]);
 
   useEffect(() => {
     const tid = String(searchParams.get("chatTaskId") || "").trim();
@@ -864,6 +1011,39 @@ export default function AIScenesPage() {
     return (text ? (JSON.parse(text) as T) : (undefined as T));
   }
 
+  const loadSceneIntoDraft = useCallback((row: AdminAIScene) => {
+    const nextAgentCode = row.builtin_agent_code || "script_expert";
+    const nextToolIds = Array.isArray(row.required_tools) ? row.required_tools : [];
+    setSceneDraft({
+      scene_code: row.scene_code,
+      name: row.name || "",
+      type: row.type || "chat",
+      description: row.description || "",
+      builtin_agent_code: nextAgentCode,
+      required_tools_text: JSON.stringify(nextToolIds, null, 2),
+      ui_config_text: JSON.stringify(row.ui_config || {}, null, 2),
+    });
+
+    setMainAgentCode(nextAgentCode);
+    setToolIds(nextToolIds);
+  }, []);
+
+  const refreshAdminScenesOnly = useCallback(async () => {
+    setSceneError(null);
+    try {
+      const res = await aiAdminListScenes();
+      const rows = (res.data || []).slice().sort((a, b) => a.scene_code.localeCompare(b.scene_code));
+      setAdminScenes(rows);
+      if (sceneMode === "edit") {
+        const current = sceneDraft.scene_code ? rows.find((x) => x.scene_code === sceneDraft.scene_code) : null;
+        if (current) loadSceneIntoDraft(current);
+        if (!current && rows.length > 0) loadSceneIntoDraft(rows[0]);
+      }
+    } catch (e: unknown) {
+      setSceneError(e instanceof Error ? e.message : "加载场景失败");
+    }
+  }, [loadSceneIntoDraft, sceneDraft.scene_code, sceneMode]);
+
   const refresh = async () => {
     setLoading(true);
     setError(null);
@@ -877,17 +1057,22 @@ export default function AIScenesPage() {
       setModelConfigs(mc.data || []);
 
       const list = data?.agents || [];
-      const preferred =
-        list.find((a) => a.agent_code === "script_expert") ||
-        list.find((a) => String(a.name || "").includes("剧本专家")) ||
-        list[0];
-      if (!mainAgentCode && preferred) {
-        setMainAgentCode(preferred.agent_code);
-        setMainAgentVersion(pickDefaultVersion(preferred));
+      const scriptExpert = list.find((a) => a.agent_code === "script_expert") || list.find((a) => String(a.name || "").includes("剧本专家")) || null;
+      if (scriptExpert && mainAgentCode === "script_expert") {
+        setMainAgentVersion(pickDefaultVersion(scriptExpert));
       }
 
       const scriptsRes = await listScripts(1, 50);
       setScripts(scriptsRes.data?.items || []);
+
+      const scenesRes = await aiAdminListScenes();
+      const rows = (scenesRes.data || []).slice().sort((a, b) => a.scene_code.localeCompare(b.scene_code));
+      setAdminScenes(rows);
+      if (sceneMode === "edit") {
+        const current = sceneDraft.scene_code ? rows.find((x) => x.scene_code === sceneDraft.scene_code) : null;
+        if (current) loadSceneIntoDraft(current);
+        if (!current && rows.length > 0) loadSceneIntoDraft(rows[0]);
+      }
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "加载失败");
     } finally {
@@ -939,6 +1124,94 @@ export default function AIScenesPage() {
     const v = pickDefaultVersion(mainAgent);
     setMainAgentVersion((prev) => (mainAgentVersions.includes(prev) ? prev : v));
   }, [mainAgentCode]);
+
+  const filteredAdminScenes = useMemo(() => {
+    const q = sceneFilter.trim().toLowerCase();
+    if (!q) return adminScenes;
+    return adminScenes.filter((s) => `${s.scene_code} ${s.name} ${s.type}`.toLowerCase().includes(q));
+  }, [adminScenes, sceneFilter]);
+
+  useEffect(() => {
+    setSceneDraft((prev) => {
+      const next = (mainAgentCode || "script_expert").trim();
+      if ((prev.builtin_agent_code || "") === next) return prev;
+      return { ...prev, builtin_agent_code: next };
+    });
+  }, [mainAgentCode]);
+
+  useEffect(() => {
+    const json = JSON.stringify(toolIds || [], null, 2);
+    setSceneDraft((prev) => {
+      if ((prev.required_tools_text || "") === json) return prev;
+      return { ...prev, required_tools_text: json };
+    });
+  }, [toolIds]);
+
+  const submitScene = useCallback(async () => {
+    setSceneSubmitting(true);
+    setSceneError(null);
+    try {
+      const code = sceneDraft.scene_code.trim();
+      const name = sceneDraft.name.trim();
+      const type = "chat";
+      if (!code) throw new Error("scene_code 不能为空");
+      if (!name) throw new Error("名称不能为空");
+
+      const cfgParsed = safeParseJson(sceneDraft.ui_config_text);
+      const uiConfig =
+        cfgParsed.ok && cfgParsed.value && typeof cfgParsed.value === "object" && !Array.isArray(cfgParsed.value)
+          ? (cfgParsed.value as Record<string, unknown>)
+          : {};
+      const builtinAgentCode = (sceneDraft.builtin_agent_code || "script_expert").trim() || "script_expert";
+
+      if (sceneMode === "create") {
+        await aiAdminCreateScene({
+          scene_code: code,
+          name,
+          type,
+          description: sceneDraft.description.trim() || null,
+          builtin_agent_code: builtinAgentCode,
+          required_tools: toolIds,
+          ui_config: uiConfig,
+        });
+        setSceneMode("edit");
+      } else {
+        await aiAdminUpdateScene(code, {
+          name,
+          type,
+          description: sceneDraft.description.trim() || null,
+          builtin_agent_code: builtinAgentCode,
+          required_tools: toolIds,
+          ui_config: uiConfig,
+        });
+      }
+
+      await refreshAdminScenesOnly();
+    } catch (e: unknown) {
+      setSceneError(e instanceof Error ? e.message : "保存失败");
+    } finally {
+      setSceneSubmitting(false);
+    }
+  }, [refreshAdminScenesOnly, sceneDraft, sceneMode, toolIds]);
+
+  const deleteScene = useCallback(async () => {
+    const code = sceneDraft.scene_code.trim();
+    if (!code) return;
+    if (!window.confirm(`确认删除场景 ${code} ?`)) return;
+    setSceneSubmitting(true);
+    setSceneError(null);
+    try {
+      await aiAdminDeleteScene(code);
+      setSceneDraft(emptySceneDraft());
+      setMainAgentCode("");
+      setToolIds([]);
+      await refreshAdminScenesOnly();
+    } catch (e: unknown) {
+      setSceneError(e instanceof Error ? e.message : "删除失败");
+    } finally {
+      setSceneSubmitting(false);
+    }
+  }, [refreshAdminScenesOnly, sceneDraft.scene_code]);
 
   useEffect(() => {
     if (!chatTaskId) return;
@@ -1116,7 +1389,7 @@ export default function AIScenesPage() {
   const loadEpisodesForScript = async (scriptId: string) => {
     if (!scriptId) {
       setEpisodes([]);
-      setSelectedEpisodeId("");
+      setSelectedEpisodeIds([]);
       return;
     }
     const res = await getScriptHierarchy(scriptId);
@@ -1128,18 +1401,30 @@ export default function AIScenesPage() {
     }));
     eps.sort((a, b) => a.episode_number - b.episode_number);
     setEpisodes(eps);
-    setSelectedEpisodeId("");
+    setSelectedEpisodeIds([]);
   };
 
   const insertSelectedEpisodeText = () => {
-    const ep = episodes.find((e) => e.id === selectedEpisodeId) || null;
-    const text = (ep?.script_full_text || "").trim();
-    if (!text) return;
-    const header = `【剧本剧集：EP${String(ep?.episode_number || 0).padStart(3, "0")} ${ep?.title || ""}】`.trim();
+    const selected = new Set(selectedEpisodeIds);
+    const eps = episodes
+      .filter((e) => selected.has(e.id))
+      .slice()
+      .sort((a, b) => a.episode_number - b.episode_number);
+    if (eps.length === 0) return;
+    const blocks = eps
+      .map((ep) => {
+        const text = (ep?.script_full_text || "").trim();
+        if (!text) return "";
+        const header = `【剧本剧集：EP${String(ep?.episode_number || 0).padStart(3, "0")} ${ep?.title || ""}】`.trim();
+        return `${header}\n${text}\n`;
+      })
+      .filter(Boolean)
+      .join("\n");
+    if (!blocks.trim()) return;
     setScriptText((prev) => {
       const base = (prev || "").trim();
-      if (!base) return `${header}\n${text}\n`;
-      return `${base}\n\n${header}\n${text}\n`;
+      if (!base) return blocks.trim() + "\n";
+      return `${base}\n\n${blocks.trim()}\n`;
     });
   };
 
@@ -1224,7 +1509,7 @@ export default function AIScenesPage() {
   };
 
   const sendChat = async (text: string) => {
-    if (!mainAgentCode) return;
+    if (!sceneReady || !mainAgentCode) return;
     setChatSubmitting(true);
     setChatError(null);
     setChatPlans([]);
@@ -1242,6 +1527,7 @@ export default function AIScenesPage() {
         body: JSON.stringify({
           type: "ai_scene_test_chat",
           input_json: {
+            scene_code: sceneDraft.scene_code.trim(),
             main_agent: { agent_code: mainAgentCode, version: mainAgentVersion },
             sub_agents: subAgentCodes.map((c) => ({ agent_code: c, version: subAgentVersions[c] || 1 })),
             tool_ids: toolIds,
@@ -1309,6 +1595,8 @@ export default function AIScenesPage() {
     }
   };
 
+  const sceneReady = sceneMode === "edit" ? !!sceneDraft.scene_code : !!sceneDraft.scene_code.trim();
+
   return (
     <div className="p-6">
       <div className="max-w-7xl mx-auto">
@@ -1328,7 +1616,7 @@ export default function AIScenesPage() {
               type="button"
               onClick={() => setChatOpen(true)}
               className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-primary text-background text-sm font-bold hover:opacity-90 disabled:opacity-60"
-              disabled={!mainAgentCode}
+              disabled={!sceneReady || !mainAgentCode}
             >
               <MessageSquare size={16} />
               打开对话测试
@@ -1400,17 +1688,188 @@ export default function AIScenesPage() {
               <div className="text-[11px] text-textMuted mt-1">先选 Agent/工具，再打开对话；右侧面板查看追踪与预览结果。</div>
             </div>
             <div className="p-4 space-y-4">
-              <details open className="rounded-xl border border-border bg-background overflow-hidden">
-                <summary className="px-3 py-2 cursor-pointer select-none text-sm font-bold flex items-center justify-between">
-                  <span>Agent</span>
-                  <span className="text-[11px] text-textMuted font-normal">{subAgentCodes.length ? `子 Agent ${subAgentCodes.length} 个` : "未选择子 Agent"}</span>
-                </summary>
-                <div className="p-3 space-y-3 border-t border-border">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="rounded-xl border border-border bg-background overflow-hidden">
+                <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+                  <div className="text-sm font-bold">① 选择场景</div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSceneMode("edit");
+                        setSceneError(null);
+                        if (adminScenes.length > 0) loadSceneIntoDraft(adminScenes[0]);
+                      }}
+                      className={`px-3 py-2 rounded-md border text-sm hover:bg-surface ${
+                        sceneMode === "edit" ? "bg-surfaceHighlight border-primary/40" : "bg-background border-border"
+                      }`}
+                    >
+                      编辑
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSceneMode("create");
+                        setSceneError(null);
+                        const draft = emptySceneDraft();
+                        draft.scene_code = generateSceneCode({ name: draft.name, existing: existingSceneCodes });
+                        setSceneDraft(draft);
+                        setMainAgentCode("script_expert");
+                        setMainAgentVersion(1);
+                        setSubAgentCodes([]);
+                        setSubAgentVersions({});
+                        setToolIds([]);
+                      }}
+                      className={`px-3 py-2 rounded-md border text-sm hover:bg-surface ${
+                        sceneMode === "create" ? "bg-surfaceHighlight border-primary/40" : "bg-background border-border"
+                      }`}
+                    >
+                      新建
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    {sceneMode === "edit" ? (
+                      <div className="flex items-center gap-2">
+                        <input
+                          value={sceneFilter}
+                          onChange={(e) => setSceneFilter(e.target.value)}
+                          placeholder="搜索场景…"
+                          className="w-56 px-3 py-2 rounded-md bg-background border border-border text-sm"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => void refreshAdminScenesOnly()}
+                          className="px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface"
+                        >
+                          刷新列表
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="text-[11px] text-textMuted">所有场景默认主 Agent：剧本专家（script_expert）</div>
+                    )}
+                    <div className="text-[11px] text-textMuted">先确定场景，再配置 Agent / 工具</div>
+                  </div>
+
+                  {sceneError && (
+                    <div className="px-3 py-2 rounded-md bg-red-500/10 border border-red-500/30 text-red-400 text-sm">{sceneError}</div>
+                  )}
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <label className="space-y-1">
+                      <div className="text-xs text-textMuted">scene_code</div>
+                      {sceneMode === "edit" ? (
+                        <select
+                          className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm"
+                          value={sceneDraft.scene_code}
+                          onChange={(e) => {
+                            const code = e.target.value;
+                            const row = adminScenes.find((x) => x.scene_code === code);
+                            if (row) loadSceneIntoDraft(row);
+                          }}
+                        >
+                          {filteredAdminScenes.map((s) => (
+                            <option key={s.scene_code} value={s.scene_code}>
+                              {s.scene_code}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <input
+                            value={sceneDraft.scene_code}
+                            onChange={(e) => setSceneDraft((p) => ({ ...p, scene_code: e.target.value }))}
+                            placeholder="例如：storyboard_gen_v2"
+                            className="flex-1 min-w-0 px-3 py-2 rounded-md bg-background border border-border text-sm"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setSceneDraft((p) => ({ ...p, scene_code: generateSceneCode({ name: p.name, existing: existingSceneCodes }) }))}
+                            className="px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface"
+                          >
+                            自动生成
+                          </button>
+                        </div>
+                      )}
+                    </label>
+
+                    <label className="space-y-1">
+                      <div className="text-xs text-textMuted">名称</div>
+                      <input
+                        value={sceneDraft.name}
+                        onChange={(e) => setSceneDraft((p) => ({ ...p, name: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm"
+                      />
+                    </label>
+
+                    <label className="space-y-1">
+                      <div className="text-xs text-textMuted">描述</div>
+                      <input
+                        value={sceneDraft.description}
+                        onChange={(e) => setSceneDraft((p) => ({ ...p, description: e.target.value }))}
+                        className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm"
+                      />
+                    </label>
+                  </div>
+
+                  <div className="px-3 py-2 rounded-xl border border-border bg-surfaceHighlight/30 flex flex-col gap-1 md:flex-row md:items-center md:justify-between">
+                    <div className="text-sm text-textMain">
+                      <span className="font-bold">主 Agent</span>{" "}
+                      <span className="text-textMuted">{mainAgentCode || "script_expert"}</span>
+                    </div>
+                    <div className="text-sm text-textMain">
+                      <span className="font-bold">工具</span>{" "}
+                      <span className="text-textMuted">{toolIds.length} 个</span>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-end gap-2">
+                    {sceneMode === "edit" && (
+                      <button
+                        type="button"
+                        onClick={() => void deleteScene()}
+                        disabled={!sceneDraft.scene_code || sceneSubmitting}
+                        className="px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm text-red-400 hover:bg-surface disabled:opacity-60"
+                      >
+                        删除
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => void submitScene()}
+                      disabled={sceneSubmitting}
+                      className="px-4 py-2 rounded-md bg-primary text-background text-sm font-bold hover:opacity-90 disabled:opacity-60"
+                    >
+                      {sceneMode === "create" ? "创建" : "保存"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`rounded-xl border border-border bg-background overflow-hidden ${sceneReady ? "" : "opacity-60"}`}>
+                <div className="px-3 py-2 border-b border-border flex items-center justify-between">
+                  <div className="text-sm font-bold">② 配置 Agent</div>
+                  <div className="text-[11px] text-textMuted">{sceneReady ? `scene: ${sceneDraft.scene_code}` : "请先选择/填写场景"}</div>
+                </div>
+                <div className="p-3 space-y-3">
+                  {!sceneReady && <div className="text-sm text-textMuted">先确定要编辑的场景（scene_code）后，才能编辑主/子 Agent。</div>}
+                  {sceneReady && (
+                    <>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <label className="space-y-1">
                       <div className="text-xs text-textMuted">主 Agent</div>
-                      <select className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm" value={mainAgentCode} onChange={(e) => setMainAgentCode(e.target.value)}>
-                        <option value="">请选择</option>
+                      <select
+                        className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm"
+                        value={mainAgentCode}
+                        onChange={(e) => {
+                          const code = e.target.value;
+                          setMainAgentCode(code);
+                          const a = agents.find((x) => x.agent_code === code) || null;
+                          setMainAgentVersion(pickDefaultVersion(a));
+                        }}
+                        disabled={!sceneReady}
+                      >
                         {agents.map((a) => (
                           <option key={a.agent_code} value={a.agent_code}>
                             {(a.name || a.agent_code) + " · " + a.agent_code}
@@ -1424,7 +1883,7 @@ export default function AIScenesPage() {
                         className="w-full px-3 py-2 rounded-md bg-background border border-border text-sm"
                         value={String(mainAgentVersion)}
                         onChange={(e) => setMainAgentVersion(parseInt(e.target.value, 10))}
-                        disabled={!mainAgentCode}
+                        disabled={!sceneReady || !mainAgentCode}
                       >
                         {mainAgentVersions.map((v) => (
                           <option key={v} value={String(v)}>
@@ -1439,7 +1898,7 @@ export default function AIScenesPage() {
                     <button
                       type="button"
                       onClick={() => void openPromptEditor(mainAgentCode, mainAgentVersion)}
-                      disabled={!mainAgentCode}
+                      disabled={!sceneReady || !mainAgentCode}
                       className="px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface disabled:opacity-60"
                     >
                       编辑主 Agent 版本
@@ -1447,7 +1906,7 @@ export default function AIScenesPage() {
                     <button
                       type="button"
                       onClick={() => void openPromptEditor(mainAgentCode, null)}
-                      disabled={!mainAgentCode}
+                      disabled={!sceneReady || !mainAgentCode}
                       className="px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface disabled:opacity-60"
                     >
                       新增主 Agent 版本
@@ -1462,6 +1921,7 @@ export default function AIScenesPage() {
                         onChange={(e) => setSubAgentFilter(e.target.value)}
                         placeholder="搜索子 Agent…"
                         className="w-44 px-3 py-2 rounded-md bg-background border border-border text-sm"
+                        disabled={!sceneReady}
                       />
                     </div>
                     <div className="space-y-2 max-h-[360px] overflow-auto pr-1">
@@ -1480,7 +1940,7 @@ export default function AIScenesPage() {
                             <div key={a.agent_code} className={`rounded-lg border ${checked ? "border-primary/40 bg-surfaceHighlight/30" : "border-border bg-background"}`}>
                               <div className="p-3 grid grid-cols-1 md:grid-cols-[minmax(0,2fr)_120px_72px_72px] gap-2 items-center">
                                 <label className="flex items-center gap-2 min-w-0">
-                                  <input type="checkbox" checked={checked} onChange={() => toggleSubAgent(a.agent_code)} />
+                                  <input type="checkbox" checked={checked} onChange={() => toggleSubAgent(a.agent_code)} disabled={!sceneReady} />
                                   <div className="min-w-0">
                                     <div className="text-sm font-bold truncate">{a.name || a.agent_code}</div>
                                     <div className="text-[11px] text-textMuted truncate">{a.agent_code}</div>
@@ -1490,6 +1950,7 @@ export default function AIScenesPage() {
                                   className="w-full px-2 py-2 rounded-md bg-background border border-border text-sm"
                                   value={String(vv)}
                                   onChange={(e) => setSubAgentVersions((prev) => ({ ...prev, [a.agent_code]: parseInt(e.target.value, 10) }))}
+                                  disabled={!sceneReady || !checked}
                                 >
                                   {versions.map((v) => (
                                     <option key={v} value={String(v)}>
@@ -1497,10 +1958,10 @@ export default function AIScenesPage() {
                                     </option>
                                   ))}
                                 </select>
-                                <button type="button" onClick={() => void openPromptEditor(a.agent_code, vv)} className="px-2 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface">
+                                <button type="button" onClick={() => void openPromptEditor(a.agent_code, vv)} disabled={!sceneReady} className="px-2 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface disabled:opacity-60">
                                   编辑
                                 </button>
-                                <button type="button" onClick={() => void openPromptEditor(a.agent_code, null)} className="px-2 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface">
+                                <button type="button" onClick={() => void openPromptEditor(a.agent_code, null)} disabled={!sceneReady} className="px-2 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface disabled:opacity-60">
                                   新增
                                 </button>
                               </div>
@@ -1509,8 +1970,10 @@ export default function AIScenesPage() {
                         })}
                     </div>
                   </div>
+                    </>
+                  )}
                 </div>
-              </details>
+              </div>
             </div>
           </div>
           </div>
@@ -1518,102 +1981,101 @@ export default function AIScenesPage() {
 
         <div className="w-full lg:w-[360px] shrink-0 space-y-4 lg:sticky lg:top-6 self-start">
           <div className="bg-surface border border-border rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-border text-sm font-bold flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Wrench size={16} />
-                工具选择
+            <div className="px-4 py-3 border-b border-border flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2 min-w-0">
+                {sideTab === "tools" ? <Wrench size={16} /> : <MessageSquare size={16} />}
+                <div className="text-sm font-bold truncate">配置与运行</div>
               </div>
-              <div className="text-[11px] text-textMuted font-normal">{toolIds.length ? `已选 ${toolIds.length}` : "未选择"}</div>
+              <div className="flex items-center gap-2 shrink-0">
+                <div className="p-1 rounded-xl border border-border bg-background flex items-center gap-1">
+                  <TabButton active={sideTab === "tools"} label="工具" onClick={() => setSideTab("tools")} />
+                  <TabButton active={sideTab === "run"} label="运行" onClick={() => setSideTab("run")} />
+                </div>
+              </div>
             </div>
-            <div className="p-4">
-              <details className="rounded-xl border border-border bg-background overflow-hidden">
-                <summary className="px-3 py-2 cursor-pointer select-none text-sm font-bold flex items-center justify-between">
-                  <span>内置工具（可多选）</span>
-                  <span className="text-[11px] text-textMuted font-normal">展开选择</span>
-                </summary>
-                <div className="p-3 space-y-3 border-t border-border">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <input
-                      value={toolFilter}
-                      onChange={(e) => setToolFilter(e.target.value)}
-                      placeholder="搜索工具…"
-                      className="w-48 px-3 py-2 rounded-md bg-background border border-border text-sm"
-                    />
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setToolIds(tools.map((t) => t.tool_id))}
-                        className="px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface disabled:opacity-60"
-                        disabled={tools.length === 0}
-                      >
-                        全选
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setToolIds([])}
-                        className="px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface disabled:opacity-60"
-                        disabled={toolIds.length === 0}
-                      >
-                        清空
-                      </button>
-                    </div>
-                  </div>
 
-                  <div className="space-y-2 max-h-[280px] overflow-auto pr-1">
-                    {tools
-                      .filter((t) => {
-                        const q = toolFilter.trim().toLowerCase();
-                        if (!q) return true;
-                        return `${t.label} ${t.tool_id}`.toLowerCase().includes(q);
-                      })
-                      .map((t) => (
-                        <label key={t.tool_id} className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-background">
-                          <input type="checkbox" checked={toolIds.includes(t.tool_id)} onChange={() => toggleTool(t.tool_id)} />
-                          <div className="min-w-0">
-                            <div className="text-sm font-bold truncate">{t.label}</div>
-                            <div className="text-[11px] text-textMuted truncate">{t.tool_id}</div>
-                          </div>
-                        </label>
-                      ))}
-                    {tools.length === 0 && <div className="text-sm text-textMuted">暂无工具</div>}
+            {sideTab === "tools" && (
+              <div className="p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <input
+                    value={toolFilter}
+                    onChange={(e) => setToolFilter(e.target.value)}
+                    placeholder="搜索工具…"
+                    className="w-full md:w-56 px-3 py-2 rounded-md bg-background border border-border text-sm"
+                    disabled={!sceneReady}
+                  />
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setToolIds(tools.map((t) => t.tool_id))}
+                      className="px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface disabled:opacity-60"
+                      disabled={!sceneReady || tools.length === 0}
+                    >
+                      全选
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setToolIds([])}
+                      className="px-3 py-2 rounded-md bg-surfaceHighlight border border-border text-sm hover:bg-surface disabled:opacity-60"
+                      disabled={!sceneReady || toolIds.length === 0}
+                    >
+                      清空
+                    </button>
                   </div>
                 </div>
-              </details>
-            </div>
-          </div>
 
-          <div className="bg-surface border border-border rounded-xl overflow-hidden">
-            <div className="px-4 py-3 border-b border-border text-sm font-bold flex items-center gap-2">
-              <MessageSquare size={16} />
-              运行面板
-            </div>
-            <div className="p-4 space-y-3">
-              <div className="text-sm text-textMuted">
-                当前选择：主 Agent {mainAgentCode ? `${mainAgentCode} v${mainAgentVersion}` : "-"}；子 Agent {subAgentCodes.length} 个；工具 {toolIds.length} 个。
-              </div>
+                <div className="text-[11px] text-textMuted">已选 {toolIds.length} / {tools.length || 0}</div>
 
-              <div className="space-y-2">
-                <div className="text-sm font-bold">最近预览结果</div>
-                {chatPlans.length === 0 ? (
-                  <div className="text-sm text-textMuted">暂无预览结果。</div>
-                ) : (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    {chatPlans.map((p) => (
-                      <div key={p.id} className="px-3 py-2 rounded-md bg-surfaceHighlight/40 border border-border">
-                        <div className="text-sm font-bold">{planSummary(p)}</div>
-                        <div className="text-[11px] text-textMuted">kind: {p.kind}</div>
-                      </div>
+                <div className="space-y-2 max-h-[520px] overflow-auto pr-1">
+                  {tools
+                    .filter((t) => {
+                      const q = toolFilter.trim().toLowerCase();
+                      if (!q) return true;
+                      return `${t.label} ${t.tool_id}`.toLowerCase().includes(q);
+                    })
+                    .map((t) => (
+                      <label key={t.tool_id} className="flex items-center gap-2 px-3 py-2 rounded-md border border-border bg-background">
+                        <input type="checkbox" checked={toolIds.includes(t.tool_id)} onChange={() => toggleTool(t.tool_id)} disabled={!sceneReady} />
+                        <div className="min-w-0">
+                          <div className="text-sm font-bold truncate">{t.label}</div>
+                          <div className="text-[11px] text-textMuted truncate">{t.tool_id}</div>
+                        </div>
+                      </label>
                     ))}
-                    <details className="md:col-span-2">
-                      <summary className="text-sm cursor-pointer text-textMain">查看完整 JSON</summary>
-                      <pre className="mt-2 w-full max-h-[360px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs">
-                        {prettyJson(chatPlans)}
-                      </pre>
-                    </details>
-                  </div>
-                )}
+                  {tools.length === 0 && <div className="text-sm text-textMuted">暂无工具</div>}
+                </div>
               </div>
-            </div>
+            )}
+
+            {sideTab === "run" && (
+              <div className="p-4 space-y-3">
+                <div className="text-sm text-textMuted">
+                  当前选择：主 Agent {mainAgentCode ? `${mainAgentCode} v${mainAgentVersion}` : "-"}；子 Agent {subAgentCodes.length} 个；工具 {toolIds.length} 个。
+                </div>
+
+                <div className="space-y-2">
+                  <div className="text-sm font-bold">最近预览结果</div>
+                  {chatPlans.length === 0 ? (
+                    <div className="text-sm text-textMuted">暂无预览结果。</div>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                      {chatPlans.map((p) => (
+                        <div key={p.id} className="px-3 py-2 rounded-md bg-surfaceHighlight/40 border border-border">
+                          <div className="text-sm font-bold">{planSummary(p)}</div>
+                          <div className="text-[11px] text-textMuted">kind: {p.kind}</div>
+                        </div>
+                      ))}
+                      <details className="md:col-span-2">
+                        <summary className="text-sm cursor-pointer text-textMain">查看完整 JSON</summary>
+                        <pre className="mt-2 w-full max-h-[360px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs">
+                          {prettyJson(chatPlans)}
+                        </pre>
+                      </details>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -1622,17 +2084,20 @@ export default function AIScenesPage() {
         open={chatOpen}
         onClose={() => setChatOpen(false)}
         onReset={clearChatTask}
+        sceneCode={sceneDraft.scene_code}
+        sceneName={sceneDraft.name}
         scriptText={scriptText}
         setScriptText={setScriptText}
         scripts={scripts}
         episodes={episodes}
         selectedScriptId={selectedScriptId}
-        selectedEpisodeId={selectedEpisodeId}
+        selectedEpisodeIds={selectedEpisodeIds}
         onSelectScript={(id) => {
           setSelectedScriptId(id);
+          setSelectedEpisodeIds([]);
           void loadEpisodesForScript(id);
         }}
-        onSelectEpisode={(id) => setSelectedEpisodeId(id)}
+        onSelectEpisodes={(ids) => setSelectedEpisodeIds(ids)}
         onInsertEpisodeText={insertSelectedEpisodeText}
         contextPreview={contextPreview}
         contextPreviewLoading={contextPreviewLoading}

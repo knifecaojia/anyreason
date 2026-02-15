@@ -76,6 +76,20 @@ BUILTIN_AGENT_SEEDS: list[BuiltinAgentSeed] = [
         description="分镜脚本生成、镜头语言设计",
         default_system_prompt="你是分镜专家。请基于剧情生成分镜脚本，包含镜头语言、景别与运镜建议。",
     ),
+    BuiltinAgentSeed(
+        agent_code="image_prompt_expert",
+        name="生图提示词专家",
+        category="prompt",
+        description="将分镜镜头信息转成可用于生图的提示词结构",
+        default_system_prompt="你是生图提示词专家。请把镜头描述转成清晰、可控、可复用的生图提示词，并输出结构化字段。",
+    ),
+    BuiltinAgentSeed(
+        agent_code="video_prompt_expert",
+        name="生视频提示词专家",
+        category="prompt",
+        description="将分镜镜头信息转成可用于生视频的提示词结构",
+        default_system_prompt="你是生视频提示词专家。请把镜头描述转成清晰、可控、可复用的生视频提示词，并输出结构化字段。",
+    ),
 ]
 
 

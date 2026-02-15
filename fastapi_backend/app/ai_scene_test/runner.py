@@ -58,7 +58,7 @@ async def run_scene_test_chat(
         context_exclude_types=set(body.context_exclude_types or []),
         agent_versions=agent_versions,
         trace_queue=trace_queue,
-        meta={"model": getattr(resolved_model, "model_name", None)},
+        meta={"model": getattr(resolved_model, "model_name", None), "scene_code": body.scene_code},
         run_id=run_id,
         debug_log_path=str(debug_logger.file_path) if is_pydanticai_debug_enabled() else None,
     )
@@ -105,15 +105,7 @@ async def run_scene_test_chat(
 
         tools.append(_wrap_tool(tid, tool_fn))
 
-    instructions = (
-        f"{main.system_prompt}\n\n"
-        "你正在一个“内置场景能力测试台”中工作。\n"
-        "你可以调用可用工具来生成“预览落库结果（ApplyPlan）”。\n"
-        "规则：\n"
-        "1) 如果用户没有提供剧本文本，请先询问用户粘贴剧本文本。\n"
-        "2) 若用户要求提取/拆分等能力，请优先调用工具。\n"
-        "3) 返回内容需包含清晰的结论与下一步建议。\n"
-    )
+    instructions = main.system_prompt
     agent = Agent(model=model, instructions=instructions, tools=tools, model_settings=main.model_settings)
 
     chat_lines: list[str] = []

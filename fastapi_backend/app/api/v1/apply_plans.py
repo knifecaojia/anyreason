@@ -5,12 +5,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_tools.apply_plan import ApplyPlan
 from app.database import User, get_async_session
-from app.models import Episode, FileNode, Project
+from app.models import Episode, FileNode, ImagePrompt, Project, Storyboard, VideoPrompt
+from app.schemas import AIShotDraft
 from app.schemas_response import ResponseBase
 from app.services.apply_plan_normalize_service import normalize_apply_plan
 from app.services.storage.vfs_service import vfs_service
@@ -355,5 +356,162 @@ async def api_execute_apply_plan(
                 "provenance": provenance,
             },
         )
+
+    if plan.kind == "storyboard_apply" and plan.tool_id == "storyboard_apply":
+        storyboard_id_raw = (plan.inputs or {}).get("storyboard_id")
+        mode = str((plan.inputs or {}).get("mode") or "replace").strip() or "replace"
+        shots_raw = (plan.inputs or {}).get("shots") or []
+        if not storyboard_id_raw:
+            raise HTTPException(status_code=400, detail="storyboard_id_required")
+        try:
+            storyboard_id = UUID(str(storyboard_id_raw))
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid_storyboard_id")
+        if mode not in {"replace", "append"}:
+            raise HTTPException(status_code=400, detail="invalid_mode")
+        if not isinstance(shots_raw, list) or not shots_raw:
+            raise HTTPException(status_code=400, detail="invalid_shots")
+
+        row = (
+            await db.execute(
+                select(Storyboard, Episode)
+                .join(Episode, Storyboard.episode_id == Episode.id)
+                .where(Storyboard.id == storyboard_id, Episode.project_id == project_id)
+            )
+        ).first()
+        if not row:
+            raise HTTPException(status_code=404, detail="storyboard_not_found")
+        storyboard, episode = row
+        if not storyboard.scene_number:
+            raise HTTPException(status_code=400, detail="scene_number_required")
+        scene_number = int(storyboard.scene_number)
+
+        if mode == "replace":
+            await db.execute(delete(Storyboard).where(Storyboard.episode_id == episode.id, Storyboard.scene_number == scene_number))
+            start_num = 1
+        else:
+            max_res = await db.execute(
+                select(func.coalesce(func.max(Storyboard.shot_number), 0)).where(
+                    Storyboard.episode_id == episode.id,
+                    Storyboard.scene_number == scene_number,
+                )
+            )
+            start_num = int(max_res.scalar_one() or 0) + 1
+
+        created_rows: list[dict] = []
+        for idx, item in enumerate(shots_raw, start=0):
+            draft = AIShotDraft.model_validate(item)
+            shot_number = start_num + idx
+            shot_code = f"EP{int(episode.episode_number):03d}_SC{scene_number:02d}_SH{shot_number:02d}"
+            r = Storyboard(
+                episode_id=episode.id,
+                shot_code=shot_code,
+                shot_number=shot_number,
+                scene_code=storyboard.scene_code,
+                scene_number=scene_number,
+                shot_type=(draft.shot_type or "").strip() or None,
+                camera_move=(draft.camera_move or "").strip() or None,
+                narrative_function=(draft.narrative_function or "").strip() or None,
+                location=storyboard.location,
+                location_type=storyboard.location_type,
+                time_of_day=storyboard.time_of_day,
+                description=(draft.description or "").strip() or None,
+                dialogue=(draft.dialogue or "").strip() or None,
+                duration_estimate=draft.duration_estimate,
+                active_assets=list(draft.active_assets or []),
+            )
+            db.add(r)
+            await db.flush()
+            created_rows.append({"storyboard_id": str(r.id), "shot_code": r.shot_code, "shot_number": int(r.shot_number)})
+
+        await db.commit()
+        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_rows, "provenance": provenance})
+
+    if plan.kind == "image_prompt_upsert" and plan.tool_id == "image_prompt_upsert":
+        prompts_raw = (plan.inputs or {}).get("prompts") or []
+        if not isinstance(prompts_raw, list) or not prompts_raw:
+            raise HTTPException(status_code=400, detail="invalid_prompts")
+        created_rows: list[dict] = []
+        for p in prompts_raw:
+            if not isinstance(p, dict):
+                continue
+            storyboard_id_raw = p.get("storyboard_id")
+            if not storyboard_id_raw:
+                continue
+            try:
+                storyboard_id = UUID(str(storyboard_id_raw))
+            except Exception:
+                raise HTTPException(status_code=400, detail="invalid_storyboard_id")
+
+            exists = (
+                await db.execute(
+                    select(Storyboard.id)
+                    .join(Episode, Storyboard.episode_id == Episode.id)
+                    .where(Storyboard.id == storyboard_id, Episode.project_id == project_id)
+                )
+            ).first()
+            if not exists:
+                raise HTTPException(status_code=404, detail="storyboard_not_found")
+
+            await db.execute(delete(ImagePrompt).where(ImagePrompt.storyboard_id == storyboard_id))
+            row = ImagePrompt(
+                storyboard_id=storyboard_id,
+                prompt_main=p.get("prompt_main"),
+                negative_prompt=p.get("negative_prompt"),
+                style_model=p.get("style_model"),
+                aspect_ratio=p.get("aspect_ratio"),
+                character_prompts=list(p.get("character_prompts") or []),
+                camera_settings=dict(p.get("camera_settings") or {}),
+                generation_notes=p.get("generation_notes"),
+            )
+            db.add(row)
+            await db.flush()
+            created_rows.append({"image_prompt_id": str(row.id), "storyboard_id": str(storyboard_id)})
+        await db.commit()
+        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_rows, "provenance": provenance})
+
+    if plan.kind == "video_prompt_upsert" and plan.tool_id == "video_prompt_upsert":
+        prompts_raw = (plan.inputs or {}).get("prompts") or []
+        if not isinstance(prompts_raw, list) or not prompts_raw:
+            raise HTTPException(status_code=400, detail="invalid_prompts")
+        created_rows: list[dict] = []
+        for p in prompts_raw:
+            if not isinstance(p, dict):
+                continue
+            storyboard_id_raw = p.get("storyboard_id")
+            if not storyboard_id_raw:
+                continue
+            try:
+                storyboard_id = UUID(str(storyboard_id_raw))
+            except Exception:
+                raise HTTPException(status_code=400, detail="invalid_storyboard_id")
+
+            exists = (
+                await db.execute(
+                    select(Storyboard.id)
+                    .join(Episode, Storyboard.episode_id == Episode.id)
+                    .where(Storyboard.id == storyboard_id, Episode.project_id == project_id)
+                )
+            ).first()
+            if not exists:
+                raise HTTPException(status_code=404, detail="storyboard_not_found")
+
+            await db.execute(delete(VideoPrompt).where(VideoPrompt.storyboard_id == storyboard_id))
+            row = VideoPrompt(
+                storyboard_id=storyboard_id,
+                prompt_main=p.get("prompt_main"),
+                negative_prompt=p.get("negative_prompt"),
+                style_model=p.get("style_model"),
+                aspect_ratio=p.get("aspect_ratio"),
+                character_prompts=list(p.get("character_prompts") or []),
+                camera_settings=dict(p.get("camera_settings") or {}),
+                duration=p.get("duration"),
+                generation_notes=p.get("generation_notes"),
+            )
+            db.add(row)
+            await db.flush()
+            created_rows.append({"video_prompt_id": str(row.id), "storyboard_id": str(storyboard_id)})
+        await db.commit()
+        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_rows, "provenance": provenance})
 
     raise HTTPException(status_code=400, detail="unsupported_plan")

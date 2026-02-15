@@ -43,6 +43,7 @@ class AISceneTestChatMessage(BaseModel):
 
 
 class AISceneTestChatRequest(BaseModel):
+    scene_code: str | None = Field(default=None, description="可选：当前测试关联的场景标识（便于追踪与审计）")
     main_agent: AISceneTestAgentSelect
     sub_agents: list[AISceneTestAgentSelect] = Field(default_factory=list)
     tool_ids: list[str] = Field(default_factory=list)

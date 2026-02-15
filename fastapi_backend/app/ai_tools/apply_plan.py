@@ -6,7 +6,15 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
 
 
-ApplyPlanKind = Literal["episode_save", "asset_create", "asset_bind", "asset_doc_upsert"]
+ApplyPlanKind = Literal[
+    "episode_save",
+    "asset_create",
+    "asset_bind",
+    "asset_doc_upsert",
+    "storyboard_apply",
+    "image_prompt_upsert",
+    "video_prompt_upsert",
+]
 
 
 class ApplyPlan(BaseModel):

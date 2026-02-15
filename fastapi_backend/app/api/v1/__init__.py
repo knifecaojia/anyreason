@@ -10,7 +10,9 @@ from app.api.v1.ai_video import router as ai_video_router
 from app.api.v1.ai_prompt_presets import router as ai_prompt_presets_router
 from app.api.v1.ai_model_configs import router as ai_model_configs_router
 from app.api.v1.ai_scenes import router as ai_scenes_router
+from app.api.v1.ai_scene_catalog import router as ai_scene_catalog_router
 from app.api.v1.ai_scene_test import router as ai_scene_test_router
+from app.api.v1.ai_scene_runner import router as ai_scene_runner_router
 from app.api.v1.ai_scene_structure import router as ai_scene_structure_router
 from app.api.v1.ai_storyboard import router as ai_storyboard_router
 from app.api.v1.ai_context import router as ai_context_router
@@ -43,7 +45,9 @@ v1_router.include_router(ai_video_router, tags=["ai"])
 v1_router.include_router(ai_prompt_presets_router, tags=["ai"])
 v1_router.include_router(ai_model_configs_router, tags=["ai"])
 v1_router.include_router(ai_scenes_router, tags=["ai"])
+v1_router.include_router(ai_scene_catalog_router, tags=["ai"])
 v1_router.include_router(ai_scene_test_router, tags=["ai"])
+v1_router.include_router(ai_scene_runner_router, tags=["ai"])
 v1_router.include_router(ai_context_router, tags=["ai"])
 v1_router.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
 v1_router.include_router(admin_router, tags=["admin"])

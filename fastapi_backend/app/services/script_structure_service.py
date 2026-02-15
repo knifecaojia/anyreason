@@ -21,7 +21,7 @@ _EPISODE_EN_RE = re.compile(
     re.MULTILINE,
 )
 _EPISODE_CN_RE = re.compile(
-    r"^\s*\*{0,2}\s*第(?P<cn_num>[0-9一二三四五六七八九十百千两零〇]+)(?:集|话|章)\s*(?:[:：\-]\s*(?P<cn_title>.*?)|（(?P<cn_title_paren_zh>[^）]+)）|\((?P<cn_title_paren_en>[^)]+)\))?\s*\*{0,2}\s*$",
+    r"^\s*\*{0,2}\s*第(?P<cn_num>[0-9一二三四五六七八九十百千两零〇]+)(?:集|话|章|卷)\s*(?:[:：\-]\s*(?P<cn_title>.*?)|（(?P<cn_title_paren_zh>[^）]+)）|\((?P<cn_title_paren_en>[^)]+)\))?\s*\*{0,2}\s*$",
     re.MULTILINE,
 )
 

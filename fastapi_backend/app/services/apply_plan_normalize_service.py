@@ -33,4 +33,16 @@ def normalize_apply_plan(plan: ApplyPlan) -> NormalizedApplyPlan:
         normalized = plan.model_copy(update={"tool_id": "asset_create"})
         return NormalizedApplyPlan(plan=normalized, provenance=provenance)
 
+    if kind == "storyboard_apply" and tool_id == "preview_storyboard_apply":
+        normalized = plan.model_copy(update={"tool_id": "storyboard_apply"})
+        return NormalizedApplyPlan(plan=normalized, provenance=provenance)
+
+    if kind == "image_prompt_upsert" and tool_id == "preview_image_prompt":
+        normalized = plan.model_copy(update={"tool_id": "image_prompt_upsert"})
+        return NormalizedApplyPlan(plan=normalized, provenance=provenance)
+
+    if kind == "video_prompt_upsert" and tool_id == "preview_video_prompt":
+        normalized = plan.model_copy(update={"tool_id": "video_prompt_upsert"})
+        return NormalizedApplyPlan(plan=normalized, provenance=provenance)
+
     return NormalizedApplyPlan(plan=plan, provenance=provenance)
