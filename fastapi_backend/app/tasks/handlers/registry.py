@@ -12,6 +12,8 @@ from app.tasks.handlers.episode_vfx_agent_apply import EpisodeVfxAgentApplyHandl
 from app.tasks.handlers.user_app_run import UserAppRunHandler
 from app.tasks.handlers.ai_scene_test_chat import AiSceneTestChatHandler
 from app.tasks.handlers.episode_doc_backfill import EpisodeDocBackfillHandler
+from app.tasks.handlers.asset_image_generate import AssetImageGenerateHandler
+from app.tasks.handlers.shot_video_generate import ShotVideoGenerateHandler
 
 TASK_HANDLER_REGISTRY = {
     NoopTaskHandler.task_type: NoopTaskHandler(),
@@ -28,4 +30,6 @@ TASK_HANDLER_REGISTRY = {
     UserAppRunHandler.task_type: UserAppRunHandler(),
     AiSceneTestChatHandler.task_type: AiSceneTestChatHandler(),
     EpisodeDocBackfillHandler.task_type: EpisodeDocBackfillHandler(),
+    AssetImageGenerateHandler.task_type: AssetImageGenerateHandler(),
+    ShotVideoGenerateHandler.task_type: ShotVideoGenerateHandler(),
 }

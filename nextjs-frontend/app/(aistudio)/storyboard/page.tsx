@@ -39,7 +39,6 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
 
 import { ASSETS } from "@/lib/aistudio/constants";
 
@@ -726,7 +725,6 @@ function StoryboardContent() {
     if (generators.length === 0) return;
 
     setIsGlobalProcessing(true);
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     try {
       for (const node of generators) {
@@ -766,32 +764,21 @@ function StoryboardContent() {
         try {
           const config = node.data;
           const fullPrompt = `${config.prompt || "High quality scene"}${config.negPrompt ? `\nNegative: ${config.negPrompt}` : ""}`;
-          const response = await ai.models.generateContent({
-            model: config.model || "gemini-2.5-flash-image",
-            contents: { parts: [{ text: fullPrompt }] },
-            config: {
-              imageConfig: {
-                aspectRatio:
-                  (config.aspectRatio as "16:9" | "1:1" | "9:16" | "4:3" | "3:4") || "16:9",
-              },
-            },
+          const res = await fetch("/api/ai/image/generate", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({
+              binding_key: "image",
+              model_config_id: null,
+              prompt: fullPrompt,
+              resolution: null,
+              images: [],
+            }),
           });
-
-          let imageUrl = "";
-          if (response.candidates?.[0]?.content?.parts) {
-            for (const part of response.candidates[0].content.parts) {
-              const rec = part as unknown as Record<string, unknown>;
-              const inlineData = rec.inlineData as unknown;
-              if (inlineData && typeof inlineData === "object") {
-                const inlineRec = inlineData as Record<string, unknown>;
-                const data = inlineRec.data;
-                if (typeof data === "string") {
-                  imageUrl = `data:image/png;base64,${data}`;
-                  break;
-                }
-              }
-            }
-          }
+          if (!res.ok) throw new Error(await res.text());
+          const json = (await res.json()) as { data?: { url?: string } };
+          const imageUrl = (json.data?.url || "").trim();
 
           if (imageUrl) {
             updateNodeData(node.id, { lastImage: imageUrl, isProcessing: false });

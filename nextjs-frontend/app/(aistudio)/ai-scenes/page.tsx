@@ -45,6 +45,17 @@ function pickDefaultVersion(agent: AISceneTestAgentOption | null): number {
   return d ? d.version : (agent.versions?.[0]?.version || 1);
 }
 
+function pickVersionDescription(agent: AISceneTestAgentOption | null, version: number): string {
+  if (!agent) return "";
+  const v = (agent.versions || []).find((x) => x.version === version) || null;
+  return String(v?.description || "").trim();
+}
+
+function formatVersionLabel(agent: AISceneTestAgentOption | null, version: number): string {
+  const d = pickVersionDescription(agent, version);
+  return d ? `v${version} · ${d}` : `v${version}`;
+}
+
 function TabButton(props: { active: boolean; label: string; onClick: () => void }) {
   const { active, label, onClick } = props;
   return (
@@ -1011,8 +1022,71 @@ export default function AIScenesPage() {
     return (text ? (JSON.parse(text) as T) : (undefined as T));
   }
 
+  const extractSceneTestUiConfig = useCallback((uiConfig: Record<string, unknown> | null | undefined) => {
+    const root = uiConfig && typeof uiConfig === "object" && !Array.isArray(uiConfig) ? (uiConfig as Record<string, unknown>) : {};
+    const st = root.scene_test && typeof root.scene_test === "object" && !Array.isArray(root.scene_test) ? (root.scene_test as Record<string, unknown>) : {};
+    const main = st.main_agent && typeof st.main_agent === "object" && !Array.isArray(st.main_agent) ? (st.main_agent as Record<string, unknown>) : {};
+    const mainAgentCode = typeof main.agent_code === "string" ? main.agent_code.trim() : "";
+    const mainAgentVersion = typeof main.version === "number" ? main.version : Number(main.version || 0);
+    const subAgentsRaw = Array.isArray(st.sub_agents) ? (st.sub_agents as Array<Record<string, unknown>>) : [];
+
+    const subAgentCodes: string[] = [];
+    const subAgentVersions: Record<string, number> = {};
+    for (const rec of subAgentsRaw) {
+      if (!rec || typeof rec !== "object") continue;
+      const code = typeof rec.agent_code === "string" ? rec.agent_code.trim() : "";
+      if (!code) continue;
+      if (!subAgentCodes.includes(code)) subAgentCodes.push(code);
+      const vv = typeof rec.version === "number" ? rec.version : Number(rec.version || 0);
+      if (vv > 0) subAgentVersions[code] = vv;
+    }
+
+    return {
+      mainAgentCode,
+      mainAgentVersion: mainAgentVersion > 0 ? mainAgentVersion : null,
+      subAgentCodes,
+      subAgentVersions,
+    };
+  }, []);
+
+  const injectSceneTestUiConfig = useCallback(
+    (uiConfig: Record<string, unknown>) => {
+      const prev = uiConfig && typeof uiConfig === "object" && !Array.isArray(uiConfig) ? uiConfig : {};
+      const existing = prev.scene_test && typeof prev.scene_test === "object" && !Array.isArray(prev.scene_test) ? (prev.scene_test as Record<string, unknown>) : {};
+
+      const effectiveMain = mainAgentCode || "script_expert";
+      const subAgents = subAgentCodes
+        .filter((code) => code && code !== effectiveMain)
+        .map((code) => ({
+          agent_code: code,
+          version: subAgentVersions[code] || pickDefaultVersion(agents.find((a) => a.agent_code === code) || null),
+        }));
+
+      return {
+        ...prev,
+        scene_test: {
+          ...existing,
+          main_agent: {
+            agent_code: mainAgentCode || "script_expert",
+            version: mainAgentVersion || pickDefaultVersion(agents.find((a) => a.agent_code === (mainAgentCode || "script_expert")) || null),
+          },
+          sub_agents: subAgents,
+        },
+      } as Record<string, unknown>;
+    },
+    [agents, mainAgentCode, mainAgentVersion, subAgentCodes, subAgentVersions]
+  );
+
   const loadSceneIntoDraft = useCallback((row: AdminAIScene) => {
-    const nextAgentCode = row.builtin_agent_code || "script_expert";
+    const uiCfg = row.ui_config && typeof row.ui_config === "object" && !Array.isArray(row.ui_config) ? (row.ui_config as Record<string, unknown>) : {};
+    const st = extractSceneTestUiConfig(uiCfg);
+    const nextAgentCode = st.mainAgentCode || row.builtin_agent_code || "script_expert";
+    const nextAgentVersion = st.mainAgentVersion || 1;
+    const nextSubAgentCodes = st.subAgentCodes.filter((c) => c && c !== nextAgentCode);
+    const nextSubAgentVersions: Record<string, number> = {};
+    for (const c of nextSubAgentCodes) {
+      if (st.subAgentVersions[c]) nextSubAgentVersions[c] = st.subAgentVersions[c];
+    }
     const nextToolIds = Array.isArray(row.required_tools) ? row.required_tools : [];
     setSceneDraft({
       scene_code: row.scene_code,
@@ -1021,12 +1095,15 @@ export default function AIScenesPage() {
       description: row.description || "",
       builtin_agent_code: nextAgentCode,
       required_tools_text: JSON.stringify(nextToolIds, null, 2),
-      ui_config_text: JSON.stringify(row.ui_config || {}, null, 2),
+      ui_config_text: JSON.stringify(uiCfg || {}, null, 2),
     });
 
     setMainAgentCode(nextAgentCode);
+    setMainAgentVersion(nextAgentVersion);
+    setSubAgentCodes(nextSubAgentCodes);
+    setSubAgentVersions(nextSubAgentVersions);
     setToolIds(nextToolIds);
-  }, []);
+  }, [extractSceneTestUiConfig]);
 
   const refreshAdminScenesOnly = useCallback(async () => {
     setSceneError(null);
@@ -1123,7 +1200,27 @@ export default function AIScenesPage() {
     if (!mainAgent) return;
     const v = pickDefaultVersion(mainAgent);
     setMainAgentVersion((prev) => (mainAgentVersions.includes(prev) ? prev : v));
-  }, [mainAgentCode]);
+  }, [mainAgent, mainAgentCode, mainAgentVersions.join(",")]);
+
+  useEffect(() => {
+    if (agents.length === 0) return;
+    setSubAgentVersions((prev) => {
+      const next: Record<string, number> = {};
+      let changed = false;
+      for (const code of subAgentCodes) {
+        const a = agents.find((x) => x.agent_code === code) || null;
+        const allowed = (a?.versions || []).map((v) => v.version);
+        const current = prev[code] || 0;
+        const desired = allowed.includes(current) ? current : pickDefaultVersion(a);
+        next[code] = desired;
+        if (current !== desired) changed = true;
+      }
+      for (const k of Object.keys(prev)) {
+        if (!subAgentCodes.includes(k)) changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [agents, subAgentCodes.join(",")]);
 
   const filteredAdminScenes = useMemo(() => {
     const q = sceneFilter.trim().toLowerCase();
@@ -1162,6 +1259,7 @@ export default function AIScenesPage() {
         cfgParsed.ok && cfgParsed.value && typeof cfgParsed.value === "object" && !Array.isArray(cfgParsed.value)
           ? (cfgParsed.value as Record<string, unknown>)
           : {};
+      const uiConfigWithSceneTest = injectSceneTestUiConfig(uiConfig);
       const builtinAgentCode = (sceneDraft.builtin_agent_code || "script_expert").trim() || "script_expert";
 
       if (sceneMode === "create") {
@@ -1172,7 +1270,7 @@ export default function AIScenesPage() {
           description: sceneDraft.description.trim() || null,
           builtin_agent_code: builtinAgentCode,
           required_tools: toolIds,
-          ui_config: uiConfig,
+          ui_config: uiConfigWithSceneTest,
         });
         setSceneMode("edit");
       } else {
@@ -1182,7 +1280,7 @@ export default function AIScenesPage() {
           description: sceneDraft.description.trim() || null,
           builtin_agent_code: builtinAgentCode,
           required_tools: toolIds,
-          ui_config: uiConfig,
+          ui_config: uiConfigWithSceneTest,
         });
       }
 
@@ -1192,7 +1290,7 @@ export default function AIScenesPage() {
     } finally {
       setSceneSubmitting(false);
     }
-  }, [refreshAdminScenesOnly, sceneDraft, sceneMode, toolIds]);
+  }, [injectSceneTestUiConfig, refreshAdminScenesOnly, sceneDraft, sceneMode, toolIds]);
 
   const deleteScene = useCallback(async () => {
     const code = sceneDraft.scene_code.trim();
@@ -1887,7 +1985,7 @@ export default function AIScenesPage() {
                       >
                         {mainAgentVersions.map((v) => (
                           <option key={v} value={String(v)}>
-                            v{v}
+                            {formatVersionLabel(mainAgent, v)}
                           </option>
                         ))}
                       </select>
@@ -1954,7 +2052,7 @@ export default function AIScenesPage() {
                                 >
                                   {versions.map((v) => (
                                     <option key={v} value={String(v)}>
-                                      v{v}
+                                      {formatVersionLabel(a, v)}
                                     </option>
                                   ))}
                                 </select>
@@ -2050,7 +2148,7 @@ export default function AIScenesPage() {
             {sideTab === "run" && (
               <div className="p-4 space-y-3">
                 <div className="text-sm text-textMuted">
-                  当前选择：主 Agent {mainAgentCode ? `${mainAgentCode} v${mainAgentVersion}` : "-"}；子 Agent {subAgentCodes.length} 个；工具 {toolIds.length} 个。
+                  当前选择：主 Agent {mainAgentCode ? `${mainAgentCode} ${formatVersionLabel(mainAgent, mainAgentVersion)}` : "-"}；子 Agent {subAgentCodes.length} 个；工具 {toolIds.length} 个。
                 </div>
 
                 <div className="space-y-2">

@@ -19,7 +19,6 @@ import {
   X,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
 
 import { ASSETS } from "@/lib/aistudio/constants";
 import type { Asset, AssetType } from "@/lib/aistudio/types";
@@ -84,26 +83,23 @@ export default function Page() {
     setIsGenerating(true);
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-image",
-        contents: { parts: [{ text: prompt }] },
-        config: { imageConfig: { aspectRatio: "1:1" } },
+      const res = await fetch("/api/ai/image/generate", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({
+          binding_key: "image",
+          model_config_id: null,
+          prompt,
+          resolution: null,
+          images: [],
+        }),
       });
-
-      let imageUrl = "";
-      if (response.candidates?.[0]?.content?.parts) {
-        for (const part of response.candidates[0].content.parts) {
-          if (part.inlineData) {
-            imageUrl = `data:image/png;base64,${part.inlineData.data}`;
-            break;
-          }
-        }
-      }
-
-      if (imageUrl) {
-        setGeneratedImage(imageUrl);
-      }
+      if (!res.ok) throw new Error(await res.text());
+      const json = (await res.json()) as { data?: { url?: string } };
+      const imageUrl = (json.data?.url || "").trim();
+      if (!imageUrl) throw new Error("图片 URL 为空");
+      setGeneratedImage(imageUrl);
     } catch {
       alert("生成失败，请检查配置");
     } finally {

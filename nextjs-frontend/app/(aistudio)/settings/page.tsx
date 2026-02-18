@@ -31,7 +31,6 @@ import {
   Zap,
   MessageSquare,
 } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
 import type { LucideIcon } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";

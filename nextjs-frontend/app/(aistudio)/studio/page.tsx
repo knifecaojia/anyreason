@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import { ArrowLeft, Save, Play, Settings2, Layers, Loader2 } from "lucide-react";
-import { GoogleGenAI } from "@google/genai";
 
 import { InfiniteCanvas } from "@/components/aistudio/InfiniteCanvas";
 import { INITIAL_EDGES, INITIAL_NODES } from "@/lib/aistudio/constants";
@@ -34,16 +33,24 @@ export default function Page() {
     );
 
     try {
-      const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
       for (const node of llmNodes) {
         if (!node.data.prompt) continue;
 
         try {
-          const response = await ai.models.generateContent({
-            model: node.data.model || "gemini-3-flash-preview",
-            contents: node.data.prompt,
+          const res = await fetch("/api/ai/text/chat", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            cache: "no-store",
+            body: JSON.stringify({
+              binding_key: "chatbox",
+              model_config_id: null,
+              messages: [{ role: "user", content: String(node.data.prompt || "") }],
+              attachments: [],
+            }),
           });
+          if (!res.ok) throw new Error(await res.text());
+          const json = (await res.json()) as { data?: { output_text?: string } };
+          const outputText = String(json.data?.output_text || "");
 
           setNodes((current) =>
             current.map((n) => {
@@ -52,7 +59,7 @@ export default function Page() {
                   ...n,
                   data: {
                     ...n.data,
-                    output: response.text,
+                    output: outputText,
                     status: "success",
                   },
                 };
@@ -163,4 +170,3 @@ export default function Page() {
     </div>
   );
 }
-

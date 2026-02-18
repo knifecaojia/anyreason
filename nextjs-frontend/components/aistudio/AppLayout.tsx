@@ -28,6 +28,7 @@ import {
   FileClock,
   ListTodo,
   X,
+  MessageSquare,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -260,6 +261,7 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
     if (path.includes("/assets")) return "资产管理 / Asset Management";
     if (path.includes("/studio")) return "AI 创作工坊 / Studio";
     if (path.includes("/ai-scenes")) return "AI 场景测试 / AI Scenes";
+    if (path.includes("/chat")) return "AI 助手 / Chat";
     if (path.includes("/tasks")) return "任务清单 / Tasks";
     if (path.includes("/settings")) return "系统设置 / Settings";
     return "言之有理";
@@ -368,6 +370,13 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
                 to="/ai-scenes"
                 icon={Wand2}
                 label="AI 场景测试"
+                collapsed={collapsed}
+              />
+
+              <SidebarItem
+                to="/chat"
+                icon={MessageSquare}
+                label="AI 助手"
                 collapsed={collapsed}
               />
             </div>

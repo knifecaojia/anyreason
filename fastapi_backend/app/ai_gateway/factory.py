@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from app.ai_gateway.providers import KlingImageProvider, KlingVideoProvider, OpenAITextProvider
+from app.ai_gateway.providers import GeminiImageProvider, KlingImageProvider, KlingVideoProvider, OpenAIImageProvider, OpenAITextProvider
 
 
 class ProviderFactory:
     def __init__(self) -> None:
         openai_compatible = OpenAITextProvider()
+        openai_image = OpenAIImageProvider()
         self._text = {
             "openai": openai_compatible,
             "qwen": openai_compatible,
@@ -15,7 +16,12 @@ class ProviderFactory:
             "xai": openai_compatible,
             "other": openai_compatible,
         }
-        self._image = {"kling": KlingImageProvider()}
+        self._image = {
+            "kling": KlingImageProvider(),
+            "gemini": GeminiImageProvider(),
+            "openai": openai_image,
+            "doubao": openai_image,
+        }
         self._video = {"kling": KlingVideoProvider()}
 
     def get_text_provider(self, *, manufacturer: str):

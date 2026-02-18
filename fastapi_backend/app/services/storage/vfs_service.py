@@ -311,6 +311,80 @@ class VFSService:
         await db.refresh(node)
         return node
 
+    async def create_bytes_file(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        name: str,
+        data: bytes,
+        content_type: str,
+        parent_id: UUID | None = None,
+        workspace_id: UUID | None = None,
+        project_id: UUID | None = None,
+    ) -> FileNode:
+        _, eff_workspace_id, eff_project_id = await self._resolve_parent_scope(
+            db=db,
+            user_id=user_id,
+            parent_id=parent_id,
+            workspace_id=workspace_id,
+            project_id=project_id,
+        )
+        file_id = uuid4()
+        bucket_name = settings.MINIO_BUCKET_VFS
+        await _ensure_bucket(bucket_name)
+        safe_name = sanitize_filename(name, default="file")
+        object_key = f"vfs/{eff_workspace_id or 'global'}/{eff_project_id or 'shared'}/{file_id}/{safe_name}"
+        payload = data or b""
+        ct = content_type or mimetypes.guess_type(safe_name)[0] or "application/octet-stream"
+        await _put_object(bucket=bucket_name, key=object_key, data=payload, content_type=ct)
+
+        thumb_bucket: str | None = None
+        thumb_key: str | None = None
+        thumb_content_type: str | None = None
+        thumb_size_bytes = 0
+        if should_generate_thumbnail(content_type=ct, filename=safe_name):
+            try:
+                thumb = generate_thumbnail(payload, max_size=512)
+                ext = ".jpg" if thumb.content_type == "image/jpeg" else ".png"
+                thumb_bucket = bucket_name
+                thumb_key = f"vfs/{eff_workspace_id or 'global'}/{eff_project_id or 'shared'}/{file_id}/thumb/thumbnail{ext}"
+                thumb_content_type = thumb.content_type
+                thumb_size_bytes = thumb.size_bytes
+                await _put_object(
+                    bucket=thumb_bucket,
+                    key=thumb_key,
+                    data=thumb.data,
+                    content_type=thumb_content_type,
+                )
+            except Exception:
+                thumb_bucket = None
+                thumb_key = None
+                thumb_content_type = None
+                thumb_size_bytes = 0
+
+        node = FileNode(
+            id=file_id,
+            name=safe_name,
+            is_folder=False,
+            parent_id=parent_id,
+            workspace_id=eff_workspace_id,
+            project_id=eff_project_id,
+            created_by=user_id,
+            minio_bucket=bucket_name,
+            minio_key=object_key,
+            content_type=ct,
+            size_bytes=len(payload),
+            thumb_minio_bucket=thumb_bucket,
+            thumb_minio_key=thumb_key,
+            thumb_content_type=thumb_content_type,
+            thumb_size_bytes=thumb_size_bytes,
+        )
+        db.add(node)
+        await db.commit()
+        await db.refresh(node)
+        return node
+
     async def upsert_text_file(
         self,
         *,

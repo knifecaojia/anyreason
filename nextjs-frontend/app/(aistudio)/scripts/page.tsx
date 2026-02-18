@@ -7,6 +7,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgentPickerDialog } from "@/components/agents/AgentPickerDialog";
 import { StatCard } from "@/components/aistudio/StatCard";
+import { ScriptAIAssistantChatboxPane } from "@/components/scripts/ScriptAIAssistantChatboxPane";
 
 type ScriptItem = {
   id: string;
@@ -130,7 +131,7 @@ export default function Page() {
   const initialPane = (() => {
     if (!isWriteMode) return "dashboard";
     const p = searchParams.get("pane");
-    if (p === "episodes" || p === "assets" || p === "editor" || p === "dashboard") return p;
+    if (p === "episodes" || p === "assets" || p === "editor" || p === "ai" || p === "dashboard") return p;
     return "dashboard";
   })();
 
@@ -160,7 +161,7 @@ export default function Page() {
   const [episodesError, setEpisodesError] = useState<string | null>(null);
   const [hierarchyLoadedScriptId, setHierarchyLoadedScriptId] = useState<string | null>(null);
   const [activeEpisodeId, setActiveEpisodeId] = useState<string | null>(null);
-  const [writePane, setWritePane] = useState<"dashboard" | "episodes" | "assets" | "editor">(initialPane);
+  const [writePane, setWritePane] = useState<"dashboard" | "episodes" | "assets" | "editor" | "ai">(initialPane);
   const [scriptStats, setScriptStats] = useState<ScriptStats | null>(null);
   const [scriptStatsLoading, setScriptStatsLoading] = useState(false);
   const [scriptStatsError, setScriptStatsError] = useState<string | null>(null);
@@ -181,7 +182,7 @@ export default function Page() {
   useEffect(() => {
     if (!isWriteMode) return;
     const p = searchParams.get("pane");
-    const nextPane = p === "episodes" || p === "assets" || p === "editor" || p === "dashboard" ? p : "dashboard";
+    const nextPane = p === "episodes" || p === "assets" || p === "editor" || p === "ai" || p === "dashboard" ? p : "dashboard";
     setWritePane((prev) => (prev === nextPane ? prev : nextPane));
   }, [isWriteMode, searchParams]);
 
@@ -220,7 +221,7 @@ export default function Page() {
     };
   }, [isWriteMode, scriptId, fullScriptText]);
 
-  const setWritePaneAndSync = (pane: "dashboard" | "episodes" | "assets" | "editor") => {
+  const setWritePaneAndSync = (pane: "dashboard" | "episodes" | "assets" | "editor" | "ai") => {
     setWritePane(pane);
     const sp = new URLSearchParams(searchParams.toString());
     if (pane === "dashboard") {
@@ -264,6 +265,12 @@ export default function Page() {
   const [viewerTitle, setViewerTitle] = useState("");
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerContent, setViewerContent] = useState("");
+  const [viewerNode, setViewerNode] = useState<VfsNode | null>(null);
+  const [viewerPrompt, setViewerPrompt] = useState("");
+  const [viewerGenTaskId, setViewerGenTaskId] = useState<string | null>(null);
+  const [viewerGenResultNodeId, setViewerGenResultNodeId] = useState<string | null>(null);
+  const [viewerGenSubmitting, setViewerGenSubmitting] = useState(false);
+  const [viewerGenError, setViewerGenError] = useState<string | null>(null);
 
   const refreshHierarchy = async (targetScriptId: string) => {
     setEpisodesLoading(true);
@@ -678,8 +685,21 @@ export default function Page() {
         }
         const allDone = statuses.every((s) => s.state.status === "succeeded");
         if (allDone) {
+          const finishedIds = statuses.map((s) => s.meta.id);
+          const captureViewerTask = viewerGenTaskId && finishedIds.includes(viewerGenTaskId) ? viewerGenTaskId : null;
           setTasksRunning([]);
           await refreshHierarchy(scriptId);
+          await refreshScriptStats(scriptId);
+          if (captureViewerTask) {
+            try {
+              const res = await fetch(`/api/tasks/${encodeURIComponent(captureViewerTask)}`, { cache: "no-store" });
+              if (res.ok) {
+                const json = (await res.json()) as { data?: { result_json?: Record<string, unknown> } };
+                const fileNodeId = json.data?.result_json?.file_node_id;
+                if (typeof fileNodeId === "string" && fileNodeId) setViewerGenResultNodeId(fileNodeId);
+              }
+            } catch {}
+          }
           return;
         }
         await new Promise((r) => setTimeout(r, 1500));
@@ -723,15 +743,75 @@ export default function Page() {
     setTasksRunning(created);
   };
 
+  const guessPromptFromMarkdown = (md: string, title: string) => {
+    const raw = String(md || "").trim();
+    const m1 = raw.match(/prompt_en\s*[:：]\s*(.+)$/im);
+    if (m1 && m1[1]) return m1[1].trim();
+    const m2 = raw.match(/prompt\s*[:：]\s*(.+)$/im);
+    if (m2 && m2[1]) return m2[1].trim();
+    const m3 = raw.match(/^#\s+(.+)$/m);
+    const heading = m3 && m3[1] ? m3[1].trim() : "";
+    if (heading) return heading;
+    return title || "";
+  };
+
   const openNode = async (node: VfsNode) => {
     setViewerOpen(true);
+    setViewerNode(node);
     setViewerTitle(node.name);
     setViewerContent("");
+    setViewerPrompt("");
+    setViewerGenTaskId(null);
+    setViewerGenResultNodeId(null);
+    setViewerGenSubmitting(false);
+    setViewerGenError(null);
     setViewerLoading(true);
     try {
-      setViewerContent(await vfsDownloadText(node.id));
+      const content = await vfsDownloadText(node.id);
+      setViewerContent(content);
+      setViewerPrompt(guessPromptFromMarkdown(content, node.name));
     } finally {
       setViewerLoading(false);
+    }
+  };
+
+  const startViewerImageGeneration = async () => {
+    if (!scriptId) return;
+    if (!viewerNode?.parent_id) {
+      setViewerGenError("当前文件没有可写入的父目录");
+      return;
+    }
+    const prompt = viewerPrompt.trim();
+    if (!prompt) {
+      setViewerGenError("请输入生成提示词");
+      return;
+    }
+    setViewerGenSubmitting(true);
+    setViewerGenError(null);
+    setViewerGenResultNodeId(null);
+    try {
+      const base = viewerNode.name.replace(/\.[^/.]+$/, "").trim() || "generated";
+      const t = await createTask({
+        type: "asset_image_generate",
+        entity_type: "project",
+        entity_id: scriptId,
+        input_json: {
+          project_id: scriptId,
+          parent_node_id: viewerNode.parent_id,
+          filename: `${base}.png`,
+          prompt,
+          binding_key: "image",
+          model_config_id: null,
+          resolution: null,
+          images: [],
+        },
+      });
+      setViewerGenTaskId(t.id);
+      setTasksRunning([{ id: t.id, label: "生成图片" }]);
+    } catch (e) {
+      setViewerGenError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setViewerGenSubmitting(false);
     }
   };
 
@@ -1188,9 +1268,12 @@ export default function Page() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-4 lg:p-8">
-        <div className="max-w-6xl mx-auto space-y-6">
-          <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+      <div
+        className={`flex-1 ${writePane === "ai" ? "p-3 lg:p-4 overflow-hidden min-h-0 flex flex-col" : "p-4 lg:p-8 overflow-y-auto"}`}
+      >
+        <div className={writePane === "ai" ? "flex-1 min-h-0 flex flex-col gap-3" : "max-w-6xl mx-auto space-y-6"}>
+          {writePane !== "ai" && (
+            <div className="rounded-2xl border border-border bg-surface overflow-hidden">
             <div className="p-5 flex flex-col lg:flex-row gap-5">
               {(activeScript?.panorama_size_bytes || 0) > 0 ? (
                 <div className="w-full lg:w-80 shrink-0 rounded-xl border border-border bg-background overflow-hidden">
@@ -1221,16 +1304,7 @@ export default function Page() {
                       </div>
                     ) : scriptsError ? (
                       <div className="text-xs text-red-400 whitespace-pre-wrap">{scriptsError}</div>
-                    ) : (
-                      <select value={scriptId} onChange={(e) => pickScript(e.target.value)} className="bg-background border border-border rounded-lg px-3 py-2 text-xs">
-                        <option value="">选择一个剧本</option>
-                        {scripts.map((s) => (
-                          <option key={s.id} value={s.id}>
-                            {s.title}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                    ) : null}
                   </div>
                 </div>
 
@@ -1257,32 +1331,181 @@ export default function Page() {
                 {scriptStatsError && <div className="text-xs text-red-400 whitespace-pre-wrap">{scriptStatsError}</div>}
               </div>
             </div>
-          </div>
+            </div>
+          )}
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[
-              { key: "scene_count", label: "场景数", value: scriptStats?.scene_count, icon: Clapperboard, color: "bg-blue-500", pane: "assets" as const },
-              { key: "character_count", label: "角色数", value: scriptStats?.character_count, icon: Users, color: "bg-green-500", pane: "assets" as const },
-              { key: "prop_count", label: "道具数", value: scriptStats?.prop_count, icon: Package, color: "bg-orange-500", pane: "assets" as const },
-              { key: "vfx_count", label: "特效数", value: scriptStats?.vfx_count, icon: Wand2, color: "bg-purple-500", pane: "assets" as const },
-              { key: "episodes_count", label: "剧集数", value: scriptStats?.episodes_count, icon: Film, color: "bg-cyan-500", pane: "episodes" as const },
-              { key: "image_count", label: "图片数", value: scriptStats?.image_count, icon: ImageIcon, color: "bg-pink-500", pane: "assets" as const },
-              { key: "video_count", label: "视频数", value: scriptStats?.video_count, icon: VideoIcon, color: "bg-red-500", pane: "assets" as const },
-              { key: "audio_count", label: "音频数", value: undefined, icon: Music, color: "bg-yellow-500", pane: "assets" as const },
-            ].map((x) => (
-              <StatCard
-                key={x.key}
-                label={x.label}
-                value={scriptStatsLoading ? "…" : scriptStatsError || !scriptStats ? "—" : typeof x.value === "number" ? x.value.toLocaleString() : "—"}
-                icon={x.icon}
-                color={x.color}
-                variant="compact"
-                onClick={() => setWritePaneAndSync(x.pane)}
-              />
-            ))}
-          </div>
+          {writePane === "ai" && (
+            <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+              <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/30 flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setWritePaneAndSync("dashboard")}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                  >
+                    概览
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWritePaneAndSync("episodes")}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                  >
+                    剧集
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWritePaneAndSync("assets")}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                  >
+                    资产
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setWritePaneAndSync("editor")}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                  >
+                    编辑器
+                  </button>
+                  <div className="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary/15 text-primary border border-primary/25">
+                    AI 助手
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {writePane === "dashboard" && (
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {[
+                  { key: "scene_count", label: "场景数", value: scriptStats?.scene_count, icon: Clapperboard, color: "bg-blue-500", pane: "assets" as const },
+                  { key: "character_count", label: "角色数", value: scriptStats?.character_count, icon: Users, color: "bg-green-500", pane: "assets" as const },
+                  { key: "prop_count", label: "道具数", value: scriptStats?.prop_count, icon: Package, color: "bg-orange-500", pane: "assets" as const },
+                  { key: "vfx_count", label: "特效数", value: scriptStats?.vfx_count, icon: Wand2, color: "bg-purple-500", pane: "assets" as const },
+                  { key: "episodes_count", label: "剧集数", value: scriptStats?.episodes_count, icon: Film, color: "bg-cyan-500", pane: "episodes" as const },
+                  { key: "image_count", label: "图片数", value: scriptStats?.image_count, icon: ImageIcon, color: "bg-pink-500", pane: "assets" as const },
+                  { key: "video_count", label: "视频数", value: scriptStats?.video_count, icon: VideoIcon, color: "bg-red-500", pane: "assets" as const },
+                  { key: "audio_count", label: "音频数", value: undefined, icon: Music, color: "bg-yellow-500", pane: "assets" as const },
+                ].map((x) => (
+                  <StatCard
+                    key={x.key}
+                    label={x.label}
+                    value={scriptStatsLoading ? "…" : scriptStatsError || !scriptStats ? "—" : typeof x.value === "number" ? x.value.toLocaleString() : "—"}
+                    icon={x.icon}
+                    color={x.color}
+                    variant="compact"
+                    onClick={() => setWritePaneAndSync(x.pane)}
+                  />
+                ))}
+              </div>
+
+              <div className="rounded-2xl border border-border bg-surface overflow-hidden">
+                <div className="px-5 py-4 border-b border-border bg-surfaceHighlight/30 flex items-center justify-between gap-3">
+                  <div className="font-bold text-sm">导演清单</div>
+                  <button
+                    onClick={() => setWritePaneAndSync("assets")}
+                    className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                    type="button"
+                    disabled={!scriptId}
+                  >
+                    打开资产面板
+                  </button>
+                </div>
+                <div className="p-4 space-y-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-textMain">1) 结构化分集</div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[11px] font-bold ${episodes.length > 0 ? "text-green-400" : "text-textMuted"}`}>
+                        {episodes.length > 0 ? "已完成" : "未完成"}
+                      </span>
+                      <button
+                        onClick={() => void autoSplitEpisodes()}
+                        disabled={!scriptId || tasksRunning.length > 0}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surfaceHighlight/30 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        自动化分集
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-textMain">2) 选择当前剧集</div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[11px] font-bold ${activeEpisode ? "text-green-400" : "text-textMuted"}`}>
+                        {activeEpisode ? activeEpisode.episode_code : "未选择"}
+                      </span>
+                      <button
+                        onClick={() => setWritePaneAndSync("episodes")}
+                        disabled={!scriptId}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surfaceHighlight/30 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        去选择
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-textMain">3) 故事板拆解</div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[11px] font-bold ${activeEpisode?.storyboard_root_node_id ? "text-green-400" : "text-textMuted"}`}>
+                        {activeEpisode?.storyboard_root_node_id ? "已完成" : "未完成"}
+                      </span>
+                      <button
+                        onClick={() => setWritePaneAndSync("assets")}
+                        disabled={!activeEpisode}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surfaceHighlight/30 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        去拆解
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-textMain">4) 资产提取与审片</div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[11px] font-bold ${activeEpisode?.asset_root_node_id ? "text-green-400" : "text-textMuted"}`}>
+                        {activeEpisode?.asset_root_node_id ? "已完成" : "未完成"}
+                      </span>
+                      <button
+                        onClick={() => {
+                          setWritePaneAndSync("assets");
+                          if (activeEpisode) setAssetDialogOpen(true);
+                        }}
+                        disabled={!activeEpisode || tasksRunning.length > 0}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surfaceHighlight/30 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        提取资产
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="text-sm font-bold text-textMain">5) 生成一致性图片素材</div>
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[11px] font-bold ${(scriptStats?.image_count || 0) > 0 ? "text-green-400" : "text-textMuted"}`}>
+                        {(scriptStats?.image_count || 0) > 0 ? `已生成 ${scriptStats?.image_count}` : "未生成"}
+                      </span>
+                      <button
+                        onClick={() => setWritePaneAndSync("assets")}
+                        disabled={!activeEpisode}
+                        className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surfaceHighlight/30 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors disabled:opacity-50"
+                        type="button"
+                      >
+                        去生成
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {writePane !== "ai" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             <button
               type="button"
               onClick={() => setWritePaneAndSync("episodes")}
@@ -1330,7 +1553,24 @@ export default function Page() {
                 </div>
               </div>
             </button>
+
+            <button
+              type="button"
+              onClick={() => setWritePaneAndSync("ai")}
+              className="rounded-2xl border border-border bg-surface p-5 text-left hover:bg-surfaceHighlight/30 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl border border-border bg-surfaceHighlight/40 flex items-center justify-center text-textMuted">
+                  <Sparkles size={18} />
+                </div>
+                <div>
+                  <div className="font-bold text-base text-textMain">AI 助手</div>
+                  <div className="text-xs text-textMuted mt-1">对话式引导与可控落库</div>
+                </div>
+              </div>
+            </button>
           </div>
+          )}
 
           {(tasksRunning.length > 0 || taskError) && (
             <div className="rounded-xl border border-border bg-surface p-4">
@@ -1341,6 +1581,17 @@ export default function Page() {
               )}
               {taskError && <div className="mt-2 text-xs text-red-400 whitespace-pre-wrap">{taskError}</div>}
             </div>
+          )}
+
+          {writePane === "ai" && (
+            <ScriptAIAssistantChatboxPane
+              projectId={scriptId}
+              scriptText={fullScriptText || fullScriptFallback}
+              episodeHint={{ episode_id: activeEpisodeId, episode_code: activeEpisode?.episode_code }}
+              episodes={episodes}
+              activeEpisodeId={activeEpisodeId}
+              onEpisodeChange={setActiveEpisodeId}
+            />
           )}
 
           {writePane === "episodes" && (
@@ -1718,6 +1969,42 @@ export default function Page() {
               >
                 关闭
               </button>
+            </div>
+            <div className="p-4 border-b border-border bg-background/20 space-y-2">
+              <div className="text-xs text-textMuted">生成提示词</div>
+              <textarea
+                value={viewerPrompt}
+                onChange={(e) => setViewerPrompt(e.target.value)}
+                className="w-full min-h-[88px] bg-transparent border border-border rounded-xl p-3 text-xs text-textMain outline-none resize-y"
+                placeholder="输入用于生成图片的提示词..."
+                spellCheck={false}
+              />
+              <div className="flex items-center justify-between gap-3">
+                <div className="text-[11px] text-textMuted truncate">
+                  {viewerGenTaskId ? `任务：${viewerGenTaskId}` : " "}
+                </div>
+                <div className="flex items-center gap-2">
+                  {viewerGenResultNodeId && (
+                    <a
+                      href={`/api/vfs/nodes/${encodeURIComponent(viewerGenResultNodeId)}/download`}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      下载生成图
+                    </a>
+                  )}
+                  <button
+                    onClick={() => void startViewerImageGeneration()}
+                    disabled={viewerLoading || viewerGenSubmitting || tasksRunning.length > 0}
+                    className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                    type="button"
+                  >
+                    {viewerGenSubmitting ? "提交中..." : "生成图片"}
+                  </button>
+                </div>
+              </div>
+              {viewerGenError && <div className="text-xs text-red-400 whitespace-pre-wrap">{viewerGenError}</div>}
             </div>
             <div className="p-4 max-h-[70vh] overflow-y-auto">
               {viewerLoading ? (
