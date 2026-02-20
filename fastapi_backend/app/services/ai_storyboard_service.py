@@ -16,6 +16,9 @@ from app.schemas import AIShotDraft
 
 _JSON_FENCE_RE = re.compile(r"```(?:json)?\s*([\s\S]*?)\s*```", re.IGNORECASE)
 _FIRST_JSON_RE = re.compile(r"(\{[\s\S]*\}|\[[\s\S]*\])")
+_SHOT_HEADER_RE = re.compile(r"(?im)^\s*###\s*镜头\s*\d+[^\n]*$")
+_MD_FIELD_RE_TEMPLATE = r"(?im)^\s*[*-]?\s*\*\*{key}\*\*\s*[:：]\s*(.+?)\s*$"
+_MAX_SHOTS = 120
 
 _STORYBOARD_INJECTION = """
 你是“分镜导演（Storyboard Director）”，负责将“分场剧本”拆解成可执行的镜头列表。
@@ -47,6 +50,7 @@ _STORYBOARD_INJECTION = """
 3) description 要具体可拍：主体是谁、做什么、在哪里、镜头关注点是什么
 4) 镜头语言要有节奏：开场建立(远/全) → 表演与信息(中/近/特) → 关键点(特写/反应) → 收束/过渡(空镜/远景)
 5) 不确定的字段用 null
+6) shots 数量不要超过 60 条，必要时合并相近镜头
 
 分场信息:
 <SCENE>
@@ -92,30 +96,94 @@ def _extract_json_text(text: str) -> str | None:
     return None
 
 
-def _parse_shots_from_output(text: str) -> list[AIShotDraft]:
-    json_text = _extract_json_text(text)
-    if not json_text:
-        raise ValueError("模型返回中未找到 JSON")
-    data = json.loads(json_text)
-    shots_payload: Any
-    if isinstance(data, dict) and isinstance(data.get("shots"), list):
-        shots_payload = data.get("shots")
-    elif isinstance(data, list):
-        shots_payload = data
-    else:
-        raise ValueError("JSON 格式不符合预期（需要 {shots:[...]} 或 [...]）")
+def _extract_md_field(block: str, key: str) -> str | None:
+    if not block:
+        return None
+    pat = re.compile(_MD_FIELD_RE_TEMPLATE.format(key=re.escape(key)))
+    m = pat.search(block)
+    if not m:
+        return None
+    v = (m.group(1) or "").strip()
+    return v or None
 
+
+def _parse_shots_from_markdown(text: str) -> list[AIShotDraft]:
+    t = (text or "").strip()
+    if not t:
+        return []
+    matches = list(_SHOT_HEADER_RE.finditer(t))
+    if not matches:
+        return []
     out: list[AIShotDraft] = []
-    for item in shots_payload:
-        if not isinstance(item, dict):
-            continue
-        draft = AIShotDraft.model_validate(item)
+    for idx, m in enumerate(matches):
+        start = m.end()
+        end = matches[idx + 1].start() if idx + 1 < len(matches) else len(t)
+        block = t[start:end]
+        view = _extract_md_field(block, "景别/视角")
+        shot_type: str | None = None
+        camera_angle: str | None = None
+        if view:
+            v = view.replace("（", "(").replace("）", ")").strip()
+            parts = [p.strip() for p in re.split(r"\s*/\s*", v) if p.strip()]
+            if parts:
+                m_paren = re.search(r"\(([^)]+)\)", parts[0])
+                if m_paren:
+                    camera_angle = (m_paren.group(1) or "").strip() or None
+                shot_type = re.sub(r"\s*\([^)]*\)\s*$", "", parts[0]).strip() or parts[0]
+            if len(parts) >= 2 and not camera_angle:
+                camera_angle = parts[1] or None
+
+        assets_line = _extract_md_field(block, "资产调用") or ""
+        active_assets = [s.strip() for s in re.findall(r"@([0-9A-Za-z_\-\u4e00-\u9fff]+)", assets_line) if s.strip()]
+
+        draft = AIShotDraft(
+            shot_type=shot_type,
+            camera_angle=camera_angle,
+            narrative_function=_extract_md_field(block, "导演意图"),
+            description=_extract_md_field(block, "画面内容描述"),
+            dialogue=_extract_md_field(block, "对白/音效"),
+            active_assets=active_assets,
+        )
         if not (draft.description or draft.dialogue):
             continue
         out.append(draft)
-    if not out:
-        raise ValueError("未解析到有效分镜数据")
+        if len(out) >= _MAX_SHOTS:
+            break
     return out
+
+
+def _parse_shots_from_output(text: str) -> list[AIShotDraft]:
+    try:
+        json_text = _extract_json_text(text)
+        if not json_text:
+            raise ValueError("模型返回中未找到 JSON")
+        data = json.loads(json_text)
+        shots_payload: Any
+        if isinstance(data, dict) and isinstance(data.get("shots"), list):
+            shots_payload = data.get("shots")
+        elif isinstance(data, list):
+            shots_payload = data
+        else:
+            raise ValueError("JSON 格式不符合预期（需要 {shots:[...]} 或 [...]）")
+
+        out: list[AIShotDraft] = []
+        for item in shots_payload:
+            if not isinstance(item, dict):
+                continue
+            draft = AIShotDraft.model_validate(item)
+            if not (draft.description or draft.dialogue):
+                continue
+            out.append(draft)
+            if len(out) >= _MAX_SHOTS:
+                break
+        if out:
+            return out
+        raise ValueError("未解析到有效分镜数据")
+    except Exception:
+        out_md = _parse_shots_from_markdown(text)
+        if out_md:
+            return out_md
+        raise
 
 
 async def _get_storyboard_and_episode_for_user(

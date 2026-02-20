@@ -65,8 +65,120 @@ class AdminAIModelTestChatMessage(BaseModel):
 
 class AdminAIModelConfigTestChatRequest(BaseModel):
     messages: list[AdminAIModelTestChatMessage] = Field(min_length=1)
+    session_id: UUID | None = None
 
 
 class AdminAIModelConfigTestChatResponse(BaseModel):
     output_text: str
     raw: dict[str, Any]
+
+
+class AdminAIModelConfigTestImageRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    resolution: str | None = None
+    image_data_urls: list[str] | None = None
+    attachment_file_node_ids: list[UUID] | None = None
+    session_id: UUID | None = None
+
+
+class AdminAIModelConfigTestVideoRequest(BaseModel):
+    prompt: str = Field(min_length=1)
+    duration: int | None = None
+    aspect_ratio: str | None = None
+    attachment_file_node_ids: list[UUID] | None = None
+    session_id: UUID | None = None
+
+
+class AdminAIModelConfigTestVideoResponse(BaseModel):
+    url: str
+    raw: dict[str, Any] | None = None
+    session_id: UUID | None = None
+    run_id: UUID | None = None
+    output_file_node_id: UUID | None = None
+    output_content_type: str | None = None
+    input_file_node_ids: list[UUID] | None = None
+
+
+class AdminAIModelConfigTestImageResponse(BaseModel):
+    url: str
+    raw: dict[str, Any] | None = None
+    session_id: UUID | None = None
+    run_id: UUID | None = None
+    output_file_node_id: UUID | None = None
+    output_content_type: str | None = None
+    input_file_node_ids: list[UUID] | None = None
+
+
+class AIModelTestImageRunRead(BaseModel):
+    id: UUID
+    prompt: str
+    resolution: str | None = None
+    input_image_count: int
+    input_file_node_ids: list[UUID] = []
+    output_file_node_id: UUID | None = None
+    output_content_type: str | None = None
+    output_url: str | None = None
+    error_message: str | None = None
+    raw_payload: dict[str, Any] | None = None
+    created_at: datetime
+
+
+class AIModelTestTextRunRead(BaseModel):
+    id: UUID
+    messages: list[dict[str, Any]] = []
+    output_text: str | None = None
+    error_message: str | None = None
+    raw_payload: dict[str, Any] | None = None
+    created_at: datetime
+
+
+class AIModelTestVideoRunRead(BaseModel):
+    id: UUID
+    prompt: str
+    duration: int | None = None
+    aspect_ratio: str | None = None
+    input_file_node_ids: list[UUID] = []
+    output_file_node_id: UUID | None = None
+    output_content_type: str | None = None
+    output_url: str | None = None
+    error_message: str | None = None
+    raw_payload: dict[str, Any] | None = None
+    created_at: datetime
+
+
+class AIModelTestSessionRead(BaseModel):
+    id: UUID
+    user_id: UUID
+    category: AICategory
+    ai_model_config_id: UUID | None = None
+    title: str
+    image_attachment_node_ids: list[UUID] = []
+    created_at: datetime
+    updated_at: datetime
+    image_runs: list[AIModelTestImageRunRead] = []
+    text_runs: list[AIModelTestTextRunRead] = []
+    video_runs: list[AIModelTestVideoRunRead] = []
+
+
+class AdminAIModelTestSessionCreateRequest(BaseModel):
+    category: AICategory
+    ai_model_config_id: UUID | None = None
+    title: str | None = None
+
+
+class AIModelTestSessionListItem(BaseModel):
+    id: UUID
+    category: AICategory
+    ai_model_config_id: UUID | None = None
+    title: str
+    created_at: datetime
+    updated_at: datetime
+    image_run_count: int = 0
+    run_count: int = 0
+
+
+class AIModelTestSessionListResponse(BaseModel):
+    items: list[AIModelTestSessionListItem]
+    total: int
+    page: int
+    page_size: int

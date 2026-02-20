@@ -63,3 +63,63 @@
 - **模型编排**：将多模型调用以工作流/节点形式组织并可追溯执行
 - **门禁/质检**：在 SOP 每个阶段对产物做自动/半自动 QA，阻止低质量进入下游
 
+## 9. 通过“沙箱”启动项目（本机联调：后端 + Worker + 前端）
+
+这里的“沙箱”指：**支撑系统（Postgres / Redis / MinIO）已经在本机运行**，应用服务（后端 / Worker / 前端）在本机启动，用于快速联调与调试。
+
+### 9.1 前置检查
+
+- Postgres：`localhost:5432`
+- Redis：`localhost:6379`
+- MinIO API：`http://localhost:9000`（控制台通常是 `http://localhost:9001`）
+
+如果上述基础设施未启动，可参考 [README.md](file:///f:/animate-serial/apps/anyreason/README.md) 的“本机运行（不使用应用容器）”章节先拉起依赖。
+
+### 9.2 启动后端（FastAPI，8000）
+
+在 PowerShell 中执行：
+
+```powershell
+cd .\fastapi_backend
+Copy-Item .\.env.example .\.env -ErrorAction SilentlyContinue
+uv python install 3.12
+uv sync
+uv run uvicorn app.main:app --reload --port 8000
+```
+
+验证：
+- Swagger：`http://localhost:8000/docs`
+
+### 9.3 启动 Worker（任务执行）
+
+新开一个 PowerShell 窗口执行：
+
+```powershell
+cd .\fastapi_backend
+Copy-Item .\.env.example .\.env -ErrorAction SilentlyContinue
+uv sync
+uv run python -m app.tasks.worker --reload
+```
+
+启动成功后，日志会打印类似 `known task types:` 的任务类型列表。
+
+### 9.4 启动前端（Next.js，3000）
+
+新开一个 PowerShell 窗口执行：
+
+```powershell
+cd .\nextjs-frontend
+Copy-Item .\.env.example .\.env -ErrorAction SilentlyContinue
+Copy-Item .\.env.local.example .\.env.local -ErrorAction SilentlyContinue
+pnpm install
+pnpm dev
+```
+
+验证：
+- 前端：`http://localhost:3000`
+
+### 9.5 常见联调要点
+
+- 前端调后端：优先检查 `nextjs-frontend/.env` 或 `.env.local` 中 `NEXT_PUBLIC_API_BASE_URL` 是否指向 `http://localhost:8000`
+- 后端连基础设施：优先检查 `fastapi_backend/.env` 中 `DATABASE_URL` / `REDIS_URL` / `MINIO_ENDPOINT`（是否为本机地址/端口）
+- 需要默认管理员账号：在 `fastapi_backend/.env` 中开启 `CREATE_DEFAULT_ADMIN=true`，并设置 `DEFAULT_ADMIN_EMAIL` / `DEFAULT_ADMIN_PASSWORD`（见 [README.md](file:///f:/animate-serial/apps/anyreason/README.md)）

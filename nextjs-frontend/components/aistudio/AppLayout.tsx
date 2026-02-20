@@ -15,12 +15,10 @@ import {
   ChevronLeft,
   FileText,
   ChevronDown,
-  ScanSearch,
   Film,
   PlusCircle,
   List,
-  ImagePlus,
-  Workflow,
+
   Cpu,
   Users,
   Shield,
@@ -28,7 +26,6 @@ import {
   FileClock,
   ListTodo,
   X,
-  MessageSquare,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
@@ -332,30 +329,9 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
               </SidebarGroup>
 
               <SidebarItem
-                to="/extraction"
-                icon={ScanSearch}
-                label="资产提取"
-                collapsed={collapsed}
-              />
-
-              <SidebarGroup
+                to="/assets"
                 icon={Library}
                 label="资产管理"
-                collapsed={collapsed}
-                active={pathname.includes("/assets")}
-              >
-                <SubItem to="/assets?mode=list" icon={List} label="资产清单" />
-                <SubItem
-                  to="/assets?mode=create"
-                  icon={ImagePlus}
-                  label="资产创作"
-                />
-              </SidebarGroup>
-
-              <SidebarItem
-                to="/storyboard"
-                icon={Workflow}
-                label="内容创作"
                 collapsed={collapsed}
               />
 
@@ -373,12 +349,6 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
                 collapsed={collapsed}
               />
 
-              <SidebarItem
-                to="/chat"
-                icon={MessageSquare}
-                label="AI 助手"
-                collapsed={collapsed}
-              />
             </div>
 
             <div className="pb-2 mt-2">

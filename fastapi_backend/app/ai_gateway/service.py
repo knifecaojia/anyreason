@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -16,6 +17,34 @@ from app.crypto import build_fernet
 from app.log import logger
 from app.models import AIModelBinding, AIModelConfig, AIUsageEvent
 from app.services.credit_service import credit_service
+
+
+def _extract_api_error(e: Exception) -> str:
+    """从 API 异常中提取友好的错误信息"""
+    err_str = str(e)
+    
+    patterns = [
+        (r"'message':\s*'([^']+)'", 1),
+        (r'"message":\s*"([^"]+)"', 1),
+        (r"Error code:\s*(\d+)", 0),
+        (r"insufficient_quota", "配额不足"),
+        (r"rate_limit", "请求过于频繁"),
+        (r"invalid_api_key", "API Key 无效"),
+        (r"model_not_found", "模型不存在"),
+        (r"context_length_exceeded", "上下文长度超限"),
+        (r"PermissionDeniedError", "权限被拒绝"),
+    ]
+    
+    for pattern, group in patterns:
+        match = re.search(pattern, err_str, re.IGNORECASE)
+        if match:
+            if isinstance(group, int):
+                return match.group(group)
+            return group
+    
+    if len(err_str) > 200:
+        return err_str[:200] + "..."
+    return err_str
 
 
 def _merge_attachments(messages: list[dict[str, Any]], attachments: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -179,6 +208,7 @@ class AIGatewayService:
             raise
         except Exception as e:
             error_code = "upstream_error"
+            friendly_msg = _extract_api_error(e)
             logger.bind(
                 context={
                     "category": "text",
@@ -186,6 +216,7 @@ class AIGatewayService:
                     "manufacturer": cfg.manufacturer,
                     "model": cfg.model,
                     "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                    "raw_error": str(e),
                 }
             ).exception("ai_gateway.chat_text_failed")
             if consumed_credits > 0:
@@ -200,7 +231,7 @@ class AIGatewayService:
                 )
                 await db.commit()
                 consumed_credits = 0
-            raise AppError(msg="AI chat failed", code=502, status_code=502, data=str(e))
+            raise AppError(msg=f"AI 调用失败: {friendly_msg}", code=502, status_code=502, data={"raw": str(e), "friendly": friendly_msg})
         finally:
             latency_ms = int((time.perf_counter() - started) * 1000)
             db.add(
@@ -286,12 +317,11 @@ class AIGatewayService:
                 )
                 await db.commit()
                 consumed_credits = 0
-            if emitted_any:
-                yield {"type": "error", "message": str(e.msg), "code": int(e.code or 500)}
-                return
-            raise
+            yield {"type": "error", "message": str(e.msg), "code": int(e.code or 500)}
+            return
         except Exception as e:
             error_code = "upstream_error"
+            friendly_msg = _extract_api_error(e)
             logger.bind(
                 context={
                     "category": "text",
@@ -299,6 +329,7 @@ class AIGatewayService:
                     "manufacturer": cfg.manufacturer,
                     "model": cfg.model,
                     "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                    "raw_error": str(e),
                 }
             ).exception("ai_gateway.chat_text_stream_failed")
             if consumed_credits > 0:
@@ -313,10 +344,8 @@ class AIGatewayService:
                 )
                 await db.commit()
                 consumed_credits = 0
-            if emitted_any:
-                yield {"type": "error", "message": str(e), "code": 502}
-                return
-            raise AppError(msg="AI chat failed", code=502, status_code=502, data=str(e))
+            yield {"type": "error", "message": f"AI 调用失败: {friendly_msg}", "code": 502}
+            return
         finally:
             latency_ms = int((time.perf_counter() - started) * 1000)
             db.add(
@@ -401,6 +430,7 @@ class AIGatewayService:
             raise
         except Exception as e:
             error_code = "upstream_error"
+            friendly_msg = _extract_api_error(e)
             if consumed_credits > 0:
                 await credit_service.adjust_balance(
                     db=db,
@@ -413,7 +443,7 @@ class AIGatewayService:
                 )
                 await db.commit()
                 consumed_credits = 0
-            raise AppError(msg="AI image failed", code=502, status_code=502, data=str(e))
+            raise AppError(msg=f"AI 图片生成失败: {friendly_msg}", code=502, status_code=502, data={"raw": str(e), "friendly": friendly_msg})
         finally:
             latency_ms = int((time.perf_counter() - started) * 1000)
             db.add(
@@ -506,6 +536,7 @@ class AIGatewayService:
             raise
         except Exception as e:
             error_code = "upstream_error"
+            friendly_msg = _extract_api_error(e)
             if consumed_credits > 0:
                 await credit_service.adjust_balance(
                     db=db,
@@ -518,7 +549,7 @@ class AIGatewayService:
                 )
                 await db.commit()
                 consumed_credits = 0
-            raise AppError(msg="AI video failed", code=502, status_code=502, data=str(e))
+            raise AppError(msg=f"AI 视频生成失败: {friendly_msg}", code=502, status_code=502, data={"raw": str(e), "friendly": friendly_msg})
         finally:
             latency_ms = int((time.perf_counter() - started) * 1000)
             db.add(

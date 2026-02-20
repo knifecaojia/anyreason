@@ -4,11 +4,13 @@ from app.api.v1.admin import router as admin_router
 from app.api.v1.asset_bindings import router as asset_bindings_router
 from app.api.v1.assets import router as assets_router
 from app.api.v1.ai_asset_extraction import router as ai_asset_extraction_router
+from app.api.v1.ai_catalog import router as ai_catalog_router
 from app.api.v1.ai_image import router as ai_image_router
 from app.api.v1.ai_text import router as ai_text_router
 from app.api.v1.ai_video import router as ai_video_router
 from app.api.v1.ai_prompt_presets import router as ai_prompt_presets_router
 from app.api.v1.ai_model_configs import router as ai_model_configs_router
+from app.api.v1.ai_model_test_sessions import router as ai_model_test_sessions_router
 from app.api.v1.ai_scenes import router as ai_scenes_router
 from app.api.v1.ai_scene_catalog import router as ai_scene_catalog_router
 from app.api.v1.ai_scene_test import router as ai_scene_test_router
@@ -29,6 +31,7 @@ from app.api.v1.admin_builtin_agents import router as admin_builtin_agents_route
 from app.api.v1.user_agents import router as user_agents_router
 from app.api.v1.user_apps import router as user_apps_router
 from app.api.v1.apply_plans import router as apply_plans_router
+from app.api.v1.ai_chat_sessions import router as ai_chat_sessions_router
 
 
 v1_router = APIRouter()
@@ -44,6 +47,8 @@ v1_router.include_router(ai_text_router, tags=["ai"])
 v1_router.include_router(ai_video_router, tags=["ai"])
 v1_router.include_router(ai_prompt_presets_router, tags=["ai"])
 v1_router.include_router(ai_model_configs_router, tags=["ai"])
+v1_router.include_router(ai_model_test_sessions_router, tags=["ai"])
+v1_router.include_router(ai_catalog_router, tags=["ai"])
 v1_router.include_router(ai_scenes_router, tags=["ai"])
 v1_router.include_router(ai_scene_catalog_router, tags=["ai"])
 v1_router.include_router(ai_scene_test_router, tags=["ai"])
@@ -61,5 +66,6 @@ v1_router.include_router(apply_plans_router, tags=["apply_plans"])
 v1_router.include_router(admin_builtin_agents_router, tags=["admin"])
 v1_router.include_router(user_agents_router, tags=["user_agents"])
 v1_router.include_router(user_apps_router, tags=["user_apps"])
+v1_router.include_router(ai_chat_sessions_router, tags=["ai_chat"])
 
 __all__ = ["v1_router"]

@@ -33,7 +33,7 @@ class SceneStoryboardPreviewHandler(BaseTaskHandler):
         final_prompt, raw_text, shots = await ai_storyboard_service.preview(
             db=db,
             user_id=task.user_id,
-            scene_id=UUID(str(scene_id)),
+            storyboard_id=UUID(str(scene_id)),
             model=model,
             prompt_template=prompt_template,
             temperature=temperature,

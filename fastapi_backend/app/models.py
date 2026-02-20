@@ -1218,3 +1218,236 @@ class UserApp(Base):
         Index("idx_user_apps_workspace", "workspace_id"),
         Index("idx_user_apps_active", "is_active"),
     )
+
+
+class AIChatSession(Base):
+    __tablename__ = "ai_chat_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    project_id = Column(UUID(as_uuid=True), ForeignKey("projects.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String(255), nullable=False, server_default=text("'新对话'"))
+    scene_code = Column(String(64), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User")
+    project = relationship("Project")
+    messages = relationship(
+        "AIChatMessage",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="AIChatMessage.created_at",
+    )
+
+    __table_args__ = (
+        Index("idx_ai_chat_sessions_user", "user_id"),
+        Index("idx_ai_chat_sessions_project", "project_id"),
+        Index("idx_ai_chat_sessions_user_updated", "user_id", "updated_at"),
+    )
+
+
+class AIChatMessage(Base):
+    __tablename__ = "ai_chat_messages"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    session_id = Column(UUID(as_uuid=True), ForeignKey("ai_chat_sessions.id", ondelete="CASCADE"), nullable=False)
+    role = Column(String(16), nullable=False)
+    content = Column(Text, nullable=False)
+    plans = Column(JSONB, nullable=True)
+    trace = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    session = relationship("AIChatSession", back_populates="messages")
+
+    __table_args__ = (
+        CheckConstraint("role IN ('user', 'assistant', 'system')", name="ck_ai_chat_messages_role"),
+        Index("idx_ai_chat_messages_session", "session_id"),
+        Index("idx_ai_chat_messages_session_created", "session_id", "created_at"),
+    )
+
+
+class AIModelTestSession(Base):
+    __tablename__ = "ai_model_test_sessions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    category = Column(String(16), nullable=False)
+    ai_model_config_id = Column(UUID(as_uuid=True), ForeignKey("ai_model_configs.id", ondelete="SET NULL"), nullable=True)
+    title = Column(String(255), nullable=False, server_default=text("'模型测试'"))
+    image_attachment_node_ids = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User")
+    model_config = relationship("AIModelConfig")
+    image_runs = relationship(
+        "AIModelTestImageRun",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="AIModelTestImageRun.created_at",
+    )
+    text_runs = relationship(
+        "AIModelTestTextRun",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="AIModelTestTextRun.created_at",
+    )
+    video_runs = relationship(
+        "AIModelTestVideoRun",
+        back_populates="session",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        order_by="AIModelTestVideoRun.created_at",
+    )
+
+    __table_args__ = (
+        CheckConstraint("category IN ('text', 'image', 'video')", name="ck_ai_model_test_sessions_category"),
+        Index("idx_ai_model_test_sessions_user", "user_id"),
+        Index("idx_ai_model_test_sessions_user_updated", "user_id", "updated_at"),
+        Index("idx_ai_model_test_sessions_category", "category"),
+        Index("idx_ai_model_test_sessions_model_config", "ai_model_config_id"),
+    )
+
+
+class AIModelTestImageRun(Base):
+    __tablename__ = "ai_model_test_image_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    session_id = Column(UUID(as_uuid=True), ForeignKey("ai_model_test_sessions.id", ondelete="CASCADE"), nullable=False)
+    prompt = Column(Text, nullable=False)
+    resolution = Column(String(32), nullable=True)
+    input_image_count = Column(Integer, nullable=False, server_default=text("0"))
+    input_file_node_ids = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    output_file_node_id = Column(UUID(as_uuid=True), ForeignKey("file_nodes.id", ondelete="SET NULL"), nullable=True)
+    output_content_type = Column(String(128), nullable=True)
+    output_url = Column(Text, nullable=True)
+    raw_payload = Column(JSONB, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    session = relationship("AIModelTestSession", back_populates="image_runs")
+
+    __table_args__ = (
+        Index("idx_ai_model_test_image_runs_session", "session_id"),
+        Index("idx_ai_model_test_image_runs_session_created", "session_id", "created_at"),
+        Index("idx_ai_model_test_image_runs_output_node", "output_file_node_id"),
+    )
+
+
+class AIModelTestTextRun(Base):
+    __tablename__ = "ai_model_test_text_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    session_id = Column(UUID(as_uuid=True), ForeignKey("ai_model_test_sessions.id", ondelete="CASCADE"), nullable=False)
+    messages = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    output_text = Column(Text, nullable=True)
+    raw_payload = Column(JSONB, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    session = relationship("AIModelTestSession", back_populates="text_runs")
+
+    __table_args__ = (
+        Index("idx_ai_model_test_text_runs_session", "session_id"),
+        Index("idx_ai_model_test_text_runs_session_created", "session_id", "created_at"),
+    )
+
+
+class AIModelTestVideoRun(Base):
+    __tablename__ = "ai_model_test_video_runs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    session_id = Column(UUID(as_uuid=True), ForeignKey("ai_model_test_sessions.id", ondelete="CASCADE"), nullable=False)
+    prompt = Column(Text, nullable=False)
+    duration = Column(Integer, nullable=True)
+    aspect_ratio = Column(String(32), nullable=True)
+    input_file_node_ids = Column(JSONB, nullable=False, server_default=text("'[]'::jsonb"))
+    output_file_node_id = Column(UUID(as_uuid=True), ForeignKey("file_nodes.id", ondelete="SET NULL"), nullable=True)
+    output_content_type = Column(String(128), nullable=True)
+    output_url = Column(Text, nullable=True)
+    raw_payload = Column(JSONB, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    session = relationship("AIModelTestSession", back_populates="video_runs")
+
+    __table_args__ = (
+        Index("idx_ai_model_test_video_runs_session", "session_id"),
+        Index("idx_ai_model_test_video_runs_session_created", "session_id", "created_at"),
+        Index("idx_ai_model_test_video_runs_output_node", "output_file_node_id"),
+    )
+
+
+class AIManufacturer(Base):
+    __tablename__ = "ai_manufacturers"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    code = Column(String(64), nullable=False)
+    name = Column(String(128), nullable=False)
+    category = Column(String(16), nullable=False)
+    provider_class = Column(String(128), nullable=True)
+    default_base_url = Column(Text, nullable=True)
+    logo_url = Column(Text, nullable=True)
+    description = Column(Text, nullable=True)
+    enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    sort_order = Column(Integer, nullable=False, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    models = relationship(
+        "AIModel",
+        back_populates="manufacturer",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("code", "category", name="uq_ai_manufacturers_code_category"),
+        Index("idx_ai_manufacturers_category", "category"),
+        Index("idx_ai_manufacturers_enabled", "enabled"),
+        Index("idx_ai_manufacturers_sort", "category", "sort_order"),
+        CheckConstraint(
+            "category IN ('text', 'image', 'video')",
+            name="ck_ai_manufacturers_category",
+        ),
+    )
+
+
+class AIModel(Base):
+    __tablename__ = "ai_models"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    manufacturer_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("ai_manufacturers.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    code = Column(String(128), nullable=False)
+    name = Column(String(128), nullable=False)
+    response_format = Column(String(16), nullable=False, server_default=text("'schema'"))
+    supports_image = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    supports_think = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    supports_tool = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    context_window = Column(Integer, nullable=True)
+    model_metadata = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    sort_order = Column(Integer, nullable=False, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    manufacturer = relationship("AIManufacturer", back_populates="models")
+
+    __table_args__ = (
+        UniqueConstraint("manufacturer_id", "code", name="uq_ai_models_manufacturer_code"),
+        Index("idx_ai_models_manufacturer", "manufacturer_id"),
+        Index("idx_ai_models_enabled", "enabled"),
+        Index("idx_ai_models_sort", "manufacturer_id", "sort_order"),
+        CheckConstraint(
+            "response_format IN ('schema', 'object')",
+            name="ck_ai_models_response_format",
+        ),
+    )

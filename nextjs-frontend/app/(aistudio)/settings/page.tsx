@@ -1,9 +1,11 @@
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertCircle,
+  ArrowUp,
   Bot,
   Check,
   CheckCircle,
@@ -14,7 +16,6 @@ import {
   FileClock,
   Image as ImageIcon,
   Key,
-  LayoutGrid,
   Lock,
   MoreHorizontal,
   Plus,
@@ -32,6 +33,17 @@ import {
   MessageSquare,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+
+import { SettingsTabsHeader } from "./_components/SettingsTabsHeader";
+import { UsersSection } from "./_components/UsersSection";
+import { RolesSection } from "./_components/RolesSection";
+import { PermissionsMatrixSection } from "./_components/PermissionsMatrixSection";
+import { AuditSection } from "./_components/AuditSection";
+import { CreditsSection } from "./_components/CreditsSection";
+import { AgentsSection } from "./_components/AgentsSection";
+import { ModelsSection } from "./_components/ModelsSection";
+import { CreditsAdjustModal } from "./_components/CreditsAdjustModal";
+import { BuiltinDiffModal } from "./_components/BuiltinDiffModal";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AvatarCropDialog } from "@/components/ui/avatar-crop-dialog";
@@ -68,7 +80,14 @@ import {
   type AIModelBinding,
   type AIModelConfig,
 } from "@/components/actions/ai-model-actions";
-import modelCatalog, { type ModelCatalogItem } from "@/lib/aistudio/modelCatalog";
+import {
+  aiGetCatalog,
+  type AICatalogItem,
+} from "@/components/actions/ai-catalog-actions";
+import { MentionPopup } from "@/components/settings/MentionPopup";
+import {
+  getCaretAbsoluteCoordinates,
+} from "@/lib/utils/caret-coordinates";
 import {
   agentsAdminCreate,
   agentsAdminDelete,
@@ -238,6 +257,8 @@ export default function Page() {
   const [aiBindings, setAiBindings] = useState<AIModelBinding[]>([]);
   const [aiConfigLoading, setAiConfigLoading] = useState(false);
   const [aiConfigError, setAiConfigError] = useState<string | null>(null);
+  const [catalogItems, setCatalogItems] = useState<AICatalogItem[]>([]);
+  const [catalogLoading, setCatalogLoading] = useState(false);
   const [createModelOpen, setCreateModelOpen] = useState(false);
   const [modelForm, setModelForm] = useState({
     category: "text" as AICategory,
@@ -256,7 +277,7 @@ export default function Page() {
   const [catalogConfigOpen, setCatalogConfigOpen] = useState(false);
   const [catalogConfigSubmitting, setCatalogConfigSubmitting] = useState(false);
   const [catalogConfigError, setCatalogConfigError] = useState<string | null>(null);
-  const [catalogSelected, setCatalogSelected] = useState<{ category: AICategory; manufacturer: string; model: string; configId: string | null } | null>(null);
+  const [catalogSelected, setCatalogSelected] = useState<AICatalogItem | null>(null);
   const [catalogDraft, setCatalogDraft] = useState<{ base_url: string; api_key: string; enabled: boolean; sort_order: number }>({
     base_url: "",
     api_key: "",
@@ -267,13 +288,55 @@ export default function Page() {
 
   const [modelTestChatOpen, setModelTestChatOpen] = useState(false);
   const [modelTestModelConfigId, setModelTestModelConfigId] = useState("");
+  const [modelTestSessionId, setModelTestSessionId] = useState("");
   const [modelTestMessages, setModelTestMessages] = useState<AIChatMessage[]>([
     { role: "system", content: "你是用于测试模型连通性的助手。请用简短中文回答。" },
   ]);
   const [modelTestInput, setModelTestInput] = useState("");
+  const [modelTestImagePrompt, setModelTestImagePrompt] = useState("");
+  const [modelTestImageResolution, setModelTestImageResolution] = useState("2048x2048");
+  const [modelTestSessionImageAttachmentNodeIds, setModelTestSessionImageAttachmentNodeIds] = useState<string[]>([]);
+  const [modelTestImageResultUrl, setModelTestImageResultUrl] = useState<string | null>(null);
+  const [modelTestSessionsLoading, setModelTestSessionsLoading] = useState(false);
+  const [modelTestSessions, setModelTestSessions] = useState<
+    { id: string; title: string; updated_at: string; run_count: number }[]
+  >([]);
+  const [modelTestImageRuns, setModelTestImageRuns] = useState<
+    {
+      id: string;
+      prompt: string;
+      resolution: string | null;
+      input_image_count: number;
+      input_file_node_ids: string[];
+      output_file_node_id: string | null;
+      output_content_type: string | null;
+      output_url: string | null;
+      error_message: string | null;
+      created_at: string;
+    }[]
+  >([]);
+  const [modelTestVideoRuns, setModelTestVideoRuns] = useState<
+    {
+      id: string;
+      prompt: string;
+      duration: number | null;
+      aspect_ratio: string | null;
+      input_file_node_ids: string[];
+      output_file_node_id: string | null;
+      output_content_type: string | null;
+      output_url: string | null;
+      error_message: string | null;
+      created_at: string;
+    }[]
+  >([]);
   const [modelTestSubmitting, setModelTestSubmitting] = useState(false);
   const [modelTestError, setModelTestError] = useState<string | null>(null);
   const [modelTestLastRaw, setModelTestLastRaw] = useState<Record<string, unknown> | null>(null);
+  const modelTestImagePromptRef = useRef<HTMLTextAreaElement | null>(null);
+  
+  // @ Mention 相关状态
+  const [mentionPopupOpen, setMentionPopupOpen] = useState(false);
+  const [mentionPosition, setMentionPosition] = useState<{ top: number; left: number } | null>(null);
 
   const [team, setTeam] = useState<TeamMember[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -948,16 +1011,58 @@ export default function Page() {
   }, [activeSection, activeModelTab]);
 
   useEffect(() => {
+    if (activeSection !== "models") return;
+    setCatalogLoading(true);
+    aiGetCatalog()
+      .then((res) => {
+        setCatalogItems(res.data || []);
+      })
+      .catch(() => {
+        setCatalogItems([]);
+      })
+      .finally(() => {
+        setCatalogLoading(false);
+      });
+  }, [activeSection]);
+
+  useEffect(() => {
     if (!modelTestChatOpen) return;
-    if (activeModelTab !== "text") return;
     if (modelTestModelConfigId) return;
     const first = aiModelConfigs[0];
     if (first) setModelTestModelConfigId(first.id);
   }, [activeModelTab, aiModelConfigs, modelTestChatOpen, modelTestModelConfigId]);
 
+  useEffect(() => {
+    if (!modelTestChatOpen) return;
+    setModelTestSessionId("");
+    setModelTestSessionImageAttachmentNodeIds([]);
+    setModelTestImageRuns([]);
+    setModelTestVideoRuns([]);
+    setModelTestMessages([{ role: "system", content: "你是用于测试模型连通性的助手。请用简短中文回答。" }]);
+  }, [activeModelTab, modelTestChatOpen]);
+
+  useEffect(() => {
+    if (!modelTestChatOpen) return;
+    if (!modelTestModelConfigId) return;
+    void fetchModelTestSessions({ category: activeModelTab, aiModelConfigId: modelTestModelConfigId });
+  }, [activeModelTab, modelTestChatOpen, modelTestModelConfigId]);
+
+  useEffect(() => {
+    if (!modelTestChatOpen) return;
+    if (!modelTestSessionId) return;
+    void fetchModelTestSessionDetail(modelTestSessionId);
+  }, [activeModelTab, modelTestChatOpen, modelTestSessionId]);
+
   const resetModelTestChat = () => {
     setModelTestMessages([{ role: "system", content: "你是用于测试模型连通性的助手。请用简短中文回答。" }]);
     setModelTestInput("");
+    setModelTestImagePrompt("");
+    setModelTestImageResolution("2048x2048");
+    setModelTestSessionImageAttachmentNodeIds([]);
+    setModelTestImageResultUrl(null);
+    setModelTestSessionId("");
+    setModelTestImageRuns([]);
+    setModelTestVideoRuns([]);
     setModelTestError(null);
     setModelTestLastRaw(null);
   };
@@ -983,6 +1088,10 @@ export default function Page() {
       return;
     }
 
+    let sid = modelTestSessionId;
+    if (!sid) sid = await createModelTestSession({ category: "text", aiModelConfigId: modelTestModelConfigId });
+    if (!sid) return;
+
     const nextMessages: AIChatMessage[] = [...modelTestMessages, { role: "user", content }];
     setModelTestMessages([...nextMessages, { role: "assistant", content: "" }]);
     setModelTestInput("");
@@ -992,7 +1101,7 @@ export default function Page() {
       const resp = await fetch(`/api/ai/admin/model-configs/${modelTestModelConfigId}/test-chat/stream`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: nextMessages }),
+        body: JSON.stringify({ messages: nextMessages, session_id: sid }),
       });
       if (!resp.ok) {
         const t = await resp.text();
@@ -1056,11 +1165,510 @@ export default function Page() {
           }
         }
       }
+
+      setModelTestSessionId(sid);
+      void fetchModelTestSessions({ category: "text", aiModelConfigId: modelTestModelConfigId });
+      void fetchModelTestSessionDetail(sid);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "请求失败";
       setModelTestError(msg);
     } finally {
       setModelTestSubmitting(false);
+    }
+  };
+
+  const submitModelTestImage = async () => {
+    if (modelTestSubmitting) return;
+    const prompt = modelTestImagePrompt.trim();
+    if (!prompt) return;
+    if (!modelTestModelConfigId) {
+      setModelTestError("请选择一个模型配置");
+      return;
+    }
+
+    const category: AICategory = activeModelTab === "video" ? "video" : "image";
+
+    const matches = Array.from(prompt.matchAll(/@(\d{1,2})/g));
+    const idxs = Array.from(
+      new Set(
+        matches
+          .map((m) => Number(m[1]))
+          .filter((n) => Number.isFinite(n) && n >= 1),
+      ),
+    ).sort((a, b) => a - b);
+    const invalid = idxs.find((n) => n > modelTestSessionImageAttachmentNodeIds.length);
+    if (invalid) {
+      setModelTestError(`引用了不存在的参考图 @${invalid}`);
+      return;
+    }
+    const attachmentIds = idxs.map((n) => modelTestSessionImageAttachmentNodeIds[n - 1]).filter((x) => typeof x === "string" && x.length > 0);
+
+    let sid = modelTestSessionId;
+    if (!sid) sid = await createModelTestSession({ category, aiModelConfigId: modelTestModelConfigId });
+    if (!sid) return;
+
+    setModelTestSubmitting(true);
+    setModelTestError(null);
+    setModelTestLastRaw(null);
+    setModelTestImageResultUrl(null);
+    setModelTestImagePrompt("");
+    try {
+      const ratioFromResolution = (resolution: string) => {
+        const m = String(resolution || "")
+          .trim()
+          .match(/^(\d+)\s*x\s*(\d+)$/i);
+        if (!m) return null;
+        const w = Number(m[1]);
+        const h = Number(m[2]);
+        if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
+        const gcd = (a: number, b: number): number => {
+          let x = Math.abs(a);
+          let y = Math.abs(b);
+          while (y) {
+            const t = x % y;
+            x = y;
+            y = t;
+          }
+          return x || 1;
+        };
+        const g = gcd(w, h);
+        return `${Math.round(w / g)}:${Math.round(h / g)}`;
+      };
+
+      const endpoint =
+        category === "video"
+          ? `/api/ai/admin/model-configs/${modelTestModelConfigId}/test-video`
+          : `/api/ai/admin/model-configs/${modelTestModelConfigId}/test-image`;
+      const payload =
+        category === "video"
+          ? {
+              prompt,
+              duration: null,
+              aspect_ratio: ratioFromResolution(modelTestImageResolution) || null,
+              attachment_file_node_ids: attachmentIds.length ? attachmentIds : null,
+              session_id: sid,
+            }
+          : {
+              prompt,
+              resolution: modelTestImageResolution.trim() || null,
+              attachment_file_node_ids: attachmentIds.length ? attachmentIds : null,
+              session_id: sid,
+            };
+
+      const resp = await fetch(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(t || resp.statusText);
+      }
+      const json: unknown = await resp.json();
+      let url = "";
+      let sessionId = "";
+      let raw: Record<string, unknown> | null = null;
+      if (json && typeof json === "object") {
+        const obj = json as Record<string, unknown>;
+        raw = obj;
+        const data = obj.data;
+        if (data && typeof data === "object") {
+          const d = data as Record<string, unknown>;
+          const u = d.url;
+          if (typeof u === "string") url = u;
+          const sid = d.session_id;
+          if (typeof sid === "string") sessionId = sid;
+          const rr = d.raw;
+          if (rr && typeof rr === "object") raw = rr as Record<string, unknown>;
+        }
+      }
+      setModelTestImageResultUrl((url || "").trim() || "（空响应）");
+      setModelTestLastRaw(raw);
+      setModelTestSessionId(sessionId || sid);
+      void fetchModelTestSessions({ category, aiModelConfigId: modelTestModelConfigId });
+      void fetchModelTestSessionDetail(sessionId || sid);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "请求失败";
+      setModelTestError(msg);
+    } finally {
+      setModelTestSubmitting(false);
+    }
+  };
+
+  const addModelTestImages = async (files: FileList | null) => {
+    if (activeModelTab === "text") {
+      setModelTestError("文本测试不支持上传参考图");
+      return;
+    }
+    const list = files ? Array.from(files) : [];
+    if (list.length === 0) return;
+
+    const maxBytes = 10 * 1024 * 1024;
+    const available = Math.max(0, 14 - modelTestSessionImageAttachmentNodeIds.length);
+    if (available <= 0) {
+      setModelTestError("最多上传 14 张参考图");
+      return;
+    }
+
+    const readAsDataUrl = (file: File) =>
+      new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("读取文件失败"));
+        reader.readAsDataURL(file);
+      });
+
+    const next: string[] = [];
+    for (const f of list) {
+      if (next.length >= available) break;
+      if (f.size > maxBytes) {
+        setModelTestError("单张图片不能超过 10MB");
+        continue;
+      }
+      try {
+        const dataUrl = (await readAsDataUrl(f)).trim();
+        if (dataUrl) next.push(dataUrl);
+      } catch {
+        setModelTestError("读取图片失败");
+        continue;
+      }
+    }
+
+    if (!next.length) return;
+    if (!modelTestModelConfigId) {
+      setModelTestError("请选择一个模型配置");
+      return;
+    }
+    let sid = modelTestSessionId;
+    const category: AICategory = activeModelTab === "video" ? "video" : "image";
+    if (!sid) sid = await createModelTestSession({ category, aiModelConfigId: modelTestModelConfigId });
+    if (!sid) return;
+
+    setModelTestSubmitting(true);
+    setModelTestError(null);
+    try {
+      const resp = await fetch(`/api/ai/admin/model-test-sessions/${encodeURIComponent(sid)}/image-attachments`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ image_data_urls: next }),
+      });
+      if (!resp.ok) {
+        const t = await resp.text();
+        throw new Error(t || resp.statusText);
+      }
+      const json: unknown = await resp.json();
+      if (!json || typeof json !== "object") return;
+      const obj = json as Record<string, unknown>;
+      const data = obj.data;
+      if (!Array.isArray(data)) return;
+      const ids = data.filter((x) => typeof x === "string") as string[];
+      setModelTestSessionImageAttachmentNodeIds(ids);
+      void fetchModelTestSessionDetail(sid);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "请求失败";
+      setModelTestError(msg);
+    } finally {
+      setModelTestSubmitting(false);
+    }
+  };
+
+  const fetchModelTestSessions = async (opts: { category: AICategory; aiModelConfigId?: string }) => {
+    setModelTestSessionsLoading(true);
+    try {
+      const sp = new URLSearchParams();
+      sp.set("category", opts.category);
+      sp.set("page", "1");
+      sp.set("page_size", "20");
+      if (opts.aiModelConfigId) sp.set("ai_model_config_id", opts.aiModelConfigId);
+      const resp = await fetch(`/api/ai/admin/model-test-sessions?${sp.toString()}`, { cache: "no-store" });
+      if (!resp.ok) return;
+      const json: unknown = await resp.json();
+      if (!json || typeof json !== "object") return;
+      const obj = json as Record<string, unknown>;
+      const data = obj.data;
+      if (!data || typeof data !== "object") return;
+      const d = data as Record<string, unknown>;
+      const items = Array.isArray(d.items) ? d.items : [];
+      const parsed = items
+        .map((it) => {
+          if (!it || typeof it !== "object") return null;
+          const r = it as Record<string, unknown>;
+          const id = typeof r.id === "string" ? r.id : "";
+          const title = typeof r.title === "string" ? r.title : "模型测试";
+          const updated_at = typeof r.updated_at === "string" ? r.updated_at : "";
+          const run_count =
+            typeof r.run_count === "number" ? r.run_count : typeof r.image_run_count === "number" ? r.image_run_count : 0;
+          if (!id) return null;
+          return { id, title, updated_at, run_count };
+        })
+        .filter((x): x is { id: string; title: string; updated_at: string; run_count: number } => Boolean(x));
+      setModelTestSessions(parsed);
+      if (!modelTestSessionId && parsed[0]?.id) setModelTestSessionId(parsed[0].id);
+    } finally {
+      setModelTestSessionsLoading(false);
+    }
+  };
+
+  const fetchModelTestSessionDetail = async (sessionId: string) => {
+    if (!sessionId) return;
+    try {
+      const resp = await fetch(`/api/ai/admin/model-test-sessions/${encodeURIComponent(sessionId)}`, { cache: "no-store" });
+      if (!resp.ok) return;
+      const json: unknown = await resp.json();
+      if (!json || typeof json !== "object") return;
+      const obj = json as Record<string, unknown>;
+      const data = obj.data;
+      if (!data || typeof data !== "object") return;
+      const d = data as Record<string, unknown>;
+      const category = typeof d.category === "string" ? (d.category as AICategory) : "image";
+      const attRaw = Array.isArray(d.image_attachment_node_ids) ? d.image_attachment_node_ids : [];
+      const att = attRaw.filter((x) => typeof x === "string") as string[];
+      setModelTestSessionImageAttachmentNodeIds(att);
+
+      if (category === "text") {
+        setModelTestImageRuns([]);
+        setModelTestVideoRuns([]);
+        const runsRaw = Array.isArray(d.text_runs) ? d.text_runs : [];
+        const last = runsRaw.length ? runsRaw[runsRaw.length - 1] : null;
+        const fallback: AIChatMessage[] = [{ role: "system", content: "你是用于测试模型连通性的助手。请用简短中文回答。" }];
+        if (!last || typeof last !== "object") {
+          setModelTestMessages(fallback);
+          return;
+        }
+        const r = last as Record<string, unknown>;
+        const msgsRaw = Array.isArray(r.messages) ? r.messages : [];
+        const msgs: AIChatMessage[] = msgsRaw.flatMap((m) => {
+          if (!m || typeof m !== "object") return [];
+          const mm = m as Record<string, unknown>;
+          if (typeof mm.role !== "string") return [];
+          if (mm.role !== "system" && mm.role !== "user" && mm.role !== "assistant") return [];
+          if (typeof mm.content !== "string") return [];
+          return [{ role: mm.role, content: mm.content } as AIChatMessage];
+        });
+        const output_text = typeof r.output_text === "string" ? r.output_text : "";
+        const next: AIChatMessage[] = output_text ? [...msgs, ({ role: "assistant", content: output_text } as AIChatMessage)] : msgs;
+        setModelTestMessages(next.length ? next : fallback);
+        return;
+      }
+
+      if (category === "video") {
+        setModelTestMessages([{ role: "system", content: "你是用于测试模型连通性的助手。请用简短中文回答。" }]);
+        setModelTestImageRuns([]);
+        const runsRaw = Array.isArray(d.video_runs) ? d.video_runs : [];
+        const runs = runsRaw
+          .map((it) => {
+            if (!it || typeof it !== "object") return null;
+            const r = it as Record<string, unknown>;
+            const id = typeof r.id === "string" ? r.id : "";
+            const prompt = typeof r.prompt === "string" ? r.prompt : "";
+            const duration = typeof r.duration === "number" ? r.duration : null;
+            const aspect_ratio = typeof r.aspect_ratio === "string" ? r.aspect_ratio : null;
+            const input_file_node_ids = Array.isArray(r.input_file_node_ids)
+              ? (r.input_file_node_ids.filter((x) => typeof x === "string") as string[])
+              : [];
+            const output_file_node_id = typeof r.output_file_node_id === "string" ? r.output_file_node_id : null;
+            const output_content_type = typeof r.output_content_type === "string" ? r.output_content_type : null;
+            const output_url = typeof r.output_url === "string" ? r.output_url : null;
+            const error_message = typeof r.error_message === "string" ? r.error_message : null;
+            const created_at = typeof r.created_at === "string" ? r.created_at : "";
+            if (!id) return null;
+            return { id, prompt, duration, aspect_ratio, input_file_node_ids, output_file_node_id, output_content_type, output_url, error_message, created_at };
+          })
+          .filter(
+            (x): x is {
+              id: string;
+              prompt: string;
+              duration: number | null;
+              aspect_ratio: string | null;
+              input_file_node_ids: string[];
+              output_file_node_id: string | null;
+              output_content_type: string | null;
+              output_url: string | null;
+              error_message: string | null;
+              created_at: string;
+            } => Boolean(x),
+          );
+        setModelTestVideoRuns(runs);
+        return;
+      }
+
+      setModelTestMessages([{ role: "system", content: "你是用于测试模型连通性的助手。请用简短中文回答。" }]);
+      setModelTestVideoRuns([]);
+      const runsRaw = Array.isArray(d.image_runs) ? d.image_runs : [];
+      const runs = runsRaw
+        .map((it) => {
+          if (!it || typeof it !== "object") return null;
+          const r = it as Record<string, unknown>;
+          const id = typeof r.id === "string" ? r.id : "";
+          const prompt = typeof r.prompt === "string" ? r.prompt : "";
+          const resolution = typeof r.resolution === "string" ? r.resolution : null;
+          const input_image_count = typeof r.input_image_count === "number" ? r.input_image_count : 0;
+          const input_file_node_ids = Array.isArray(r.input_file_node_ids)
+            ? (r.input_file_node_ids.filter((x) => typeof x === "string") as string[])
+            : [];
+          const output_file_node_id = typeof r.output_file_node_id === "string" ? r.output_file_node_id : null;
+          const output_content_type = typeof r.output_content_type === "string" ? r.output_content_type : null;
+          const output_url = typeof r.output_url === "string" ? r.output_url : null;
+          const error_message = typeof r.error_message === "string" ? r.error_message : null;
+          const created_at = typeof r.created_at === "string" ? r.created_at : "";
+          if (!id) return null;
+          return { id, prompt, resolution, input_image_count, input_file_node_ids, output_file_node_id, output_content_type, output_url, error_message, created_at };
+        })
+        .filter(
+          (x): x is {
+            id: string;
+            prompt: string;
+            resolution: string | null;
+            input_image_count: number;
+            input_file_node_ids: string[];
+            output_file_node_id: string | null;
+            output_content_type: string | null;
+            output_url: string | null;
+            error_message: string | null;
+            created_at: string;
+          } => Boolean(x),
+        );
+      setModelTestImageRuns(runs);
+    } catch {
+      return;
+    }
+  };
+
+  const createModelTestSession = async (opts: { category: AICategory; aiModelConfigId?: string }) => {
+    setModelTestSubmitting(true);
+    setModelTestError(null);
+    try {
+      const title =
+        opts.category === "text" ? "文本测试" : opts.category === "video" ? "视频测试" : "图片测试";
+      const resp = await fetch(`/api/ai/admin/model-test-sessions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ category: opts.category, ai_model_config_id: opts.aiModelConfigId || null, title }),
+      });
+      if (!resp.ok) return "";
+      const json: unknown = await resp.json();
+      if (!json || typeof json !== "object") return "";
+      const obj = json as Record<string, unknown>;
+      const data = obj.data;
+      if (!data || typeof data !== "object") return "";
+      const d = data as Record<string, unknown>;
+      const id = typeof d.id === "string" ? d.id : "";
+      if (!id) return "";
+      setModelTestSessionId(id);
+      setModelTestSessionImageAttachmentNodeIds([]);
+      setModelTestImageRuns([]);
+      setModelTestVideoRuns([]);
+      setModelTestMessages([{ role: "system", content: "你是用于测试模型连通性的助手。请用简短中文回答。" }]);
+      await fetchModelTestSessions({ category: opts.category, aiModelConfigId: opts.aiModelConfigId });
+      return id;
+    } finally {
+      setModelTestSubmitting(false);
+    }
+  };
+
+  const insertModelTestImageMention = (n: number) => {
+    const token = `@${n} `;
+    const el = modelTestImagePromptRef.current;
+    if (!el) {
+      setModelTestImagePrompt((p) => `${p}${token}`);
+      return;
+    }
+    const start = typeof el.selectionStart === "number" ? el.selectionStart : el.value.length;
+    const end = typeof el.selectionEnd === "number" ? el.selectionEnd : el.value.length;
+    const current = el.value;
+    const next = `${current.slice(0, start)}${token}${current.slice(end)}`;
+    setModelTestImagePrompt(next);
+    requestAnimationFrame(() => {
+      try {
+        el.focus();
+        const pos = start + token.length;
+        el.setSelectionRange(pos, pos);
+      } catch {
+        return;
+      }
+    });
+  };
+
+  // 解析 Prompt 中的 @ 引用
+  const parseMentionIndices = (prompt: string): number[] => {
+    const matches = Array.from(prompt.matchAll(/@(\d{1,2})/g));
+    return Array.from(
+      new Set(
+        matches
+          .map((m) => Number(m[1]))
+          .filter((n) => Number.isFinite(n) && n >= 1),
+      ),
+    ).sort((a, b) => a - b);
+  };
+
+  // 处理 @ 输入
+  const handlePromptChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    const cursorPos = e.target.selectionStart || 0;
+    setModelTestImagePrompt(value);
+
+    // 检测是否刚输入了 @
+    if (value[cursorPos - 1] === '@') {
+      const textarea = e.currentTarget;
+      const coords = getCaretAbsoluteCoordinates(textarea, cursorPos);
+      
+      setMentionPosition({
+        top: coords.top,
+        left: coords.left,
+      });
+      setMentionPopupOpen(true);
+    }
+  };
+
+  // 处理 Mention 选择
+  const handleMentionSelect = (index: number) => {
+    const textarea = modelTestImagePromptRef.current;
+    if (!textarea) return;
+
+    const value = textarea.value;
+    const cursorPos = textarea.selectionStart || value.length;
+
+    // 找到最后一个 @ 的位置
+    const lastAt = value.lastIndexOf('@', cursorPos - 1);
+    if (lastAt === -1) {
+      setMentionPopupOpen(false);
+      return;
+    }
+
+    // 替换 @ 为 @n
+    const before = value.slice(0, lastAt);
+    const after = value.slice(cursorPos);
+    const newValue = `${before}@${index} ${after}`;
+
+    setModelTestImagePrompt(newValue);
+    setMentionPopupOpen(false);
+
+    // 恢复焦点和光标
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const newPos = lastAt + `@${index} `.length;
+      textarea.setSelectionRange(newPos, newPos);
+    });
+  };
+
+  const removeModelTestSessionImageAttachment = async (nodeId: string) => {
+    if (!modelTestSessionId) return;
+    try {
+      const resp = await fetch(
+        `/api/ai/admin/model-test-sessions/${encodeURIComponent(modelTestSessionId)}/image-attachments/${encodeURIComponent(nodeId)}`,
+        { method: "DELETE", cache: "no-store" },
+      );
+      if (!resp.ok) return;
+      const json: unknown = await resp.json();
+      if (!json || typeof json !== "object") return;
+      const obj = json as Record<string, unknown>;
+      const data = obj.data;
+      if (!Array.isArray(data)) return;
+      const ids = data.filter((x) => typeof x === "string") as string[];
+      setModelTestSessionImageAttachmentNodeIds(ids);
+      void fetchModelTestSessionDetail(modelTestSessionId);
+    } catch {
+      return;
     }
   };
 
@@ -1097,22 +1705,14 @@ export default function Page() {
     return palette[h % palette.length];
   };
 
-  const isVideoModel = (item: ModelCatalogItem) => {
-    const m = `${item.manufacturer} ${item.model}`.toLowerCase();
-    return m.includes("kling") || m.includes("video") || m.includes("pika") || m.includes("runway") || m.includes("luma") || m.includes("hailuo");
-  };
-
-  const catalogItems = useMemo(() => {
-    const base = modelCatalog.slice();
-    if (activeModelTab === "image") return base.filter((x) => x.image);
-    if (activeModelTab === "video") return base.filter((x) => isVideoModel(x));
-    return base.filter((x) => !isVideoModel(x));
-  }, [activeModelTab]);
+  const filteredCatalogByCategory = useMemo(() => {
+    return catalogItems.filter((x) => x.category === activeModelTab);
+  }, [catalogItems, activeModelTab]);
 
   const catalogManufacturers = useMemo(() => {
-    const set = new Set(catalogItems.map((m) => (m.manufacturer || "").trim()).filter((x) => x.length > 0));
-    return [{ key: "all", label: "全部" }, ...Array.from(set).sort((a, b) => a.localeCompare(b)).map((k) => ({ key: k, label: manufacturerLabel(k) }))];
-  }, [catalogItems]);
+    const set = new Set(filteredCatalogByCategory.map((m) => m.manufacturer_code).filter((x) => x.length > 0));
+    return [{ key: "all", label: "全部" }, ...Array.from(set).sort((a, b) => a.localeCompare(b)).map((k) => ({ key: k, label: k }))];
+  }, [filteredCatalogByCategory]);
 
   const configByKey = useMemo(() => {
     const map = new Map<string, AIModelConfig>();
@@ -1122,13 +1722,13 @@ export default function Page() {
 
   const filteredCatalogItems = useMemo(() => {
     const q = catalogSearch.trim().toLowerCase();
-    return catalogItems.filter((m) => {
-      if (catalogManufacturer !== "all" && (m.manufacturer || "").trim() !== catalogManufacturer) return false;
+    return filteredCatalogByCategory.filter((m) => {
+      if (catalogManufacturer !== "all" && m.manufacturer_code !== catalogManufacturer) return false;
       if (!q) return true;
-      const hay = `${m.manufacturer} ${m.model}`.toLowerCase();
+      const hay = `${m.manufacturer_code} ${m.manufacturer_name} ${m.model_code} ${m.model_name}`.toLowerCase();
       return hay.includes(q);
     });
-  }, [catalogItems, catalogManufacturer, catalogSearch]);
+  }, [filteredCatalogByCategory, catalogManufacturer, catalogSearch]);
 
   useEffect(() => {
     if (!catalogManufacturers.some((x) => x.key === catalogManufacturer)) setCatalogManufacturer("all");
@@ -1147,6 +1747,7 @@ export default function Page() {
     const m = (manufacturer || "").trim().toLowerCase();
     if (category !== "text") {
       if (m === "openai") return "https://api.openai.com/v1";
+      if (m === "doubao") return "https://ark.cn-beijing.volces.com/api/v3";
       return "";
     }
     if (m === "openai") return "https://api.openai.com/v1";
@@ -1158,13 +1759,13 @@ export default function Page() {
     return "";
   };
 
-  const openCatalogConfig = (item: ModelCatalogItem) => {
-    const cfg = configByKey.get(`${activeModelTab}::${item.manufacturer}::${item.model}`) || null;
-    const defaultBaseUrl = getDefaultBaseUrl(item.manufacturer, activeModelTab);
+  const openCatalogConfig = (item: AICatalogItem) => {
+    const cfg = configByKey.get(`${item.category}::${item.manufacturer_code}::${item.model_code}`) || null;
+    const defaultBaseUrl = (item.default_base_url || "").trim();
     const existingBaseUrl = (cfg?.base_url || "").trim();
     setCatalogConfigError(null);
     setCatalogApiKeyVisible(false);
-    setCatalogSelected({ category: activeModelTab, manufacturer: item.manufacturer, model: item.model, configId: cfg?.id || null });
+    setCatalogSelected(item);
     setCatalogDraft({
       base_url: existingBaseUrl || defaultBaseUrl,
       api_key: "",
@@ -1187,8 +1788,9 @@ export default function Page() {
     setCatalogConfigSubmitting(true);
     setCatalogConfigError(null);
     try {
-      if (catalogSelected.configId) {
-        await aiAdminUpdateModelConfig(catalogSelected.configId, {
+      const existingCfg = configByKey.get(`${catalogSelected.category}::${catalogSelected.manufacturer_code}::${catalogSelected.model_code}`);
+      if (existingCfg?.id) {
+        await aiAdminUpdateModelConfig(existingCfg.id, {
           base_url: catalogDraft.base_url.trim() ? catalogDraft.base_url.trim() : null,
           api_key: catalogDraft.api_key.trim() ? catalogDraft.api_key.trim() : null,
           enabled: !!catalogDraft.enabled,
@@ -1196,9 +1798,9 @@ export default function Page() {
         });
       } else {
         await aiAdminCreateModelConfig({
-          category: catalogSelected.category,
-          manufacturer: catalogSelected.manufacturer,
-          model: catalogSelected.model,
+          category: catalogSelected.category as AICategory,
+          manufacturer: catalogSelected.manufacturer_code,
+          model: catalogSelected.model_code,
           base_url: catalogDraft.base_url.trim() ? catalogDraft.base_url.trim() : null,
           api_key: catalogDraft.api_key.trim() ? catalogDraft.api_key.trim() : null,
           enabled: !!catalogDraft.enabled,
@@ -1447,917 +2049,124 @@ export default function Page() {
 
   return (
     <div className="w-full">
-      <div className="max-w-6xl mx-auto pt-6 pb-2 px-2">
-        <div className="flex items-center gap-2 mb-4">
-          <LayoutGrid size={16} className="text-primary" />
-          <h1 className="text-lg font-bold text-textMain">系统设置</h1>
-        </div>
-        <div className="flex items-center gap-2 bg-surfaceHighlight border border-border rounded-xl p-2">
-          {tabs.map(({ key, label, icon: Icon }) => (
-            <button
-              key={key}
-              onClick={() => setQuery({ tab: key })}
-              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-bold transition-all ${
-                activeSection === key
-                  ? "bg-surface text-textMain shadow-sm border border-border/50"
-                  : "text-textMuted hover:text-textMain"
-              }`}
-              type="button"
-            >
-              <Icon size={16} />
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
+      <SettingsTabsHeader
+        tabs={tabs}
+        activeKey={activeSection}
+        onSelect={(key) => setQuery({ tab: key as Section })}
+      />
 
       {activeSection === "models" && (
-        <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
-          <div className="flex justify-between items-end border-b border-border pb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-textMain mb-2">AI 模型配置</h2>
-              <p className="text-textMuted text-sm">平台级共享：按文本/图片/视频分类维护模型配置与用途绑定。</p>
-            </div>
-            <div className="flex items-center gap-1 bg-surfaceHighlight p-1 rounded-lg border border-border">
-              {(["text", "image", "video"] as AICategory[]).map((c) => (
-                <button
-                  key={c}
-                  onClick={() => {
-                    setActiveModelTab(c);
-                    setModelForm((prev) => ({ ...prev, category: c }));
-                  }}
-                  className={`px-4 py-1.5 rounded-md text-xs font-bold transition-all ${
-                    activeModelTab === c ? "bg-surface text-textMain shadow-sm border border-border/50" : "text-textMuted hover:text-textMain"
-                  }`}
-                  type="button"
-                >
-                  {c === "text" ? "文本" : c === "image" ? "图片" : "视频"}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {aiConfigError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">{aiConfigError}</div>
-          )}
-
-          <div className="bg-surface border border-border rounded-xl p-6 space-y-3">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h3 className="text-lg font-bold text-textMain">新增模型</h3>
-                <p className="text-sm text-textMuted mt-1">从模型清单点选，进入配置弹窗填写 Base URL / API Key。</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={openModelTestChat}
-                  className="flex items-center gap-2 text-sm font-bold bg-surfaceHighlight border border-border hover:border-primary/40 text-textMain px-4 py-2 rounded-lg transition-all disabled:opacity-60"
-                  type="button"
-                  disabled={activeModelTab !== "text"}
-                >
-                  <MessageSquare size={16} /> 测试对话
-                </button>
-                <button
-                  onClick={() => {
-                    setCatalogSearch("");
-                    setCatalogManufacturer("all");
-                    setAddModelOpen(true);
-                  }}
-                  className="flex items-center gap-2 text-sm font-bold bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-all"
-                  type="button"
-                >
-                  <Plus size={16} /> 新增模型
-                </button>
-              </div>
-            </div>
-            <div className="text-xs text-textMuted">提示：API Key 会加密保存，不会以明文返回。</div>
-          </div>
-
-          <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
-            <h3 className="text-lg font-bold text-textMain">模型配置列表</h3>
-            <div className="bg-surfaceHighlight/40 border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
-                  <tr>
-                    <th className="px-4 py-3">厂商</th>
-                    <th className="px-4 py-3">模型</th>
-                    <th className="px-4 py-3">Base URL</th>
-                    <th className="px-4 py-3">Key</th>
-                    <th className="px-4 py-3">启用</th>
-                    <th className="px-4 py-3 text-right">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {aiConfigLoading && (
-                    <tr>
-                      <td className="px-4 py-6 text-textMuted" colSpan={6}>
-                        加载中...
-                      </td>
-                    </tr>
-                  )}
-                  {!aiConfigLoading && aiModelConfigs.length === 0 && (
-                    <tr>
-                      <td className="px-4 py-6 text-textMuted" colSpan={6}>
-                        暂无配置。
-                      </td>
-                    </tr>
-                  )}
-                  {!aiConfigLoading &&
-                    aiModelConfigs.map((c) => (
-                      <tr key={c.id} className="hover:bg-surfaceHighlight/30 transition-colors">
-                        <td className="px-4 py-3 font-medium text-textMain">{c.manufacturer}</td>
-                        <td className="px-4 py-3 text-xs text-textMain font-mono">{c.model}</td>
-                        <td className="px-4 py-3 text-xs text-textMuted font-mono truncate max-w-[18rem]">{c.base_url || "-"}</td>
-                        <td className="px-4 py-3 text-xs text-textMuted">{c.has_api_key ? "已配置" : "未配置"}</td>
-                        <td className="px-4 py-3 text-xs text-textMain">{c.enabled ? "是" : "否"}</td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            className="px-3 py-1.5 bg-surfaceHighlight border border-border hover:border-red-500/50 rounded-lg text-xs font-medium transition-all text-red-200"
-                            type="button"
-                            onClick={() => void deleteModelConfig(c.id)}
-                          >
-                            删除
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <div className="bg-surface border border-border rounded-xl p-6 space-y-4">
-            <h3 className="text-lg font-bold text-textMain">用途绑定</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs text-textMuted font-bold">用途 key</label>
-                <input
-                  value={bindingForm.key}
-                  onChange={(e) => setBindingForm((p) => ({ ...p, key: e.target.value }))}
-                  className="w-full bg-surfaceHighlight border border-border rounded-lg p-3 text-sm outline-none focus:border-primary text-textMain"
-                  placeholder="chatbox / image / video ..."
-                  disabled={aiConfigSubmitting}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <label className="text-xs text-textMuted font-bold">绑定到模型配置</label>
-                <select
-                  value={bindingForm.ai_model_config_id}
-                  onChange={(e) => setBindingForm((p) => ({ ...p, ai_model_config_id: e.target.value }))}
-                  className="w-full bg-surfaceHighlight border border-border rounded-lg p-3 text-sm outline-none focus:border-primary text-textMain"
-                  disabled={aiConfigSubmitting}
-                >
-                  <option value="">不绑定</option>
-                  {aiModelConfigs.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.manufacturer} · {c.model}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="md:col-span-3 flex justify-end">
-                <button
-                  onClick={() => void submitUpsertBinding()}
-                  className="bg-primary hover:bg-blue-600 disabled:opacity-60 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all"
-                  type="button"
-                  disabled={aiConfigSubmitting}
-                >
-                  保存绑定
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-surfaceHighlight/40 border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
-                  <tr>
-                    <th className="px-4 py-3">key</th>
-                    <th className="px-4 py-3">模型</th>
-                    <th className="px-4 py-3 text-right">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {aiBindings.length === 0 && (
-                    <tr>
-                      <td className="px-4 py-6 text-textMuted" colSpan={3}>
-                        暂无绑定。
-                      </td>
-                    </tr>
-                  )}
-                  {aiBindings.map((b) => {
-                    const cfg = aiModelConfigs.find((c) => c.id === b.ai_model_config_id);
-                    return (
-                      <tr key={b.id} className="hover:bg-surfaceHighlight/30 transition-colors">
-                        <td className="px-4 py-3 text-xs text-textMain font-mono">{b.key}</td>
-                        <td className="px-4 py-3 text-xs text-textMuted">{cfg ? `${cfg.manufacturer} · ${cfg.model}` : "-"}</td>
-                        <td className="px-4 py-3 text-right">
-                          <button
-                            className="px-3 py-1.5 bg-surfaceHighlight border border-border hover:border-red-500/50 rounded-lg text-xs font-medium transition-all text-red-200"
-                            type="button"
-                            onClick={() => void deleteBinding(b.id)}
-                          >
-                            删除
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {modelTestChatOpen && (
-            <div
-              className="fixed inset-0 z-[70] bg-black/60"
-              role="dialog"
-              aria-modal="true"
-              onClick={(e) => {
-                if (e.target !== e.currentTarget) return;
-                closeModelTestChat();
-              }}
-            >
-              <div className="h-full w-full p-4 flex items-center justify-center">
-                <div className="w-full max-w-3xl h-[80vh] rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col">
-                  <div className="h-14 px-6 border-b border-border bg-surfaceHighlight/30 flex items-center justify-between">
-                    <div className="font-bold text-base text-textMain">模型对话测试</div>
-                    <button
-                      type="button"
-                      onClick={closeModelTestChat}
-                      className="p-2 rounded-lg hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs text-textMuted font-bold">选择模型配置</label>
-                        <select
-                          value={modelTestModelConfigId}
-                          onChange={(e) => setModelTestModelConfigId(e.target.value)}
-                          className="w-full bg-surfaceHighlight border border-border rounded-lg p-3 text-sm outline-none focus:border-primary text-textMain"
-                          disabled={modelTestSubmitting || activeModelTab !== "text"}
-                        >
-                          {aiModelConfigs.length === 0 ? (
-                            <option value="">暂无可用模型配置</option>
-                          ) : (
-                            <>
-                              <option value="">请选择…</option>
-                              {aiModelConfigs.map((c) => (
-                                <option key={c.id} value={c.id}>
-                                  {c.manufacturer} · {c.model}
-                                </option>
-                              ))}
-                            </>
-                          )}
-                        </select>
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs text-textMuted font-bold">快捷操作</label>
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={resetModelTestChat}
-                            className="px-4 py-2 rounded-lg text-sm font-bold border border-border bg-surfaceHighlight hover:bg-surfaceHighlight/70 text-textMain transition-colors disabled:opacity-60"
-                            disabled={modelTestSubmitting}
-                          >
-                            清空对话
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {modelTestError && (
-                      <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">{modelTestError}</div>
-                    )}
-
-                    <div className="rounded-xl border border-border bg-background/20 p-3 h-[42vh] overflow-y-auto space-y-3">
-                      {modelTestMessages.map((m, idx) => {
-                        const isUser = m.role === "user";
-                        const label = m.role === "system" ? "SYSTEM" : isUser ? "YOU" : "AI";
-                        const bubble =
-                          m.role === "system"
-                            ? "bg-surfaceHighlight/40 text-textMain"
-                            : isUser
-                              ? "bg-primary/10 text-textMain"
-                              : "bg-background/40 text-textMain";
-                        return (
-                          <div key={`${m.role}-${idx}`} className={isUser ? "flex justify-end" : "flex justify-start"}>
-                            <div className={`max-w-[82%] rounded-xl border border-border px-3 py-2 text-sm whitespace-pre-wrap ${bubble}`}>
-                              <div className="text-[10px] font-bold text-textMuted mb-1">{label}</div>
-                              <div>{m.content}</div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-
-                    {modelTestLastRaw && (
-                      <details className="rounded-xl border border-border bg-background/20 p-3">
-                        <summary className="text-xs font-bold text-textMain cursor-pointer select-none">查看 raw</summary>
-                        <pre className="mt-3 text-xs text-textMuted overflow-x-auto whitespace-pre-wrap">
-                          {JSON.stringify(modelTestLastRaw, null, 2)}
-                        </pre>
-                      </details>
-                    )}
-                  </div>
-
-                  <div className="border-t border-border bg-surfaceHighlight/20 p-4">
-                    <div className="flex items-start gap-2">
-                      <textarea
-                        value={modelTestInput}
-                        onChange={(e) => setModelTestInput(e.target.value)}
-                        className="flex-1 bg-background border border-border rounded-lg p-3 text-sm outline-none focus:border-primary text-textMain"
-                        placeholder="输入一条消息，例如：hello"
-                        rows={2}
-                        disabled={modelTestSubmitting}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => void submitModelTestChat()}
-                        className="bg-primary hover:bg-blue-600 disabled:opacity-60 text-white px-4 py-3 rounded-lg text-sm font-bold transition-all"
-                        disabled={modelTestSubmitting || !modelTestInput.trim()}
-                      >
-                        {modelTestSubmitting ? "发送中..." : "发送"}
-                      </button>
-                    </div>
-                    <div className="mt-2 text-xs text-textMuted">该测试接口不扣积分，仅用于验证模型配置可用性。</div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {addModelOpen && (
-            <div
-              className="fixed inset-0 z-50 bg-black/60"
-              role="dialog"
-              aria-modal="true"
-              onClick={(e) => {
-                if (e.target !== e.currentTarget) return;
-                setAddModelOpen(false);
-              }}
-            >
-              <div className="h-full w-full p-4 flex items-center justify-center">
-                <div className="w-full max-w-6xl h-[86vh] rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col">
-                  <div className="h-14 px-6 border-b border-border bg-surfaceHighlight/30 flex items-center justify-between">
-                    <div className="font-bold text-base text-textMain">新增模型</div>
-                    <button
-                      type="button"
-                      onClick={() => setAddModelOpen(false)}
-                      className="p-2 rounded-lg hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
-                    >
-                      <X size={18} />
-                    </button>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto">
-                    <div className="px-6 pt-4 pb-6 space-y-4">
-                      <div className="flex items-center gap-1">
-                        {(["text", "image", "video"] as AICategory[]).map((c) => (
-                          <button
-                            key={c}
-                            type="button"
-                            onClick={() => setActiveModelTab(c)}
-                            className={`px-3 py-2 text-sm font-bold border-b-2 transition-colors ${
-                              activeModelTab === c ? "border-primary text-primary" : "border-transparent text-textMuted hover:text-textMain"
-                            }`}
-                          >
-                            {c === "text" ? "文本" : c === "image" ? "图像" : "视频"}
-                          </button>
-                        ))}
-                      </div>
-
-                      <div className="flex items-center gap-2">
-                        <div className="relative flex-1">
-                          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-textMuted" />
-                          <input
-                            value={catalogSearch}
-                            onChange={(e) => setCatalogSearch(e.target.value)}
-                            className="w-full bg-background border border-border rounded-lg pl-10 pr-3 py-2.5 text-sm outline-none focus:border-primary text-textMain"
-                            placeholder="搜索模型名称或厂商…"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          className="w-10 h-10 rounded-lg border border-border bg-background hover:bg-surfaceHighlight transition-colors flex items-center justify-center text-textMuted hover:text-textMain"
-                          onClick={() => setCatalogSearch((s) => s.trim())}
-                        >
-                          <Search size={16} />
-                        </button>
-                      </div>
-
-                      <div className="rounded-xl border border-border bg-background/30 p-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <div className="flex items-center gap-2 text-sm font-bold text-textMain">
-                            <Filter size={16} className="text-textMuted" />
-                            厂商筛选
-                          </div>
-                          <button
-                            type="button"
-                            className="text-xs font-bold text-primary hover:underline"
-                            onClick={() => {
-                              setCatalogManufacturer("all");
-                              setCatalogSearch("");
-                            }}
-                          >
-                            清空筛选
-                          </button>
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {catalogManufacturers.map((m) => {
-                            const active = catalogManufacturer === m.key;
-                            return (
-                              <button
-                                key={m.key}
-                                type="button"
-                                onClick={() => setCatalogManufacturer(m.key)}
-                                className={`px-4 py-2 rounded-full text-xs font-bold transition-colors border ${
-                                  active ? "bg-primary text-white border-primary" : "bg-background border-border text-textMain hover:bg-surfaceHighlight"
-                                }`}
-                              >
-                                <span className="inline-flex items-center gap-2">
-                                  <span className={`w-2 h-2 rounded-full ${m.key === "all" ? "bg-textMuted" : vendorColor(m.key)}`} />
-                                  {m.label}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      <div className="rounded-lg bg-primary/10 border border-primary/20 px-4 py-2 text-sm text-textMain">
-                        找到 {filteredCatalogItems.length} 个模型
-                      </div>
-
-                      {aiConfigLoading ? (
-                        <div className="text-sm text-textMuted flex items-center gap-2">
-                          <RefreshCw size={16} className="animate-spin" /> 加载模型配置...
-                        </div>
-                      ) : (
-                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                          {filteredCatalogItems
-                            .slice()
-                            .sort((a, b) => {
-                              const am = manufacturerLabel(a.manufacturer).localeCompare(manufacturerLabel(b.manufacturer));
-                              if (am !== 0) return am;
-                              return a.model.localeCompare(b.model);
-                            })
-                            .map((item) => {
-                              const k = `${activeModelTab}::${item.manufacturer}::${item.model}`;
-                              const cfg = configByKey.get(k);
-                              return (
-                                <button
-                                  key={k}
-                                  type="button"
-                                  onClick={() => openCatalogConfig(item)}
-                                  className="rounded-2xl border border-border bg-background hover:bg-surfaceHighlight/40 transition-colors p-4 text-left"
-                                >
-                                  <div className="flex items-start justify-between gap-3">
-                                    <div className="w-8 h-8 rounded-lg border border-border bg-surfaceHighlight/40 flex items-center justify-center text-primary font-bold">
-                                      T
-                                    </div>
-                                    <div className="px-2 py-1 rounded-md text-[11px] font-bold border border-border bg-surfaceHighlight/30 text-textMain">
-                                      {manufacturerLabel(item.manufacturer)}
-                                    </div>
-                                  </div>
-                                  <div className="mt-3 font-bold text-sm text-textMain truncate">{item.model}</div>
-                                  <div className="mt-1 text-xs text-textMuted truncate">{cfg?.base_url || "默认 Base URL"}</div>
-                                  <div className="mt-3 flex items-center justify-between text-xs">
-                                    <div className="text-textMuted">{cfg?.has_api_key ? "已配置 API Key" : "未配置 API Key"}</div>
-                                    <div className={`font-bold ${cfg?.enabled ? "text-green-300" : "text-textMuted"}`}>{cfg?.enabled ? "启用" : "未启用"}</div>
-                                  </div>
-                                </button>
-                              );
-                            })}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {catalogConfigOpen && catalogSelected && (
-            <div
-              className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4"
-              role="dialog"
-              aria-modal="true"
-              onClick={(e) => {
-                if (e.target !== e.currentTarget) return;
-                closeCatalogConfig();
-              }}
-            >
-              <div className="w-full max-w-lg rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden">
-                <div className="h-12 px-4 border-b border-border flex items-center justify-between">
-                  <div className="font-bold text-sm truncate">
-                    配置 {manufacturerLabel(catalogSelected.manufacturer)} · {catalogSelected.model}
-                  </div>
-                  <button
-                    onClick={closeCatalogConfig}
-                    className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors disabled:opacity-50"
-                    type="button"
-                    disabled={catalogConfigSubmitting}
-                  >
-                    关闭
-                  </button>
-                </div>
-                <div className="p-4 space-y-4">
-                  <div className="space-y-2">
-                    <label className="text-xs text-textMuted font-bold">模型名称</label>
-                    <input
-                      value={catalogSelected.model}
-                      readOnly
-                      className="w-full bg-surfaceHighlight border border-border rounded-lg p-3 text-sm outline-none text-textMain font-mono"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs text-textMuted font-bold">Base URL（可选）</label>
-                    <input
-                      value={catalogDraft.base_url}
-                      onChange={(e) => setCatalogDraft((p) => ({ ...p, base_url: e.target.value }))}
-                      className="w-full bg-surfaceHighlight border border-border rounded-lg p-3 text-sm outline-none focus:border-primary text-textMain font-mono"
-                      placeholder="留空使用默认"
-                      disabled={catalogConfigSubmitting}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <label className="text-xs text-textMuted font-bold">API Key（留空则不改）</label>
-                    <div className="relative">
-                      <input
-                        value={catalogDraft.api_key}
-                        onChange={(e) => setCatalogDraft((p) => ({ ...p, api_key: e.target.value }))}
-                        className="w-full bg-surfaceHighlight border border-border rounded-lg pl-3 pr-10 py-3 text-sm outline-none focus:border-primary text-textMain font-mono"
-                        placeholder="请输入 API Key"
-                        disabled={catalogConfigSubmitting}
-                        type={catalogApiKeyVisible ? "text" : "password"}
-                        autoComplete="off"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setCatalogApiKeyVisible((v) => !v)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-background/40 text-textMuted hover:text-textMain transition-colors"
-                        disabled={catalogConfigSubmitting}
-                      >
-                        {catalogApiKeyVisible ? <EyeOff size={16} /> : <Eye size={16} />}
-                      </button>
-                    </div>
-                    {getApiKeyUrl(catalogSelected.manufacturer) ? (
-                      <a
-                        href={getApiKeyUrl(catalogSelected.manufacturer)}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-xs font-bold text-primary hover:underline inline-block"
-                      >
-                        点击获取 {manufacturerLabel(catalogSelected.manufacturer)} API Key
-                      </a>
-                    ) : null}
-                  </div>
-
-                  <details className="rounded-xl border border-border bg-background/20 p-3">
-                    <summary className="cursor-pointer text-sm font-bold text-textMain">高级设置</summary>
-                    <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <label className="text-xs text-textMuted font-bold">排序（sort_order）</label>
-                        <input
-                          value={String(catalogDraft.sort_order)}
-                          onChange={(e) => setCatalogDraft((p) => ({ ...p, sort_order: Number(e.target.value || 0) }))}
-                          className="w-full bg-surfaceHighlight border border-border rounded-lg p-3 text-sm outline-none focus:border-primary text-textMain"
-                          type="number"
-                          disabled={catalogConfigSubmitting}
-                        />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-xs text-textMuted font-bold">启用</label>
-                        <div className="flex items-center gap-2 pt-2">
-                          <input
-                            type="checkbox"
-                            checked={catalogDraft.enabled}
-                            onChange={(e) => setCatalogDraft((p) => ({ ...p, enabled: e.target.checked }))}
-                            disabled={catalogConfigSubmitting}
-                          />
-                          <span className="text-sm text-textMain">enabled</span>
-                        </div>
-                      </div>
-                    </div>
-                  </details>
-
-                  {catalogConfigError && <div className="text-xs text-red-400 whitespace-pre-wrap">{catalogConfigError}</div>}
-
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-surfaceHighlight border border-border hover:border-textMuted rounded-lg text-sm font-medium transition-all text-textMain disabled:opacity-50"
-                      onClick={closeCatalogConfig}
-                      disabled={catalogConfigSubmitting}
-                    >
-                      取消
-                    </button>
-                    <button
-                      type="button"
-                      className="px-4 py-2 bg-primary hover:bg-blue-600 rounded-lg text-sm font-bold text-white transition-all disabled:opacity-50 flex items-center gap-2"
-                      onClick={() => void saveCatalogConfig()}
-                      disabled={catalogConfigSubmitting}
-                    >
-                      {catalogConfigSubmitting ? <RefreshCw size={14} className="animate-spin" /> : <Check size={14} />} 保存
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-        </div>
+        <>
+          <ModelsSection
+            activeModelTab={activeModelTab}
+            setActiveModelTab={setActiveModelTab}
+            setModelForm={setModelForm}
+            aiConfigError={aiConfigError}
+            aiConfigSubmitting={aiConfigSubmitting}
+            aiConfigLoading={aiConfigLoading}
+            aiModelConfigs={aiModelConfigs}
+            deleteModelConfig={deleteModelConfig}
+            bindingForm={bindingForm}
+            setBindingForm={setBindingForm}
+            submitUpsertBinding={submitUpsertBinding}
+            aiBindings={aiBindings}
+            deleteBinding={deleteBinding}
+            openModelTestChat={openModelTestChat}
+            modelTestChatOpen={modelTestChatOpen}
+            closeModelTestChat={closeModelTestChat}
+            resetModelTestChat={resetModelTestChat}
+            modelTestModelConfigId={modelTestModelConfigId}
+            setModelTestModelConfigId={setModelTestModelConfigId}
+            modelTestSubmitting={modelTestSubmitting}
+            modelTestError={modelTestError}
+            modelTestMessages={modelTestMessages}
+            modelTestSessionsLoading={modelTestSessionsLoading}
+            modelTestSessions={modelTestSessions}
+            modelTestSessionId={modelTestSessionId}
+            setModelTestSessionId={setModelTestSessionId}
+            createModelTestSession={createModelTestSession}
+            modelTestImageRuns={modelTestImageRuns}
+            modelTestVideoRuns={modelTestVideoRuns}
+            modelTestLastRaw={modelTestLastRaw}
+            modelTestInput={modelTestInput}
+            setModelTestInput={setModelTestInput}
+            submitModelTestChat={submitModelTestChat}
+            modelTestSessionImageAttachmentNodeIds={modelTestSessionImageAttachmentNodeIds}
+            parseMentionIndices={parseMentionIndices}
+            insertModelTestImageMention={insertModelTestImageMention}
+            removeModelTestSessionImageAttachment={removeModelTestSessionImageAttachment}
+            addModelTestImages={addModelTestImages}
+            modelTestImagePromptRef={modelTestImagePromptRef}
+            modelTestImagePrompt={modelTestImagePrompt}
+            handlePromptChange={handlePromptChange}
+            mentionPopupOpen={mentionPopupOpen}
+            mentionPosition={mentionPosition}
+            handleMentionSelect={handleMentionSelect}
+            setMentionPopupOpen={setMentionPopupOpen}
+            submitModelTestImage={submitModelTestImage}
+            modelTestImageResolution={modelTestImageResolution}
+            setModelTestImageResolution={setModelTestImageResolution}
+            addModelOpen={addModelOpen}
+            setAddModelOpen={setAddModelOpen}
+            catalogSearch={catalogSearch}
+            setCatalogSearch={setCatalogSearch}
+            catalogManufacturer={catalogManufacturer}
+            setCatalogManufacturer={setCatalogManufacturer}
+            catalogManufacturers={catalogManufacturers}
+            vendorColor={vendorColor}
+            filteredCatalogItems={filteredCatalogItems}
+            catalogLoading={catalogLoading}
+            configByKey={configByKey}
+            openCatalogConfig={openCatalogConfig}
+            catalogConfigOpen={catalogConfigOpen}
+            catalogSelected={catalogSelected}
+            closeCatalogConfig={closeCatalogConfig}
+            catalogConfigSubmitting={catalogConfigSubmitting}
+            catalogDraft={catalogDraft}
+            setCatalogDraft={setCatalogDraft}
+            catalogApiKeyVisible={catalogApiKeyVisible}
+            setCatalogApiKeyVisible={setCatalogApiKeyVisible}
+            getApiKeyUrl={getApiKeyUrl}
+            catalogConfigError={catalogConfigError}
+            saveCatalogConfig={saveCatalogConfig}
+          />
+        </>
       )}
 
-      {activeSection === "users" && (
-        <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
-          <div className="flex justify-between items-end border-b border-border pb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-textMain mb-2">用户管理</h2>
-              <p className="text-textMuted text-sm">管理成员账号、分配角色及重置访问权限。</p>
-            </div>
-            <button
-              onClick={() => openCreateUserDialog()}
-              className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2"
-              type="button"
-            >
-              <UserPlus size={16} /> 新建用户
-            </button>
-          </div>
-
-          {rbacError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">
-              {rbacError}
-            </div>
-          )}
-
-          <div className="flex gap-4 mb-6">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-textMuted" size={16} />
-              <input
-                type="text"
-                placeholder="搜索成员姓名或邮箱..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-surfaceHighlight border border-border rounded-lg pl-10 pr-4 py-2.5 text-sm outline-none focus:border-primary text-textMain"
-              />
-            </div>
-            <select className="bg-surfaceHighlight border border-border rounded-lg px-4 py-2.5 text-sm outline-none focus:border-primary text-textMain">
-              <option value="all">所有状态</option>
-              <option value="active">活跃</option>
-              <option value="inactive">已禁用</option>
-            </select>
-          </div>
-
-          <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
-                <tr>
-                  <th className="px-6 py-4">成员信息</th>
-                  <th className="px-6 py-4">分配角色</th>
-                  <th className="px-6 py-4">账号状态</th>
-                  <th className="px-6 py-4">最近活跃</th>
-                  <th className="px-6 py-4 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {team
-                  .filter((u) => u.name.includes(searchQuery) || u.email.includes(searchQuery))
-                  .map((user) => (
-                    <tr key={user.id} className="hover:bg-surfaceHighlight/30 transition-colors">
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-3">
-                          <Avatar className="w-10 h-10 border border-border">
-                            {user.hasAvatar && (
-                              <AvatarImage src={`/api/avatar/${user.id}?v=${avatarCacheBust}`} alt={user.name} />
-                            )}
-                            <AvatarFallback className="text-sm font-bold bg-surface">
-                              {avatarLetter(user.email)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div>
-                            <div className="font-bold text-textMain">{user.name}</div>
-                            <div className="text-xs text-textMuted">{user.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          {(user.roleNames.length ? user.roleNames : ["user"]).map((name) => (
-                            <span
-                              key={name}
-                              className="inline-flex items-center rounded-full border border-border bg-surfaceHighlight px-2 py-1 text-[10px] font-bold text-textMain"
-                            >
-                              {name}
-                            </span>
-                          ))}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => handleUserStatusToggle(user.id)}
-                          className={`px-3 py-1 rounded-full text-[10px] font-bold border flex items-center justify-center gap-1 w-20 transition-all ${
-                            user.status === "active"
-                              ? "bg-green-500/10 text-green-400 border-green-500/20 hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/20"
-                              : "bg-gray-500/10 text-gray-500 border-gray-500/20 hover:bg-green-500/10 hover:text-green-400 hover:border-green-500/20"
-                          }`}
-                          type="button"
-                        >
-                          <div
-                            className={`w-1.5 h-1.5 rounded-full ${
-                              user.status === "active" ? "bg-green-400" : "bg-gray-500"
-                            }`}
-                          />
-                          {user.status === "active" ? "Active" : "Disabled"}
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-textMuted text-xs font-mono">{user.lastActive}</td>
-                      <td className="px-6 py-4 text-right">
-                        <button
-                          onClick={() => openEditUserDialog(user)}
-                          className="p-2 text-textMuted hover:text-textMain hover:bg-surfaceHighlight rounded-lg transition-colors"
-                          type="button"
-                        >
-                          <MoreHorizontal size={16} />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
+      {(activeSection as Section) === "users" && (
+        <UsersSection
+          rbacError={rbacError}
+          searchQuery={searchQuery}
+          setSearchQuery={setSearchQuery}
+          onOpenCreateUser={() => openCreateUserDialog()}
+          team={team}
+          avatarCacheBust={avatarCacheBust}
+          avatarLetter={avatarLetter}
+          onToggleUserStatus={handleUserStatusToggle}
+          onOpenEditUser={openEditUserDialog}
+        />
       )}
 
-      {activeSection === "roles" && (
-        <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
-          <div className="flex justify-between items-end border-b border-border pb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-textMain mb-2">角色管理</h2>
-              <p className="text-textMuted text-sm">定义平台角色及其职能描述，用于权限绑定。</p>
-            </div>
-            <button
-              onClick={handleAddRole}
-              className="bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2"
-              type="button"
-            >
-              <Plus size={16} /> 创建角色
-            </button>
-          </div>
-
-          {rbacError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">
-              {rbacError}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {roles.map((role) => {
-              const memberCount = team.filter((u) => u.roleIds.includes(role.id)).length;
-              return (
-                <div
-                  key={role.id}
-                  className="bg-surface border border-border rounded-xl p-6 flex flex-col hover:border-primary/50 transition-colors group"
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <div
-                      className={`w-12 h-12 rounded-xl flex items-center justify-center text-xl font-bold ${
-                        role.isSystem ? "bg-purple-500/10 text-purple-400" : "bg-blue-500/10 text-blue-400"
-                      }`}
-                    >
-                      {role.name.charAt(0)}
-                    </div>
-                    {role.isSystem && (
-                      <span className="text-[10px] bg-purple-500/10 text-purple-400 border border-purple-500/20 px-2 py-0.5 rounded font-bold uppercase tracking-wider">
-                        System
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-lg font-bold text-textMain mb-2">{role.name}</h3>
-                  <p className="text-sm text-textMuted mb-6 flex-1 line-clamp-2">{role.description}</p>
-
-                  <div className="pt-4 border-t border-border/50 flex items-center justify-between text-xs text-textMuted">
-                    <div className="flex items-center gap-2">
-                      <Users size={14} />
-                      <span>{memberCount} 成员</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => setQuery({ tab: "permissions" })}
-                        className="hover:text-primary transition-colors flex items-center gap-1"
-                        type="button"
-                      >
-                        <Lock size={12} /> 权限
-                      </button>
-                      {!role.isSystem && (
-                        <button
-                          onClick={() => handleDeleteRole(role.id)}
-                          className="hover:text-red-400 transition-colors ml-2"
-                          type="button"
-                        >
-                          <Trash2 size={12} />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      {(activeSection as Section) === "roles" && (
+        <RolesSection
+          rbacError={rbacError}
+          roles={roles}
+          team={team}
+          onAddRole={handleAddRole}
+          onDeleteRole={handleDeleteRole}
+          onGoPermissions={() => setQuery({ tab: "permissions" })}
+        />
       )}
 
-      {activeSection === "permissions" && (
-        <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
-          <div className="flex justify-between items-end border-b border-border pb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-textMain mb-2">权限矩阵 (Permission Matrix)</h2>
-              <p className="text-textMuted text-sm">精细化控制每个角色的系统操作权限。</p>
-            </div>
-            <button
-              onClick={handleAddPermission}
-              className="bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2"
-              type="button"
-            >
-              <Plus size={16} /> 新增权限
-            </button>
-          </div>
-
-          {rbacError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">
-              {rbacError}
-            </div>
-          )}
-
-          <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="bg-surfaceHighlight/50 border-b border-border">
-                    <th className="px-6 py-4 text-left font-medium text-textMuted w-64">权限项 / 功能模块</th>
-                    {roles.map((role) => (
-                      <th key={role.id} className="px-4 py-4 text-center font-bold text-textMain min-w-[100px]">
-                        <div className="flex flex-col items-center gap-1">
-                          <span>{role.name}</span>
-                          {role.isSystem && (
-                            <span className="text-[9px] font-normal text-textMuted opacity-60">System</span>
-                          )}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {permissionGroups.map((group) => (
-                    <Fragment key={group}>
-                      <tr key={`${group}-header`} className="bg-surfaceHighlight/20">
-                        <td
-                          colSpan={roles.length + 1}
-                          className="px-6 py-2 text-xs font-bold text-textMuted uppercase tracking-widest bg-surfaceHighlight/30"
-                        >
-                          {group}
-                        </td>
-                      </tr>
-                      {(permissionsByGroup.get(group) || []).map((perm) => (
-                        <tr key={perm.id} className="hover:bg-surfaceHighlight/10 transition-colors">
-                          <td className="px-6 py-3">
-                            <div className="font-medium text-textMain">{perm.name}</div>
-                            <div className="text-xs text-textMuted font-mono opacity-50">{perm.code}</div>
-                          </td>
-                          {roles.map((role) => {
-                            const hasPerm = role.permissionIds.includes(perm.id);
-                            const isAdmin = role.isSystem;
-                            return (
-                              <td key={role.id} className="px-4 py-3 text-center">
-                                <button
-                                  onClick={() => togglePermission(role.id, perm.id)}
-                                  disabled={isAdmin}
-                                  className={`w-6 h-6 rounded border flex items-center justify-center transition-all mx-auto ${
-                                    hasPerm
-                                      ? "bg-primary border-primary text-white"
-                                      : "bg-transparent border-border text-transparent hover:border-primary/50"
-                                  } ${isAdmin ? "opacity-50 cursor-not-allowed" : ""}`}
-                                  type="button"
-                                >
-                                  <Check size={14} strokeWidth={3} />
-                                </button>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </Fragment>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
+      {(activeSection as Section) === "permissions" && (
+        <PermissionsMatrixSection
+          rbacError={rbacError}
+          roles={roles}
+          permissionGroups={permissionGroups}
+          permissionsByGroup={permissionsByGroup}
+          onTogglePermission={togglePermission}
+          onAddPermission={handleAddPermission}
+        />
       )}
 
       {createRoleOpen && (
@@ -2437,615 +2246,81 @@ export default function Page() {
         </div>
       )}
 
-      {activeSection === "audit" && (
-        <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
-          <div className="flex justify-between items-end border-b border-border pb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-textMain mb-2">系统审计日志</h2>
-              <p className="text-textMuted text-sm">记录关键管理操作，用于追溯与排障。</p>
-            </div>
-            <button
-              onClick={() => void refreshAudit()}
-              className="bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2"
-              type="button"
-            >
-              <RefreshCw size={16} /> 刷新
-            </button>
-          </div>
-
-          {rbacError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">
-              {rbacError}
-            </div>
-          )}
-
-          <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
-                <tr>
-                  <th className="px-6 py-4">时间</th>
-                  <th className="px-6 py-4">动作</th>
-                  <th className="px-6 py-4">资源</th>
-                  <th className="px-6 py-4">操作者</th>
-                  <th className="px-6 py-4">状态</th>
-                  <th className="px-6 py-4">Request</th>
-                  <th className="px-6 py-4">IP</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {rbacLoading && auditLogs.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-6 text-textMuted">
-                      加载中...
-                    </td>
-                  </tr>
-                )}
-                {!rbacLoading && auditLogs.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-6 text-textMuted">
-                      暂无审计记录
-                    </td>
-                  </tr>
-                )}
-                {auditLogs.map((row) => (
-                  <tr key={row.id} className="hover:bg-surfaceHighlight/30 transition-colors">
-                    <td className="px-6 py-4 text-xs text-textMuted font-mono">
-                      {new Date(row.created_at).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-4 font-mono text-xs text-textMain">{row.action}</td>
-                    <td className="px-6 py-4 text-xs text-textMuted font-mono">
-                      {(row.resource_type || "-") + (row.resource_id ? `:${row.resource_id.slice(0, 8)}` : "")}
-                    </td>
-                    <td className="px-6 py-4 text-xs text-textMuted font-mono">
-                      {row.actor_user_id ? row.actor_user_id.slice(0, 8) : "-"}
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-2 py-1 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 ${
-                          row.success
-                            ? "bg-green-500/10 text-green-400 border-green-500/20"
-                            : "bg-red-500/10 text-red-400 border-red-500/20"
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${row.success ? "bg-green-400" : "bg-red-400"}`} />
-                        {row.success ? "SUCCESS" : "FAILED"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-xs text-textMuted font-mono">{row.request_id || "-"}</td>
-                    <td className="px-6 py-4 text-xs text-textMuted font-mono">{row.ip || "-"}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="flex items-center justify-between text-xs text-textMuted">
-            <div>
-              共 <span className="text-textMain font-medium">{auditTotal}</span> 条
-            </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() => setAuditOffset(Math.max(0, auditOffset - 50))}
-                disabled={auditOffset === 0}
-                className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg disabled:opacity-50"
-                type="button"
-              >
-                上一页
-              </button>
-              <button
-                onClick={() => setAuditOffset(auditOffset + 50)}
-                disabled={auditOffset + 50 >= auditTotal}
-                className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg disabled:opacity-50"
-                type="button"
-              >
-                下一页
-              </button>
-            </div>
-          </div>
-        </div>
+      {(activeSection as Section) === "audit" && (
+        <AuditSection
+          rbacError={rbacError}
+          rbacLoading={rbacLoading}
+          auditLogs={auditLogs}
+          onRefresh={() => void refreshAudit()}
+          auditTotal={auditTotal}
+          auditOffset={auditOffset}
+          setAuditOffset={setAuditOffset}
+        />
       )}
 
-      {activeSection === "credits" && (
-        <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
-          <div className="flex justify-between items-end border-b border-border pb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-textMain mb-2">积分管理</h2>
-              <p className="text-textMuted text-sm">查看用户积分余额并进行调整，充值/兑换入口预留。</p>
-            </div>
-            <button
-              onClick={() => void refreshUsers()}
-              className="bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2"
-              type="button"
-            >
-              <RefreshCw size={16} /> 刷新
-            </button>
-          </div>
-
-          {rbacError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">
-              {rbacError}
-            </div>
-          )}
-
-          <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
-            <table className="w-full text-sm text-left">
-              <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
-                <tr>
-                  <th className="px-6 py-4">成员信息</th>
-                  <th className="px-6 py-4">账号状态</th>
-                  <th className="px-6 py-4 text-right">操作</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {rbacLoading && team.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-6 py-6 text-textMuted">
-                      加载中...
-                    </td>
-                  </tr>
-                )}
-                {!rbacLoading && team.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-6 py-6 text-textMuted">
-                      暂无用户
-                    </td>
-                  </tr>
-                )}
-                {team.map((user) => (
-                  <tr key={user.id} className="hover:bg-surfaceHighlight/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="w-10 h-10 border border-border">
-                          {user.hasAvatar && (
-                            <AvatarImage src={`/api/avatar/${user.id}?v=${avatarCacheBust}`} alt={user.name} />
-                          )}
-                          <AvatarFallback className="text-sm font-bold bg-surface">{avatarLetter(user.email)}</AvatarFallback>
-                        </Avatar>
-                        <div>
-                          <div className="font-bold text-textMain">{user.name}</div>
-                          <div className="text-xs text-textMuted">{user.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span
-                        className={`px-3 py-1 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 ${
-                          user.status === "active"
-                            ? "bg-green-500/10 text-green-400 border-green-500/20"
-                            : "bg-gray-500/10 text-gray-500 border-gray-500/20"
-                        }`}
-                      >
-                        <span className={`w-1.5 h-1.5 rounded-full ${user.status === "active" ? "bg-green-400" : "bg-gray-500"}`} />
-                        {user.status === "active" ? "ACTIVE" : "DISABLED"}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button
-                        onClick={() => void openCreditsDialog(user)}
-                        className="bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-3 py-1.5 rounded-lg text-xs font-bold transition-all"
-                        type="button"
-                      >
-                        查看/调整
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between">
-            <div className="text-sm text-textMuted">充值与兑换系统入口预留（即将上线）</div>
-            <div className="flex items-center gap-2">
-              <button className="px-3 py-2 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain" type="button">
-                充值
-              </button>
-              <button className="px-3 py-2 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain" type="button">
-                兑换
-              </button>
-            </div>
-          </div>
-        </div>
+      {(activeSection as Section) === "credits" && (
+        <CreditsSection
+          rbacError={rbacError}
+          rbacLoading={rbacLoading}
+          team={team}
+          avatarCacheBust={avatarCacheBust}
+          avatarLetter={avatarLetter}
+          onRefreshUsers={() => void refreshUsers()}
+          onOpenCreditsDialog={openCreditsDialog}
+        />
       )}
 
-      {activeSection === "agents" && (
-        <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
-          <div className="flex justify-between items-end border-b border-border pb-6">
-            <div>
-              <h2 className="text-2xl font-bold text-textMain mb-2">Agent 管理</h2>
-              <p className="text-textMuted text-sm">配置 Agent 类型、模型与单次消耗积分数。</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 bg-surfaceHighlight p-1 rounded-lg border border-border">
-                <button
-                  onClick={() => setAgentsSubTab("custom")}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                    agentsSubTab === "custom" ? "bg-surface text-textMain shadow-sm border border-border/50" : "text-textMuted hover:text-textMain"
-                  }`}
-                  type="button"
-                >
-                  自定义 Agent
-                </button>
-                <button
-                  onClick={() => setAgentsSubTab("builtin")}
-                  className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all ${
-                    agentsSubTab === "builtin" ? "bg-surface text-textMain shadow-sm border border-border/50" : "text-textMuted hover:text-textMain"
-                  }`}
-                  type="button"
-                >
-                  内置提示词
-                </button>
-              </div>
-              <button
-                onClick={() => {
-                  if (agentsSubTab === "custom") {
-                    void refreshAgents();
-                  } else {
-                    void refreshBuiltinAgents();
-                    if (selectedBuiltinAgentCode) void refreshBuiltinVersions(selectedBuiltinAgentCode);
-                  }
-                }}
-                className="bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2"
-                type="button"
-              >
-                <RefreshCw size={16} /> 刷新
-              </button>
-              {agentsSubTab === "custom" && (
-                <button
-                  onClick={() => openCreateAgentDialog()}
-                  className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2"
-                  type="button"
-                >
-                  <Plus size={16} /> 新建 Agent
-                </button>
-              )}
-              {agentsSubTab === "builtin" && (
-                <>
-                  <button
-                    onClick={() => openBuiltinDiff()}
-                    className="bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-2"
-                    type="button"
-                    disabled={!selectedBuiltinAgentCode}
-                  >
-                    <Eye size={16} /> 对比版本
-                  </button>
-                  <button
-                    onClick={() => openCreateBuiltinPrompt()}
-                    className="bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/20 transition-all flex items-center gap-2"
-                    type="button"
-                    disabled={!selectedBuiltinAgentCode}
-                  >
-                    <Plus size={16} /> 新增版本
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-
-          {agentsSubTab === "custom" && agentsError && (
-            <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">
-              {agentsError}
-            </div>
-          )}
-
-          {agentsSubTab === "custom" && (
-            <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
-              <table className="w-full text-sm text-left">
-                <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
-                  <tr>
-                    <th className="px-6 py-4">名称</th>
-                    <th className="px-6 py-4">类别</th>
-                    <th className="px-6 py-4">模型</th>
-                    <th className="px-6 py-4">单次消耗</th>
-                    <th className="px-6 py-4">状态</th>
-                    <th className="px-6 py-4 text-right">操作</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {agentsLoading && agents.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-6 text-textMuted">
-                        加载中...
-                      </td>
-                    </tr>
-                  )}
-                  {!agentsLoading && agents.length === 0 && (
-                    <tr>
-                      <td colSpan={6} className="px-6 py-6 text-textMuted">
-                        暂无 Agent
-                      </td>
-                    </tr>
-                  )}
-                  {agents.map((a) => (
-                    <tr key={a.id} className="hover:bg-surfaceHighlight/30 transition-colors">
-                      <td className="px-6 py-4 font-bold text-textMain">{a.name}</td>
-                      <td className="px-6 py-4 text-xs text-textMuted font-mono">{a.category}</td>
-                      <td className="px-6 py-4 text-xs text-textMuted font-mono">
-                        {(() => {
-                          const cfgId = (a as unknown as { ai_model_config_id?: string }).ai_model_config_id;
-                          const cfg = agentModelConfigs.find((c) => c.id === cfgId);
-                          return cfg ? `${cfg.manufacturer} · ${cfg.model}` : cfgId || "-";
-                        })()}
-                      </td>
-                      <td className="px-6 py-4 text-xs text-textMain font-mono">{Number(a.credits_per_call || 0)}</td>
-                      <td className="px-6 py-4">
-                        <span
-                          className={`px-3 py-1 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 ${
-                            a.enabled
-                              ? "bg-green-500/10 text-green-400 border-green-500/20"
-                              : "bg-gray-500/10 text-gray-500 border-gray-500/20"
-                          }`}
-                        >
-                          <span className={`w-1.5 h-1.5 rounded-full ${a.enabled ? "bg-green-400" : "bg-gray-500"}`} />
-                          {a.enabled ? "ENABLED" : "DISABLED"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => {
-                              setAgentPromptVersionsAgent(a);
-                              setAgentPromptVersionsOpen(true);
-                            }}
-                            className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain"
-                            type="button"
-                          >
-                            提示词版本
-                          </button>
-                          <button
-                            onClick={() => openEditAgentDialog(a)}
-                            className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain"
-                            type="button"
-                          >
-                            编辑
-                          </button>
-                          <button
-                            onClick={() => {
-                              if (!window.confirm(`确认删除 Agent：${a.name}？`)) return;
-                              void deleteAgent(a.id);
-                            }}
-                            className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs font-bold text-red-400"
-                            type="button"
-                          >
-                            删除
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {agentsSubTab === "builtin" && (
-            <div className="space-y-4">
-              {(builtinAgentsError || builtinVersionsError) && (
-                <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-4 text-sm">
-                  {builtinAgentsError || builtinVersionsError}
-                </div>
-              )}
-
-              <div className="bg-surface border border-border rounded-xl p-4 flex items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                  <div className="text-sm font-bold text-textMain">内置 Agent</div>
-                  <select
-                    value={selectedBuiltinAgentCode}
-                    onChange={(e) => setSelectedBuiltinAgentCode(e.target.value)}
-                    className="bg-surfaceHighlight border border-border rounded-lg px-3 py-2 text-sm text-textMain outline-none"
-                  >
-                    {builtinAgents.map((a) => (
-                      <option key={a.id} value={a.agent_code}>
-                        {a.agent_code} · {a.name}
-                      </option>
-                    ))}
-                  </select>
-                  <div className="text-xs text-textMuted">{builtinAgentsLoading ? "加载中..." : `${builtinAgents.length} 个`}</div>
-                </div>
-                <div className="flex items-center gap-3">
-                  <div className="text-xs text-textMuted">模型：随版本</div>
-                  <div className="text-xs text-textMuted">
-                    {(() => {
-                      const row = builtinAgents.find((a) => a.agent_code === selectedBuiltinAgentCode);
-                      const cfgId = row?.default_ai_model_config_id;
-                      const cfg = agentModelConfigs.find((c) => c.id === cfgId);
-                      return cfg ? `兜底：${cfg.manufacturer} · ${cfg.model}` : cfgId ? `兜底：${cfgId}` : "兜底：未设置";
-                    })()}
-                  </div>
-                  <div className="text-xs text-textMuted">提示：修改默认版本会影响未覆盖用户</div>
-                </div>
-              </div>
-
-              <div className="bg-surface border border-border rounded-xl overflow-hidden shadow-sm">
-                <table className="w-full text-sm text-left">
-                  <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
-                    <tr>
-                      <th className="px-6 py-4">版本</th>
-                      <th className="px-6 py-4">描述</th>
-                      <th className="px-6 py-4">创建时间</th>
-                      <th className="px-6 py-4">模型</th>
-                      <th className="px-6 py-4">状态</th>
-                      <th className="px-6 py-4 text-right">操作</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {builtinVersionsLoading && builtinVersions.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-6 text-textMuted">
-                          加载中...
-                        </td>
-                      </tr>
-                    )}
-                    {!builtinVersionsLoading && builtinVersions.length === 0 && (
-                      <tr>
-                        <td colSpan={6} className="px-6 py-6 text-textMuted">
-                          暂无版本
-                        </td>
-                      </tr>
-                    )}
-                    {builtinVersions.map((v) => (
-                      <tr key={v.id} className="hover:bg-surfaceHighlight/30 transition-colors">
-                        <td className="px-6 py-4 text-xs text-textMain font-mono">v{v.version}</td>
-                        <td className="px-6 py-4 text-xs text-textMuted">{v.description || "-"}</td>
-                        <td className="px-6 py-4 text-xs text-textMuted font-mono">{new Date(v.created_at).toLocaleString()}</td>
-                        <td className="px-6 py-4 text-xs text-textMuted font-mono">
-                          {(() => {
-                            const cfgId = (v as unknown as { ai_model_config_id?: string | null }).ai_model_config_id;
-                            if (!cfgId) return "继承";
-                            const cfg = agentModelConfigs.find((c) => c.id === cfgId);
-                            return cfg ? `${cfg.manufacturer} · ${cfg.model}` : cfgId;
-                          })()}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span
-                            className={`px-3 py-1 rounded-full text-[10px] font-bold border inline-flex items-center gap-1 ${
-                              v.is_default
-                                ? "bg-green-500/10 text-green-400 border-green-500/20"
-                                : "bg-gray-500/10 text-gray-500 border-gray-500/20"
-                            }`}
-                          >
-                            <span className={`w-1.5 h-1.5 rounded-full ${v.is_default ? "bg-green-400" : "bg-gray-500"}`} />
-                            {v.is_default ? "DEFAULT" : "VERSION"}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => openEditBuiltinPrompt(v)}
-                              className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain"
-                              type="button"
-                            >
-                              查看/编辑
-                            </button>
-                            {!v.is_default && (
-                              <button
-                                onClick={() => activateBuiltinVersion(v.version)}
-                                className="px-3 py-1.5 bg-surfaceHighlight border border-border rounded-lg text-xs font-bold text-textMain"
-                                type="button"
-                              >
-                                设为默认
-                              </button>
-                            )}
-                            {!v.is_default && (
-                              <button
-                                onClick={() => deleteBuiltinVersion(v.version)}
-                                className="px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-xs font-bold text-red-400"
-                                type="button"
-                              >
-                                删除
-                              </button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
+      {(activeSection as Section) === "agents" && (
+        <AgentsSection
+          agentsSubTab={agentsSubTab}
+          setAgentsSubTab={setAgentsSubTab}
+          agentsError={agentsError}
+          agentsLoading={agentsLoading}
+          agents={agents}
+          agentModelConfigs={agentModelConfigs}
+          builtinAgentsLoading={builtinAgentsLoading}
+          builtinAgents={builtinAgents}
+          builtinAgentsError={builtinAgentsError}
+          builtinVersionsLoading={builtinVersionsLoading}
+          builtinVersions={builtinVersions}
+          builtinVersionsError={builtinVersionsError}
+          selectedBuiltinAgentCode={selectedBuiltinAgentCode}
+          setSelectedBuiltinAgentCode={setSelectedBuiltinAgentCode}
+          refreshAgents={() => void refreshAgents()}
+          refreshBuiltinAgents={() => void refreshBuiltinAgents()}
+          refreshBuiltinVersions={(code) => void refreshBuiltinVersions(code)}
+          openCreateAgentDialog={openCreateAgentDialog}
+          openBuiltinDiff={openBuiltinDiff}
+          openCreateBuiltinPrompt={openCreateBuiltinPrompt}
+          openEditBuiltinPrompt={openEditBuiltinPrompt}
+          activateBuiltinVersion={activateBuiltinVersion}
+          deleteBuiltinVersion={deleteBuiltinVersion}
+          openEditAgentDialog={openEditAgentDialog}
+          deleteAgent={deleteAgent}
+          onOpenPromptVersions={(a) => {
+            setAgentPromptVersionsAgent(a);
+            setAgentPromptVersionsOpen(true);
+          }}
+        />
       )}
 
-      {creditsOpen && creditsUser && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-3xl bg-surface border border-border rounded-2xl p-6 space-y-4 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-lg font-bold text-textMain">积分调整</div>
-                <div className="text-sm text-textMuted mt-1">{creditsUser.email}</div>
-              </div>
-              <button
-                onClick={() => setCreditsOpen(false)}
-                className="w-9 h-9 rounded-lg bg-surfaceHighlight border border-border flex items-center justify-center text-textMuted hover:text-textMain"
-                type="button"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {creditsError && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-3 text-sm">
-                {creditsError}
-              </div>
-            )}
-
-            <div className="grid grid-cols-3 gap-4">
-              <div className="bg-surfaceHighlight/40 border border-border rounded-xl p-4">
-                <div className="text-xs text-textMuted">当前余额</div>
-                <div className="text-2xl font-bold text-textMain mt-1">{creditsAccount?.balance ?? "-"}</div>
-              </div>
-              <div className="col-span-2 bg-surfaceHighlight/40 border border-border rounded-xl p-4 space-y-2">
-                <div className="text-xs text-textMuted">调整原因</div>
-                <input
-                  value={creditsReason}
-                  onChange={(e) => setCreditsReason(e.target.value)}
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-textMain outline-none"
-                  placeholder="admin.adjust"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-surfaceHighlight/40 border border-border rounded-xl p-4 space-y-3">
-                <div className="text-sm font-bold text-textMain">加/减积分</div>
-                <input
-                  type="number"
-                  value={creditsAdjustDelta}
-                  onChange={(e) => setCreditsAdjustDelta(Number(e.target.value))}
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-textMain outline-none"
-                />
-                <button
-                  onClick={() => void submitCreditsAdjust()}
-                  disabled={creditsLoading || Number(creditsAdjustDelta || 0) === 0}
-                  className="w-full bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
-                  type="button"
-                >
-                  {creditsLoading ? "处理中..." : "提交调整"}
-                </button>
-              </div>
-
-              <div className="bg-surfaceHighlight/40 border border-border rounded-xl p-4 space-y-3">
-                <div className="text-sm font-bold text-textMain">直接设置余额</div>
-                <input
-                  type="number"
-                  value={creditsSetBalance}
-                  onChange={(e) => setCreditsSetBalance(Number(e.target.value))}
-                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm text-textMain outline-none"
-                />
-                <button
-                  onClick={() => void submitCreditsSet()}
-                  disabled={creditsLoading}
-                  className="w-full bg-surfaceHighlight hover:bg-surface border border-border text-textMain px-4 py-2 rounded-lg text-sm font-bold transition-all disabled:opacity-50"
-                  type="button"
-                >
-                  {creditsLoading ? "处理中..." : "设置余额"}
-                </button>
-              </div>
-            </div>
-
-            <div className="bg-surfaceHighlight/20 border border-border rounded-xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-border text-sm font-bold text-textMain">最近流水</div>
-              <div className="max-h-64 overflow-y-auto divide-y divide-border">
-                {creditsTransactions.length === 0 && (
-                  <div className="px-4 py-6 text-sm text-textMuted">{creditsLoading ? "加载中..." : "暂无流水"}</div>
-                )}
-                {creditsTransactions.map((t) => (
-                  <div key={t.id} className="px-4 py-3 flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="text-xs text-textMain font-mono truncate">{t.reason}</div>
-                      <div className="text-xs text-textMuted font-mono truncate">{new Date(t.created_at).toLocaleString()}</div>
-                    </div>
-                    <div className="text-xs text-textMain font-mono">
-                      {t.delta > 0 ? `+${t.delta}` : `${t.delta}`} → {t.balance_after}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      <CreditsAdjustModal
+        open={creditsOpen}
+        user={creditsUser}
+        onClose={() => setCreditsOpen(false)}
+        creditsError={creditsError}
+        creditsAccount={creditsAccount}
+        creditsReason={creditsReason}
+        setCreditsReason={setCreditsReason}
+        creditsAdjustDelta={creditsAdjustDelta}
+        setCreditsAdjustDelta={setCreditsAdjustDelta}
+        creditsSetBalance={creditsSetBalance}
+        setCreditsSetBalance={setCreditsSetBalance}
+        creditsLoading={creditsLoading}
+        submitCreditsAdjust={submitCreditsAdjust}
+        submitCreditsSet={submitCreditsSet}
+        creditsTransactions={creditsTransactions}
+      />
 
       <AgentPromptVersionsDialog
         open={agentPromptVersionsOpen}
@@ -3074,78 +2349,23 @@ export default function Page() {
         onSubmit={(payload) => void submitBuiltinPrompt(payload)}
       />
 
-      {builtinDiffOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="w-full max-w-4xl bg-surface border border-border rounded-2xl p-6 space-y-4 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="text-lg font-bold text-textMain">版本对比</div>
-                <div className="text-sm text-textMuted mt-1">{selectedBuiltinAgentCode || "-"}</div>
-              </div>
-              <button
-                onClick={() => {
-                  setBuiltinDiffOpen(false);
-                  setBuiltinDiffError(null);
-                }}
-                className="w-9 h-9 rounded-lg bg-surfaceHighlight border border-border flex items-center justify-center text-textMuted hover:text-textMain"
-                type="button"
-              >
-                <X size={16} />
-              </button>
-            </div>
-
-            {builtinDiffError && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-200 rounded-xl p-3 text-sm">{builtinDiffError}</div>
-            )}
-
-            <div className="flex items-end justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="space-y-1">
-                  <div className="text-xs text-textMuted">from</div>
-                  <select
-                    value={String(builtinDiffFrom)}
-                    onChange={(e) => setBuiltinDiffFrom(Number(e.target.value))}
-                    className="bg-surfaceHighlight border border-border rounded-lg px-3 py-2 text-sm text-textMain outline-none"
-                  >
-                    {builtinVersions.map((v) => (
-                      <option key={`from-${v.id}`} value={String(v.version)}>
-                        v{v.version}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="space-y-1">
-                  <div className="text-xs text-textMuted">to</div>
-                  <select
-                    value={String(builtinDiffTo)}
-                    onChange={(e) => setBuiltinDiffTo(Number(e.target.value))}
-                    className="bg-surfaceHighlight border border-border rounded-lg px-3 py-2 text-sm text-textMain outline-none"
-                  >
-                    {builtinVersions.map((v) => (
-                      <option key={`to-${v.id}`} value={String(v.version)}>
-                        v{v.version}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button
-                  onClick={() => void runBuiltinDiff()}
-                  disabled={builtinDiffLoading || builtinVersions.length === 0}
-                  className="px-4 py-2 bg-primary hover:bg-blue-600 text-white rounded-lg text-sm font-bold transition-all disabled:opacity-50"
-                  type="button"
-                >
-                  {builtinDiffLoading ? "对比中..." : "生成 Diff"}
-                </button>
-              </div>
-              <div className="text-xs text-textMuted">统一 diff（unified diff）</div>
-            </div>
-
-            <div className="bg-surfaceHighlight/40 border border-border rounded-xl overflow-hidden">
-              <pre className="max-h-[420px] overflow-auto p-4 text-xs text-textMain font-mono whitespace-pre-wrap">{builtinDiffText || ""}</pre>
-            </div>
-          </div>
-        </div>
-      )}
+      <BuiltinDiffModal
+        open={builtinDiffOpen}
+        agentCode={selectedBuiltinAgentCode}
+        error={builtinDiffError}
+        versions={builtinVersions}
+        from={builtinDiffFrom}
+        to={builtinDiffTo}
+        setFrom={setBuiltinDiffFrom}
+        setTo={setBuiltinDiffTo}
+        loading={builtinDiffLoading}
+        diffText={builtinDiffText}
+        onRun={() => void runBuiltinDiff()}
+        onClose={() => {
+          setBuiltinDiffOpen(false);
+          setBuiltinDiffError(null);
+        }}
+      />
 
       {agentEditOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">

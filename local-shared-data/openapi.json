@@ -567,6 +567,16 @@
               "format": "uuid",
               "title": "Script Id"
             }
+          },
+          {
+            "name": "force",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Force"
+            }
           }
         ],
         "responses": {
@@ -1699,6 +1709,50 @@
         ]
       }
     },
+    "/api/v1/ai/text/chat/stream": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Ai Text Chat Stream",
+        "operationId": "ai_text_chat_stream",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AITextChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
     "/api/v1/ai/video/generate": {
       "post": {
         "tags": [
@@ -2103,6 +2157,62 @@
         }
       }
     },
+    "/api/v1/ai/admin/model-configs/{model_config_id}/test-chat/stream": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Admin Test Model Config Chat Stream",
+        "operationId": "admin_test_model_config_chat_stream",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "model_config_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Model Config Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminAIModelConfigTestChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/ai/admin/model-configs/{model_config_id}": {
       "put": {
         "tags": [
@@ -2336,6 +2446,498 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResponseBase_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/admin/scenes": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Admin List Ai Scenes",
+        "operationId": "admin_list_ai_scenes",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_list_AdminAISceneRead__"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Admin Create Ai Scene",
+        "operationId": "admin_create_ai_scene",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminAISceneCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_AdminAISceneRead_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/admin/scenes/{scene_code}": {
+      "patch": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Admin Update Ai Scene",
+        "operationId": "admin_update_ai_scene",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scene_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scene Code"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminAISceneUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_AdminAISceneRead_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Admin Delete Ai Scene",
+        "operationId": "admin_delete_ai_scene",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scene_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scene Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/scenes": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "List Ai Scenes Catalog",
+        "operationId": "list_ai_scenes_catalog",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_list_AISceneCatalogItem__"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/admin/scene-test/options": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Admin Ai Scene Test Options",
+        "operationId": "admin_ai_scene_test_options",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_AISceneTestOptionsResponse_"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/admin/scene-test/chat": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Admin Ai Scene Test Chat",
+        "operationId": "admin_ai_scene_test_chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISceneTestChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_AISceneTestChatResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/admin/scene-test/chat/stream": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Admin Ai Scene Test Chat Stream",
+        "operationId": "admin_ai_scene_test_chat_stream",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISceneTestChatRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ]
+      }
+    },
+    "/api/v1/ai/scenes/{scene_code}/chat/stream": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Ai Scene Chat Stream",
+        "operationId": "ai_scene_chat_stream",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scene_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scene Code"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISceneRunChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/scenes/{scene_code}/chat": {
+      "post": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Ai Scene Chat",
+        "operationId": "ai_scene_chat",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "scene_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Scene Code"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AISceneRunChatRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_AISceneRunChatResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/projects/{project_id}/context/preview": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Preview Project Context",
+        "operationId": "preview_project_context",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "exclude_types",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated asset types to exclude",
+              "title": "Exclude Types"
+            },
+            "description": "Comma-separated asset types to exclude"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_ContextPreviewRead_"
                 }
               }
             }
@@ -4770,6 +5372,110 @@
         }
       }
     },
+    "/api/v1/episodes/{episode_id}/doc": {
+      "get": {
+        "tags": [
+          "episodes"
+        ],
+        "summary": "Get Episode Doc",
+        "operationId": "get_episode_doc",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Episode Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_EpisodeDocResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "episodes"
+        ],
+        "summary": "Put Episode Doc",
+        "operationId": "put_episode_doc",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "episode_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Episode Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EpisodeDocUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_EpisodeDocResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/v1/scripts/{script_id}/episodes": {
       "post": {
         "tags": [
@@ -6475,6 +7181,334 @@
         }
       }
     },
+    "/api/v1/ai/chat/sessions": {
+      "get": {
+        "tags": [
+          "ai_chat"
+        ],
+        "summary": "List Sessions",
+        "operationId": "list_sessions",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_AIChatSessionListResponse_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "ai_chat"
+        ],
+        "summary": "Create Session",
+        "operationId": "create_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIChatSessionCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_AIChatSessionRead_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/chat/sessions/{session_id}": {
+      "get": {
+        "tags": [
+          "ai_chat"
+        ],
+        "summary": "Get Session",
+        "operationId": "get_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_AIChatSessionRead_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "ai_chat"
+        ],
+        "summary": "Update Session",
+        "operationId": "update_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIChatSessionUpdate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_AIChatSessionRead_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "ai_chat"
+        ],
+        "summary": "Delete Session",
+        "operationId": "delete_session",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_dict_"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/chat/sessions/{session_id}/messages": {
+      "post": {
+        "tags": [
+          "ai_chat"
+        ],
+        "summary": "Send Message",
+        "operationId": "send_message",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "session_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "title": "Session Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AIChatMessageCreate"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/jwt/login": {
       "post": {
         "tags": [
@@ -7400,6 +8434,298 @@
         "type": "object",
         "title": "AIAssetVariantDraft"
       },
+      "AIChatMessageCreate": {
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Content",
+            "description": "\u7528\u6237\u6d88\u606f\u5185\u5bb9"
+          },
+          "scene_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Code",
+            "description": "\u53ef\u9009\uff1a\u5207\u6362\u573a\u666f"
+          },
+          "episode_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Episode Id",
+            "description": "\u53ef\u9009\uff1a\u6307\u5b9a\u5267\u96c6ID"
+          }
+        },
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "title": "AIChatMessageCreate"
+      },
+      "AIChatMessageRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          },
+          "plans": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Plans"
+          },
+          "trace": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trace"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content",
+          "created_at"
+        ],
+        "title": "AIChatMessageRead"
+      },
+      "AIChatSessionCreate": {
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id",
+            "description": "\u5173\u8054\u9879\u76ee ID"
+          },
+          "scene_code": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Scene Code",
+            "description": "\u573a\u666f\u4ee3\u7801"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "\u4f1a\u8bdd\u6807\u9898"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scene_code"
+        ],
+        "title": "AIChatSessionCreate"
+      },
+      "AIChatSessionListItem": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "scene_code": {
+            "type": "string",
+            "title": "Scene Code"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "message_count": {
+            "type": "integer",
+            "title": "Message Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "title",
+          "scene_code",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AIChatSessionListItem"
+      },
+      "AIChatSessionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AIChatSessionListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size"
+        ],
+        "title": "AIChatSessionListResponse"
+      },
+      "AIChatSessionRead": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Id"
+          },
+          "user_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "User Id"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "scene_code": {
+            "type": "string",
+            "title": "Scene Code"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AIChatMessageRead"
+            },
+            "type": "array",
+            "title": "Messages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "user_id",
+          "project_id",
+          "title",
+          "scene_code",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "AIChatSessionRead"
+      },
+      "AIChatSessionUpdate": {
+        "properties": {
+          "title": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title",
+            "description": "\u65b0\u6807\u9898"
+          }
+        },
+        "type": "object",
+        "title": "AIChatSessionUpdate"
+      },
       "AIEpisodeAssetExtractionApplyRequest": {
         "properties": {
           "mode": {
@@ -7956,6 +9282,70 @@
         "type": "object",
         "title": "AIPromptPresetUpdateRequest"
       },
+      "AISceneCatalogItem": {
+        "properties": {
+          "scene_code": {
+            "type": "string",
+            "title": "Scene Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "builtin_agent_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Builtin Agent Code"
+          },
+          "required_tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Tools"
+          },
+          "input_schema": {
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "type": "object",
+            "title": "Output Schema"
+          },
+          "ui_config": {
+            "type": "object",
+            "title": "Ui Config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scene_code",
+          "name",
+          "type"
+        ],
+        "title": "AISceneCatalogItem"
+      },
       "AISceneDraft": {
         "properties": {
           "scene_number": {
@@ -8032,6 +9422,79 @@
         },
         "type": "object",
         "title": "AISceneDraft"
+      },
+      "AISceneRunChatRequest": {
+        "properties": {
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id"
+          },
+          "script_text": {
+            "type": "string",
+            "title": "Script Text",
+            "default": ""
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AISceneTestChatMessage"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "context_exclude_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Context Exclude Types"
+          }
+        },
+        "type": "object",
+        "title": "AISceneRunChatRequest"
+      },
+      "AISceneRunChatResponse": {
+        "properties": {
+          "output_text": {
+            "type": "string",
+            "title": "Output Text",
+            "default": ""
+          },
+          "plans": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Plans"
+          },
+          "trace_events": {
+            "items": {
+              "type": "object"
+            },
+            "type": "array",
+            "title": "Trace Events"
+          },
+          "archive": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive"
+          }
+        },
+        "type": "object",
+        "title": "AISceneRunChatResponse"
       },
       "AISceneStoryboardApplyRequest": {
         "properties": {
@@ -8312,6 +9775,266 @@
           "final_prompt"
         ],
         "title": "AISceneStructurePromptPreviewResponse"
+      },
+      "AISceneTestAgentOption": {
+        "properties": {
+          "agent_code": {
+            "type": "string",
+            "title": "Agent Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "type": "string",
+            "title": "Category"
+          },
+          "versions": {
+            "items": {
+              "$ref": "#/components/schemas/AISceneTestAgentVersionOption"
+            },
+            "type": "array",
+            "title": "Versions"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_code",
+          "name",
+          "category"
+        ],
+        "title": "AISceneTestAgentOption"
+      },
+      "AISceneTestAgentSelect": {
+        "properties": {
+          "agent_code": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Agent Code"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Version"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_code",
+          "version"
+        ],
+        "title": "AISceneTestAgentSelect"
+      },
+      "AISceneTestAgentVersionOption": {
+        "properties": {
+          "version": {
+            "type": "integer",
+            "title": "Version"
+          },
+          "is_default": {
+            "type": "boolean",
+            "title": "Is Default"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "version",
+          "is_default"
+        ],
+        "title": "AISceneTestAgentVersionOption"
+      },
+      "AISceneTestChatMessage": {
+        "properties": {
+          "role": {
+            "type": "string",
+            "title": "Role"
+          },
+          "content": {
+            "type": "string",
+            "title": "Content"
+          }
+        },
+        "type": "object",
+        "required": [
+          "role",
+          "content"
+        ],
+        "title": "AISceneTestChatMessage"
+      },
+      "AISceneTestChatRequest": {
+        "properties": {
+          "scene_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Scene Code",
+            "description": "\u53ef\u9009\uff1a\u5f53\u524d\u6d4b\u8bd5\u5173\u8054\u7684\u573a\u666f\u6807\u8bc6\uff08\u4fbf\u4e8e\u8ffd\u8e2a\u4e0e\u5ba1\u8ba1\uff09"
+          },
+          "main_agent": {
+            "$ref": "#/components/schemas/AISceneTestAgentSelect"
+          },
+          "sub_agents": {
+            "items": {
+              "$ref": "#/components/schemas/AISceneTestAgentSelect"
+            },
+            "type": "array",
+            "title": "Sub Agents"
+          },
+          "tool_ids": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Tool Ids"
+          },
+          "script_text": {
+            "type": "string",
+            "title": "Script Text",
+            "description": "\u7528\u6237\u7c98\u8d34\u7684\u5267\u672c\u6587\u672c",
+            "default": ""
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/AISceneTestChatMessage"
+            },
+            "type": "array",
+            "title": "Messages"
+          },
+          "project_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Project Id",
+            "description": "\u53ef\u9009\uff1a\u7528\u4e8e\u4e0a\u4e0b\u6587\u6ce8\u5165\u4e0e\u5f52\u6863\u7684\u9879\u76ee ID"
+          },
+          "context_exclude_types": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Context Exclude Types",
+            "description": "\u53ef\u9009\uff1a\u4e0a\u4e0b\u6587\u6ce8\u5165\u6392\u9664\u7684\u8d44\u4ea7\u7c7b\u578b"
+          }
+        },
+        "type": "object",
+        "required": [
+          "main_agent"
+        ],
+        "title": "AISceneTestChatRequest"
+      },
+      "AISceneTestChatResponse": {
+        "properties": {
+          "output_text": {
+            "type": "string",
+            "title": "Output Text"
+          },
+          "plans": {
+            "items": {
+              "$ref": "#/components/schemas/ApplyPlan"
+            },
+            "type": "array",
+            "title": "Plans"
+          },
+          "archive": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Archive"
+          }
+        },
+        "type": "object",
+        "required": [
+          "output_text"
+        ],
+        "title": "AISceneTestChatResponse"
+      },
+      "AISceneTestOptionsResponse": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AISceneTestAgentOption"
+            },
+            "type": "array",
+            "title": "Agents"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/AISceneTestToolOption"
+            },
+            "type": "array",
+            "title": "Tools"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agents",
+          "tools"
+        ],
+        "title": "AISceneTestOptionsResponse"
+      },
+      "AISceneTestToolOption": {
+        "properties": {
+          "tool_id": {
+            "type": "string",
+            "title": "Tool Id"
+          },
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "uses_agent_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Uses Agent Codes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tool_id",
+          "label"
+        ],
+        "title": "AISceneTestToolOption"
       },
       "AIShotDraft": {
         "properties": {
@@ -9024,6 +10747,272 @@
           "content"
         ],
         "title": "AdminAIModelTestChatMessage"
+      },
+      "AdminAISceneCreateRequest": {
+        "properties": {
+          "scene_code": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Scene Code"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "maxLength": 32,
+            "minLength": 1,
+            "title": "Type"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "builtin_agent_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Builtin Agent Code"
+          },
+          "required_tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Tools"
+          },
+          "input_schema": {
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "type": "object",
+            "title": "Output Schema"
+          },
+          "ui_config": {
+            "type": "object",
+            "title": "Ui Config"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scene_code",
+          "name",
+          "type"
+        ],
+        "title": "AdminAISceneCreateRequest"
+      },
+      "AdminAISceneRead": {
+        "properties": {
+          "scene_code": {
+            "type": "string",
+            "title": "Scene Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "builtin_agent_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Builtin Agent Code"
+          },
+          "required_tools": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Required Tools"
+          },
+          "input_schema": {
+            "type": "object",
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "type": "object",
+            "title": "Output Schema"
+          },
+          "ui_config": {
+            "type": "object",
+            "title": "Ui Config"
+          },
+          "effective_input_schema": {
+            "type": "object",
+            "title": "Effective Input Schema"
+          },
+          "effective_output_schema": {
+            "type": "object",
+            "title": "Effective Output Schema"
+          },
+          "is_runnable": {
+            "type": "boolean",
+            "title": "Is Runnable",
+            "default": false
+          },
+          "created_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Created At"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "scene_code",
+          "name",
+          "type"
+        ],
+        "title": "AdminAISceneRead"
+      },
+      "AdminAISceneUpdateRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "builtin_agent_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Builtin Agent Code"
+          },
+          "required_tools": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Required Tools"
+          },
+          "input_schema": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Input Schema"
+          },
+          "output_schema": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Output Schema"
+          },
+          "ui_config": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ui Config"
+          }
+        },
+        "type": "object",
+        "title": "AdminAISceneUpdateRequest"
       },
       "AdminCreditAdjustRequest": {
         "properties": {
@@ -9770,7 +11759,11 @@
             "enum": [
               "episode_save",
               "asset_create",
-              "asset_bind"
+              "asset_bind",
+              "asset_doc_upsert",
+              "storyboard_apply",
+              "image_prompt_upsert",
+              "video_prompt_upsert"
             ],
             "title": "Kind"
           },
@@ -10854,6 +12847,57 @@
         "type": "object",
         "title": "BuiltinAgentUpdate"
       },
+      "ContextPreviewRead": {
+        "properties": {
+          "project_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Project Id"
+          },
+          "assets_root_node_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "uuid"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Assets Root Node Id"
+          },
+          "counts": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "type": "object",
+            "title": "Counts"
+          },
+          "samples": {
+            "additionalProperties": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "title": "Samples"
+          },
+          "refs": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Refs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "project_id",
+          "assets_root_node_id"
+        ],
+        "title": "ContextPreviewRead"
+      },
       "CreditAccountRead": {
         "properties": {
           "user_id": {
@@ -11053,6 +13097,48 @@
         },
         "type": "object",
         "title": "EpisodeCreateRequest"
+      },
+      "EpisodeDocResponse": {
+        "properties": {
+          "episode_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Episode Id"
+          },
+          "node_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Node Id"
+          },
+          "filename": {
+            "type": "string",
+            "title": "Filename"
+          },
+          "content_md": {
+            "type": "string",
+            "title": "Content Md"
+          }
+        },
+        "type": "object",
+        "required": [
+          "episode_id",
+          "node_id",
+          "filename",
+          "content_md"
+        ],
+        "title": "EpisodeDocResponse"
+      },
+      "EpisodeDocUpdateRequest": {
+        "properties": {
+          "content_md": {
+            "type": "string",
+            "title": "Content Md",
+            "description": "Episode Markdown \u6b63\u6587\uff08SSOT\uff09",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "title": "EpisodeDocUpdateRequest"
       },
       "EpisodeMutateRead": {
         "properties": {
@@ -11866,6 +13952,58 @@
         "type": "object",
         "title": "PermissionUpdate"
       },
+      "ResponseBase_AIChatSessionListResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AIChatSessionListResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[AIChatSessionListResponse]"
+      },
+      "ResponseBase_AIChatSessionRead_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AIChatSessionRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[AIChatSessionRead]"
+      },
       "ResponseBase_AIEpisodeAssetExtractionPreviewResponse_": {
         "properties": {
           "code": {
@@ -12022,6 +14160,32 @@
         "type": "object",
         "title": "ResponseBase[AIPromptPresetRead]"
       },
+      "ResponseBase_AISceneRunChatResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AISceneRunChatResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[AISceneRunChatResponse]"
+      },
       "ResponseBase_AISceneStoryboardPreviewResponse_": {
         "properties": {
           "code": {
@@ -12126,6 +14290,58 @@
         "type": "object",
         "title": "ResponseBase[AISceneStructurePromptPreviewResponse]"
       },
+      "ResponseBase_AISceneTestChatResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AISceneTestChatResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[AISceneTestChatResponse]"
+      },
+      "ResponseBase_AISceneTestOptionsResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AISceneTestOptionsResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[AISceneTestOptionsResponse]"
+      },
       "ResponseBase_AITextChatResponse_": {
         "properties": {
           "code": {
@@ -12203,6 +14419,32 @@
         },
         "type": "object",
         "title": "ResponseBase[AdminAIModelConfigTestChatResponse]"
+      },
+      "ResponseBase_AdminAISceneRead_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminAISceneRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[AdminAISceneRead]"
       },
       "ResponseBase_AgentPromptDiffResponse_": {
         "properties": {
@@ -12438,6 +14680,32 @@
         "type": "object",
         "title": "ResponseBase[BuiltinAgentRead]"
       },
+      "ResponseBase_ContextPreviewRead_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ContextPreviewRead"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[ContextPreviewRead]"
+      },
       "ResponseBase_CreditAccountRead_": {
         "properties": {
           "code": {
@@ -12489,6 +14757,32 @@
         },
         "type": "object",
         "title": "ResponseBase[CreditMyRead]"
+      },
+      "ResponseBase_EpisodeDocResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EpisodeDocResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[EpisodeDocResponse]"
       },
       "ResponseBase_EpisodeMutateRead_": {
         "properties": {
@@ -13000,6 +15294,66 @@
         },
         "type": "object",
         "title": "ResponseBase[list[AIPromptPresetRead]]"
+      },
+      "ResponseBase_list_AISceneCatalogItem__": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AISceneCatalogItem"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[list[AISceneCatalogItem]]"
+      },
+      "ResponseBase_list_AdminAISceneRead__": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AdminAISceneRead"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[list[AdminAISceneRead]]"
       },
       "ResponseBase_list_AgentListRead__": {
         "properties": {

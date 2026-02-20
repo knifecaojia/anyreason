@@ -2,12 +2,13 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Clapperboard, Edit3, Eye, Film, Image as ImageIcon, Loader2, Music, Package, Plus, Save, Settings, Sparkles, Trash2, Users, Video as VideoIcon, Wand2, X } from "lucide-react";
+import { Clapperboard, Code, Edit3, Eye, FileText, Film, Image as ImageIcon, Loader2, Music, Package, Plus, Save, Settings, Sparkles, Trash2, Users, Video as VideoIcon, Wand2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AgentPickerDialog } from "@/components/agents/AgentPickerDialog";
 import { StatCard } from "@/components/aistudio/StatCard";
 import { ScriptAIAssistantChatboxPane } from "@/components/scripts/ScriptAIAssistantChatboxPane";
+import { ScriptAIAssistantSessionPane } from "@/components/scripts/ScriptAIAssistantSessionPane";
 
 type ScriptItem = {
   id: string;
@@ -155,6 +156,10 @@ export default function Page() {
   const [deleteScriptTarget, setDeleteScriptTarget] = useState<ScriptItem | null>(null);
   const [deleteScriptSubmitting, setDeleteScriptSubmitting] = useState(false);
   const [deleteScriptError, setDeleteScriptError] = useState<string | null>(null);
+
+  const [newFolderDialogOpen, setNewFolderDialogOpen] = useState(false);
+  const [newFolderName, setNewFolderName] = useState("");
+  const [newFolderSubmitting, setNewFolderSubmitting] = useState(false);
 
   const [episodes, setEpisodes] = useState<EpisodeRow[]>([]);
   const [episodesLoading, setEpisodesLoading] = useState(false);
@@ -509,18 +514,26 @@ export default function Page() {
     })();
 
     (async () => {
-      if (activeEpisode.asset_root_node_id) {
-        setAssetLoading(true);
-        try {
-          const nodes = await vfsListNodes({ parent_id: activeEpisode.asset_root_node_id, project_id: scriptId || null });
-          setAssetRootNodes(nodes.sort((a, b) => a.name.localeCompare(b.name)));
-        } finally {
-          setAssetLoading(false);
-        }
-      } else {
+      if (!scriptId) {
         setAssetRootNodes([]);
         setAssetExpanded({});
         setAssetChildren({});
+        return;
+      }
+      setAssetLoading(true);
+      try {
+        const allNodes = await vfsListNodes({ parent_id: null, project_id: scriptId });
+        const assetsRoot = allNodes.find((n) => n.name === "资产" && n.is_folder);
+        if (assetsRoot) {
+          const nodes = await vfsListNodes({ parent_id: assetsRoot.id, project_id: scriptId });
+          setAssetRootNodes(nodes.sort((a, b) => a.name.localeCompare(b.name)));
+          setProjectAssetsRootId(assetsRoot.id);
+        } else {
+          setAssetRootNodes([]);
+          setProjectAssetsRootId(null);
+        }
+      } finally {
+        setAssetLoading(false);
       }
     })();
   }, [activeEpisode?.id, scriptId]);
@@ -844,15 +857,25 @@ export default function Page() {
   };
 
   const refreshAssetRoot = async () => {
-    if (!activeEpisode?.asset_root_node_id) return;
+    if (!scriptId) return;
     setAssetLoading(true);
     try {
-      const nodes = await vfsListNodes({ parent_id: activeEpisode.asset_root_node_id, project_id: scriptId || null });
-      setAssetRootNodes(nodes.sort((a, b) => a.name.localeCompare(b.name)));
+      const allNodes = await vfsListNodes({ parent_id: null, project_id: scriptId });
+      const assetsRoot = allNodes.find((n) => n.name === "资产" && n.is_folder);
+      if (assetsRoot) {
+        const nodes = await vfsListNodes({ parent_id: assetsRoot.id, project_id: scriptId });
+        setAssetRootNodes(nodes.sort((a, b) => a.name.localeCompare(b.name)));
+        setProjectAssetsRootId(assetsRoot.id);
+      } else {
+        setAssetRootNodes([]);
+        setProjectAssetsRootId(null);
+      }
     } finally {
       setAssetLoading(false);
     }
   };
+
+  const [projectAssetsRootId, setProjectAssetsRootId] = useState<string | null>(null);
 
   const toggleAssetFolder = async (folder: VfsNode) => {
     if (!folder.is_folder) return;
@@ -864,11 +887,42 @@ export default function Page() {
     }
   };
 
+  const groupAssetsByName = (nodes: VfsNode[]): { name: string; mdNode?: VfsNode; jsonNode?: VfsNode }[] => {
+    const groups: Map<string, { mdNode?: VfsNode; jsonNode?: VfsNode }> = new Map();
+    for (const node of nodes) {
+      const baseName = node.name.replace(/\.(md|json)$/i, "");
+      if (!groups.has(baseName)) {
+        groups.set(baseName, {});
+      }
+      const group = groups.get(baseName)!;
+      if (node.name.endsWith(".md")) {
+        group.mdNode = node;
+      } else if (node.name.endsWith(".json")) {
+        group.jsonNode = node;
+      }
+    }
+    return Array.from(groups.entries())
+      .map(([name, nodes]) => ({ name, ...nodes }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  };
+
+  const openNewFolderDialog = () => {
+    setNewFolderName("");
+    setNewFolderDialogOpen(true);
+  };
+
   const createAssetFolder = async () => {
-    if (!activeEpisode?.asset_root_node_id) return;
-    const name = `未分类_${String(Date.now()).slice(-5)}`;
-    await vfsCreateFolder({ name, parent_id: activeEpisode.asset_root_node_id, project_id: scriptId || null });
-    await refreshAssetRoot();
+    const name = newFolderName.trim();
+    if (!projectAssetsRootId || !name) return;
+    setNewFolderSubmitting(true);
+    try {
+      await vfsCreateFolder({ name, parent_id: projectAssetsRootId, project_id: scriptId || null });
+      await refreshAssetRoot();
+      setNewFolderDialogOpen(false);
+      setNewFolderName("");
+    } finally {
+      setNewFolderSubmitting(false);
+    }
   };
 
   const createAssetDocInFolder = async (folderId: string) => {
@@ -1466,8 +1520,8 @@ export default function Page() {
                   <div className="flex items-center justify-between gap-3">
                     <div className="text-sm font-bold text-textMain">4) 资产提取与审片</div>
                     <div className="flex items-center gap-2">
-                      <span className={`text-[11px] font-bold ${activeEpisode?.asset_root_node_id ? "text-green-400" : "text-textMuted"}`}>
-                        {activeEpisode?.asset_root_node_id ? "已完成" : "未完成"}
+                      <span className={`text-[11px] font-bold ${projectAssetsRootId ? "text-green-400" : "text-textMuted"}`}>
+                        {projectAssetsRootId ? "已完成" : "未完成"}
                       </span>
                       <button
                         onClick={() => {
@@ -1584,13 +1638,14 @@ export default function Page() {
           )}
 
           {writePane === "ai" && (
-            <ScriptAIAssistantChatboxPane
+            <ScriptAIAssistantSessionPane
               projectId={scriptId}
-              scriptText={fullScriptText || fullScriptFallback}
-              episodeHint={{ episode_id: activeEpisodeId, episode_code: activeEpisode?.episode_code }}
-              episodes={episodes}
-              activeEpisodeId={activeEpisodeId}
-              onEpisodeChange={setActiveEpisodeId}
+              episodes={episodes.map((ep) => ({
+                id: ep.id,
+                episode_number: ep.episode_number,
+                title: ep.title || "",
+              }))}
+              initialSceneCode="asset_extract"
             />
           )}
 
@@ -1746,12 +1801,12 @@ export default function Page() {
                       <div className="rounded-xl border border-border bg-background/20 overflow-hidden">
                         <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/20 font-bold text-sm">资产结果</div>
                         <div className="p-4">
-                          {!activeEpisode.asset_root_node_id ? (
+                          {!projectAssetsRootId ? (
                             <div className="text-sm text-textMuted">暂无资产结果</div>
                           ) : (
                             <div className="space-y-3">
                               <div className="flex items-center justify-between gap-2">
-                                <div className="text-xs text-textMuted font-mono truncate">root: {activeEpisode.asset_root_node_id}</div>
+                                <div className="text-xs text-textMuted font-mono truncate">项目资产目录</div>
                                 <div className="flex items-center gap-2">
                                   <button
                                     onClick={() => void refreshAssetRoot()}
@@ -1762,7 +1817,7 @@ export default function Page() {
                                     刷新
                                   </button>
                                   <button
-                                    onClick={() => void createAssetFolder()}
+                                    onClick={openNewFolderDialog}
                                     className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors"
                                     type="button"
                                     disabled={assetLoading}
@@ -1801,20 +1856,62 @@ export default function Page() {
                                           </div>
                                         </div>
                                         {assetExpanded[n.id] && (
-                                          <div className="px-3 pb-3 space-y-2">
+                                          <div className="px-3 pb-3">
                                             {(assetChildren[n.id] || []).length === 0 ? (
                                               <div className="text-xs text-textMuted">空</div>
                                             ) : (
-                                              (assetChildren[n.id] || []).map((c) => (
-                                                <div key={c.id} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/40 px-3 py-2">
-                                                  <button onClick={() => void openNode(c)} className="text-left text-sm text-textMain truncate hover:text-primary transition-colors" type="button">
-                                                    {c.name}
-                                                  </button>
-                                                  <button onClick={() => void deleteAssetNode(c)} className="p-1.5 rounded-lg hover:bg-surfaceHighlight text-textMuted hover:text-red-400 transition-colors" type="button">
-                                                    <Trash2 size={14} />
-                                                  </button>
-                                                </div>
-                                              ))
+                                              <div className="grid grid-cols-2 gap-3">
+                                                {groupAssetsByName(assetChildren[n.id] || []).map((group) => (
+                                                  <div key={group.name} className="rounded-xl border border-border bg-gradient-to-br from-surface/80 to-surface/40 p-3 hover:border-primary/50 transition-colors">
+                                                    <div className="flex items-start justify-between gap-2 mb-2">
+                                                      <div className="flex items-center gap-2">
+                                                        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
+                                                          <span className="text-sm font-bold text-primary">
+                                                            {group.name.charAt(0)}
+                                                          </span>
+                                                        </div>
+                                                        <div>
+                                                          <div className="text-sm font-medium text-textMain truncate max-w-[120px]">
+                                                            {group.name.replace(/^(character|prop|location|vfx)_/i, "")}
+                                                          </div>
+                                                          <div className="text-[10px] text-textMuted">
+                                                            {n.name === "角色" ? "Character" : n.name === "道具" ? "Prop" : n.name === "地点" ? "Location" : "Asset"}
+                                                          </div>
+                                                        </div>
+                                                      </div>
+                                                      <button
+                                                        onClick={() => void deleteAssetNode(group.mdNode || group.jsonNode!)}
+                                                        className="p-1 rounded hover:bg-red-500/20 text-textMuted hover:text-red-400 transition-colors"
+                                                        type="button"
+                                                      >
+                                                        <Trash2 size={12} />
+                                                      </button>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                      {group.mdNode && (
+                                                        <button
+                                                          onClick={() => void openNode(group.mdNode!)}
+                                                          className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center justify-center gap-1"
+                                                          type="button"
+                                                        >
+                                                          <FileText size={12} />
+                                                          文档
+                                                        </button>
+                                                      )}
+                                                      {group.jsonNode && (
+                                                        <button
+                                                          onClick={() => void openNode(group.jsonNode!)}
+                                                          className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-surface/60 text-textMuted hover:bg-surfaceHighlight transition-colors flex items-center justify-center gap-1"
+                                                          type="button"
+                                                        >
+                                                          <Code size={12} />
+                                                          JSON
+                                                        </button>
+                                                      )}
+                                                    </div>
+                                                  </div>
+                                                ))}
+                                              </div>
                                             )}
                                           </div>
                                         )}
@@ -2159,6 +2256,59 @@ export default function Page() {
           setPickerMode(null);
         }}
       />
+
+      {newFolderDialogOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden">
+            <div className="h-12 px-4 border-b border-border flex items-center justify-between">
+              <div className="font-bold text-sm">新建文件夹</div>
+              <button
+                onClick={() => setNewFolderDialogOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                type="button"
+              >
+                <X size={16} />
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              <div className="space-y-2">
+                <label className="text-xs text-textMuted">文件夹名称</label>
+                <input
+                  type="text"
+                  value={newFolderName}
+                  onChange={(e) => setNewFolderName(e.target.value)}
+                  placeholder="输入文件夹名称..."
+                  className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary"
+                  autoFocus
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newFolderName.trim()) {
+                      e.preventDefault();
+                      void createAssetFolder();
+                    }
+                  }}
+                />
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setNewFolderDialogOpen(false)}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void createAssetFolder()}
+                  disabled={!newFolderName.trim() || newFolderSubmitting}
+                  className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
+                >
+                  {newFolderSubmitting ? "创建中..." : "创建"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

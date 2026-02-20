@@ -110,7 +110,7 @@ def _parse_keywords(raw: str) -> list[str]:
     return out
 
 
-def _parse_markdown_card(card_md: str, *, default_episode: int | None = None) -> dict[str, Any]:
+def _parse_markdown_card(card_md: str, *, default_episode: int | None = None, keep_call_name_suffix: bool = False) -> dict[str, Any]:
     md = (card_md or "").strip()
     call_name = None
     m = re.search(r"(?im)^\s*###\s*[^:\n]*资产卡片\s*[:：]\s*([^\n]+)\s*$", md)
@@ -125,7 +125,11 @@ def _parse_markdown_card(card_md: str, *, default_episode: int | None = None) ->
         if m:
             name = m.group(1).strip()
     if not name and call_name and call_name.startswith("@"):
-        name = call_name[1:].split("_", 1)[0].strip() or None
+        call_name_body = call_name[1:].strip()
+        if keep_call_name_suffix:
+            name = call_name_body or None
+        else:
+            name = call_name_body.split("_", 1)[0].strip() or None
 
     keywords: list[str] = []
     m = re.search(r"(?im)^\s*[-*]?\s*Keywords\s*[:：]\s*(.+?)\s*$", md)
@@ -480,11 +484,12 @@ async def _preview_asset_extraction(
 
     version = _pick_version(ctx, agent_code, 1)
     must_cover: list[str] = []
-    m = re.search(r"出场人物[:：]\s*(.+)", source_text)
-    if m:
-        raw = m.group(1).strip()
-        parts = re.split(r"[\s,，、/]+", raw)
-        must_cover = [p.strip() for p in parts if p.strip()]
+    if asset_type == "character":
+        m = re.search(r"出场人物[:：]\s*(.+)", source_text)
+        if m:
+            raw = m.group(1).strip()
+            parts = re.split(r"[\s,，、/]+", raw)
+            must_cover = [p.strip() for p in parts if p.strip()]
     card_title_map = {
         "character": "角色资产卡片",
         "prop": "道具资产卡片",
@@ -515,7 +520,7 @@ async def _preview_asset_extraction(
         except Exception:
             default_episode = None
 
-    cards = [_parse_markdown_card(c, default_episode=default_episode) for c in _split_markdown_cards(raw_output_text)]
+    cards = [_parse_markdown_card(c, default_episode=default_episode, keep_call_name_suffix=(asset_type == "location")) for c in _split_markdown_cards(raw_output_text)]
     normalized_cards: list[dict[str, Any]] = []
     for c in cards:
         if c.get("name"):
@@ -606,7 +611,7 @@ class _StoryboardShotsOutput(BaseModel):
 
 async def preview_storyboard_apply(
     ctx: RunContext[SceneTestDeps],
-    storyboard_id: str,
+    storyboard_id: str | None = None,
     mode: Literal["replace", "append"] = "replace",
 ) -> ApplyPlan:
     await _emit(
@@ -623,36 +628,59 @@ async def preview_storyboard_apply(
         await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "project_id_required"})
         return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "project_id_required"})
 
+    sb_uuid: UUID | None = None
     try:
-        sb_uuid = UUID(str(storyboard_id))
+        if storyboard_id:
+            sb_uuid = UUID(str(storyboard_id))
     except Exception:
-        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "invalid_storyboard_id"})
-        return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "invalid_storyboard_id"})
+        sb_uuid = None
 
-    row = (
-        await ctx.deps.db.execute(
-            select(Storyboard, Episode).join(Episode, Storyboard.episode_id == Episode.id).where(Storyboard.id == sb_uuid)
-        )
-    ).first()
-    if not row:
-        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "storyboard_not_found"})
-        return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "storyboard_not_found"})
-    storyboard, episode = row
-    if episode.project_id != ctx.deps.project_id:
-        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "project_mismatch"})
-        return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "project_mismatch"})
+    storyboard: Storyboard | None = None
+    episode: Episode | None = None
+    if sb_uuid:
+        row = (
+            await ctx.deps.db.execute(
+                select(Storyboard, Episode).join(Episode, Storyboard.episode_id == Episode.id).where(Storyboard.id == sb_uuid)
+            )
+        ).first()
+        if row:
+            storyboard, episode = row
+        if storyboard is None or episode is None:
+            sb_uuid = None
+        elif episode.project_id != ctx.deps.project_id:
+            storyboard = None
+            episode = None
+            sb_uuid = None
+
+    scene_script = ""
+    scene_code = ""
+    scene_number = 0
+    location = ""
+    time_of_day = ""
+    if storyboard is not None:
+        scene_script = (storyboard.description or "").strip()
+        scene_code = storyboard.scene_code or ""
+        scene_number = int(storyboard.scene_number or 0)
+        location = storyboard.location or ""
+        time_of_day = storyboard.time_of_day or ""
+    else:
+        scene_script = (ctx.deps.script_text or "").strip()
+
+    if not scene_script:
+        await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "empty_script"})
+        return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "empty_script"})
 
     scene_info = "\n".join(
         [
             "<SCENE>",
-            f"scene_code: {storyboard.scene_code or ''}",
-            f"scene_number: {int(storyboard.scene_number or 0)}",
-            f"location: {storyboard.location or ''}",
-            f"time_of_day: {storyboard.time_of_day or ''}",
+            f"scene_code: {scene_code}",
+            f"scene_number: {int(scene_number or 0)}",
+            f"location: {location}",
+            f"time_of_day: {time_of_day}",
             "</SCENE>",
             "",
             "<SCENE_SCRIPT>",
-            (storyboard.description or "").strip(),
+            scene_script,
             "</SCENE_SCRIPT>",
         ]
     ).strip()
@@ -673,21 +701,23 @@ async def preview_storyboard_apply(
     shots_out = _StoryboardShotsOutput.model_validate(out)
     shots = list(shots_out.shots or [])
     if not shots:
-        shots = [AIShotDraft(description=(storyboard.description or "").strip() or None)]
+        shots = [AIShotDraft(description=(scene_script or "").strip() or None)]
 
     plan = ApplyPlan(
         kind="storyboard_apply",
         tool_id="preview_storyboard_apply",
         inputs={
             "project_id": str(ctx.deps.project_id),
-            "storyboard_id": str(sb_uuid),
+            "storyboard_id": str(sb_uuid or ""),
             "mode": mode,
             "shots": [s.model_dump() for s in shots],
         },
         preview={
             "count": len(shots),
-            "episode_number": int(episode.episode_number or 0),
-            "scene_number": int(storyboard.scene_number or 0),
+            "episode_number": int(getattr(episode, "episode_number", 0) or 0),
+            "scene_number": int(scene_number or 0),
+            "virtual": sb_uuid is None,
+            "warning": "storyboard_id_required_for_apply" if sb_uuid is None else None,
         },
     )
     ctx.deps.plans.append(plan)

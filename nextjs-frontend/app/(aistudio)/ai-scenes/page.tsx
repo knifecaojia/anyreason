@@ -140,6 +140,8 @@ function planSummary(plan: ApplyPlan) {
   const n =
     typeof preview?.episode_count === "number"
       ? preview.episode_count
+      : typeof preview?.count === "number"
+        ? preview.count
       : typeof preview?.binding_count === "number"
         ? preview.binding_count
         : typeof preview?.counts === "object" && preview?.counts
@@ -397,6 +399,98 @@ function PlanCard(props: { plan: ApplyPlan }) {
         <pre className="w-full max-h-[320px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs">
           {contentJson || "（空）"}
         </pre>
+      </div>
+    );
+  };
+
+  const renderStoryboardApply = () => {
+    const shots = Array.isArray(inputs?.shots) ? (inputs.shots as any[]) : [];
+    const count = typeof preview?.count === "number" ? Number(preview.count) : shots.length;
+    const warning = preview?.warning ? String(preview.warning) : "";
+    const virtual = Boolean(preview?.virtual);
+    return (
+      <div className="space-y-2">
+        <div className="text-[11px] text-textMuted">分镜预览（不落库）</div>
+        <div className="text-xs text-textMuted">
+          镜头 {count} {virtual ? "· virtual" : ""} {warning ? `· ${warning}` : ""}
+        </div>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => copyText(prettyJson(shots))}
+            className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+          >
+            复制 shots JSON
+          </button>
+          <button
+            type="button"
+            onClick={() => copyText(prettyJson(inputs))}
+            className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+          >
+            复制输入对象
+          </button>
+        </div>
+        {shots.length === 0 && <div className="text-sm text-textMuted">没有 shots 输入。</div>}
+        {shots.length > 0 && (
+          <div className="space-y-2">
+            {shots.slice(0, 20).map((s, idx) => {
+              const shotType = String(s?.shot_type || "");
+              const angle = String(s?.camera_angle || "");
+              const move = String(s?.camera_move || "");
+              const filterStyle = String(s?.filter_style || "");
+              const narrativeFunction = String(s?.narrative_function || "");
+              const povCharacter = String(s?.pov_character || "");
+              const dialogueSpeaker = String(s?.dialogue_speaker || "");
+              const soundEffect = String(s?.sound_effect || "");
+              const duration = typeof s?.duration_estimate === "number" ? Number(s.duration_estimate) : null;
+              const activeAssets = Array.isArray(s?.active_assets)
+                ? (s.active_assets as any[]).filter((x) => typeof x === "string" && x.trim()).map((x) => String(x))
+                : [];
+              const desc = String(s?.description || "");
+              const dialogue = String(s?.dialogue || "");
+              const md = [
+                `#${idx + 1} ${shotType || "shot"}`,
+                "",
+                "- 机位",
+                `  - 镜头类型：${shotType || "（空）"}`,
+                angle ? `  - 镜头角度：${angle}` : "",
+                move ? `  - 镜头运动：${move}` : "",
+                filterStyle ? `  - 滤镜/风格：${filterStyle}` : "",
+                narrativeFunction ? `  - 叙事功能：${narrativeFunction}` : "",
+                povCharacter ? `  - POV：${povCharacter}` : "",
+                soundEffect ? `  - 音效：${soundEffect}` : "",
+                duration !== null ? `  - 时长(秒)：${duration}` : "",
+                activeAssets.length ? `  - 资产：${activeAssets.join("、")}` : "",
+                "",
+                "## 画面描述",
+                desc || "（无画面描述）",
+                dialogue
+                  ? [
+                      "",
+                      "## 台词",
+                      dialogueSpeaker ? `**${dialogueSpeaker}**` : "",
+                      dialogue,
+                    ].filter(Boolean).join("\n")
+                  : "",
+              ]
+                .filter((x) => typeof x === "string" && x.length > 0)
+                .join("\n");
+              return (
+                <details key={idx} className="px-3 py-2 rounded-md bg-background border border-border">
+                  <summary className="cursor-pointer text-sm font-bold text-textMain">
+                    #{idx + 1} {shotType || "shot"} {angle ? `· ${angle}` : ""} {move ? `· ${move}` : ""}
+                  </summary>
+                  <div className="mt-2 space-y-2">
+                    <pre className="w-full max-h-[220px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs whitespace-pre-wrap">
+                      {md}
+                    </pre>
+                  </div>
+                </details>
+              );
+            })}
+            {shots.length > 20 && <div className="text-xs text-textMuted">仅展示前 20 条，完整内容请复制 JSON。</div>}
+          </div>
+        )}
       </div>
     );
   };
