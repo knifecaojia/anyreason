@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models import Asset, AssetTag, AssetTagRelation, AssetVariant, Project, Script
+from app.models import Asset, AssetResource, AssetTag, AssetTagRelation, AssetVariant, Project, Script
 
 
 async def get_asset_for_user(*, db: AsyncSession, user_id: UUID, asset_id: UUID) -> Asset | None:
@@ -20,6 +20,33 @@ async def get_asset_for_user(*, db: AsyncSession, user_id: UUID, asset_id: UUID)
         )
     )
     return res.scalars().first()
+
+
+async def list_assets(
+    *,
+    db: AsyncSession,
+    user_id: UUID,
+    project_id: UUID | None = None,
+    script_id: UUID | None = None,
+    source: str | None = None,
+) -> list[Asset]:
+    stmt = select(Asset).join(Project, Asset.project_id == Project.id)
+
+    if project_id:
+        stmt = stmt.where(Asset.project_id == project_id)
+    if script_id:
+        stmt = stmt.where(Asset.script_id == script_id)
+    if source:
+        stmt = stmt.where(Asset.source == source)
+
+    # Permission check: user must own the project
+    # Note: This simplifies the permission model (ignoring workspace members for now)
+    stmt = stmt.where(Project.owner_id == user_id)
+
+    stmt = stmt.order_by(Asset.created_at.desc())
+
+    res = await db.execute(stmt)
+    return list(res.scalars().all())
 
 
 async def list_asset_tags(*, db: AsyncSession, asset_entity_id: UUID) -> list[str]:
@@ -67,6 +94,11 @@ async def replace_asset_tags(
 async def list_variants(*, db: AsyncSession, asset_entity_id: UUID) -> list[AssetVariant]:
     res = await db.execute(select(AssetVariant).where(AssetVariant.asset_entity_id == asset_entity_id).order_by(AssetVariant.variant_code.asc()))
     return list(res.scalars().all())
+
+
+async def get_variant(*, db: AsyncSession, variant_id: UUID) -> AssetVariant | None:
+    res = await db.execute(select(AssetVariant).where(AssetVariant.id == variant_id))
+    return res.scalars().first()
 
 
 async def create_variant(
@@ -135,3 +167,33 @@ async def delete_variant(*, db: AsyncSession, variant: AssetVariant) -> None:
     await db.delete(variant)
     await db.flush()
 
+
+async def list_resources_by_asset(*, db: AsyncSession, asset_entity_id: UUID) -> list[AssetResource]:
+    res = await db.execute(
+        select(AssetResource)
+        .join(AssetVariant, AssetResource.variant_id == AssetVariant.id)
+        .where(AssetVariant.asset_entity_id == asset_entity_id)
+        .order_by(AssetResource.created_at.asc())
+    )
+    return list(res.scalars().all())
+
+
+async def create_resource(
+    *,
+    db: AsyncSession,
+    variant_id: UUID,
+    res_type: str,
+    minio_bucket: str,
+    minio_key: str,
+    meta_data: dict,
+) -> AssetResource:
+    row = AssetResource(
+        variant_id=variant_id,
+        res_type=res_type,
+        minio_bucket=minio_bucket,
+        minio_key=minio_key,
+        meta_data=meta_data,
+    )
+    db.add(row)
+    await db.flush()
+    return row

@@ -8,7 +8,20 @@ interface ImageAttachment {
   url: string;
   index: number;
   isSelected: boolean;
+  title?: string;
 }
+
+export type MentionPopupTab = {
+  id: string;
+  label: string;
+  images: ImageAttachment[];
+  onSelect?: (index: number, image: ImageAttachment) => void;
+  onUpload?: (files: FileList | null) => void;
+  allowUpload?: boolean;
+  badgeLabel?: string;
+  emptyText?: string;
+  loading?: boolean;
+};
 
 interface MentionPopupProps {
   isOpen: boolean;
@@ -17,6 +30,7 @@ interface MentionPopupProps {
   onSelect: (index: number) => void;
   onClose: () => void;
   onUpload: (files: FileList | null) => void;
+  tabs?: MentionPopupTab[];
 }
 
 export const MentionPopup = ({
@@ -26,9 +40,16 @@ export const MentionPopup = ({
   onSelect,
   onClose,
   onUpload,
+  tabs,
 }: MentionPopupProps) => {
   const popupRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const resolvedTabs = tabs && tabs.length > 0 ? tabs : [
+    { id: 'session', label: '参考图', images, onSelect: (index: number) => onSelect(index), onUpload, allowUpload: true },
+  ];
+  const tabsKey = resolvedTabs.map((tab) => tab.id).join('|');
+  const [activeTabId, setActiveTabId] = useState<string>(resolvedTabs[0]?.id || 'session');
+  const [searchTerm, setSearchTerm] = useState('');
 
   // 点击外部关闭
   useEffect(() => {
@@ -58,9 +79,36 @@ export const MentionPopup = ({
     }
   }, [isOpen, onClose]);
 
+  useEffect(() => {
+    if (!isOpen) return;
+    setActiveTabId(resolvedTabs[0]?.id || 'session');
+    setSearchTerm('');
+  }, [isOpen, tabsKey]);
+
   if (!isOpen || !position) return null;
 
-  const selectedCount = images.filter((img) => img.isSelected).length;
+  const activeTab = resolvedTabs.find((tab) => tab.id === activeTabId) || resolvedTabs[0];
+  const filteredImages = activeTab.images.filter((img) => {
+    const query = searchTerm.trim().toLowerCase();
+    if (!query) return true;
+    const hay = `${img.title || ''} ${img.id}`.toLowerCase();
+    return hay.includes(query);
+  });
+  const selectedCount = activeTab.images.filter((img) => img.isSelected).length;
+  const handleSelect = (img: ImageAttachment) => {
+    if (activeTab.onSelect) {
+      activeTab.onSelect(img.index, img);
+      return;
+    }
+    onSelect(img.index);
+  };
+  const handleUpload = (files: FileList | null) => {
+    if (activeTab.onUpload) {
+      activeTab.onUpload(files);
+      return;
+    }
+    onUpload(files);
+  };
 
   return (
     <>
@@ -79,25 +127,59 @@ export const MentionPopup = ({
         }}
       >
         {/* 头部 */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100 dark:border-gray-700">
-          <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">
-            选择参考图
-          </span>
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">选择参考图</span>
           <button
             onClick={onClose}
             className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             <X size={16} />
           </button>
+          </div>
+          {resolvedTabs.length > 1 && (
+            <div className="mt-3 flex items-center gap-2 flex-wrap">
+              {resolvedTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setActiveTabId(tab.id)}
+                  className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
+                    tab.id === activeTabId
+                      ? 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-blue-900/30'
+                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-blue-300'
+                  }`}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="mt-3">
+            <input
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="搜索"
+              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 outline-none focus:border-blue-400"
+            />
+          </div>
         </div>
 
         {/* 图片网格 */}
         <div className="p-4">
           <div className="grid grid-cols-4 gap-3 max-h-80 overflow-y-auto">
-            {images.map((img) => (
+            {activeTab.loading && (
+              <div className="col-span-4 text-center text-xs text-gray-400 py-6">加载中...</div>
+            )}
+            {!activeTab.loading && filteredImages.length === 0 && (
+              <div className="col-span-4 text-center text-xs text-gray-400 py-6">
+                {activeTab.emptyText || '暂无内容'}
+              </div>
+            )}
+            {!activeTab.loading && filteredImages.map((img) => (
               <button
                 key={img.id}
-                onClick={() => onSelect(img.index)}
+                onClick={() => handleSelect(img)}
                 className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200 ${
                   img.isSelected
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
@@ -120,7 +202,7 @@ export const MentionPopup = ({
 
                 {/* 序号标签 */}
                 <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-xs py-1 text-center font-mono">
-                  @{img.index}
+                  {activeTab.badgeLabel ? activeTab.badgeLabel : `@${img.index}`}
                 </div>
 
                 {/* Hover 遮罩 */}
@@ -128,30 +210,31 @@ export const MentionPopup = ({
               </button>
             ))}
 
-            {/* 上传按钮 */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="aspect-square rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 flex flex-col items-center justify-center gap-1 transition-colors group"
-            >
-              <Upload
-                size={20}
-                className="text-gray-400 group-hover:text-blue-500 transition-colors"
-              />
-              <span className="text-xs text-gray-500 dark:text-gray-400 group-hover:text-blue-500">
-                上传
-              </span>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
-                onChange={(e) => {
-                  onUpload(e.target.files);
-                  e.target.value = '';
-                }}
-              />
-            </button>
+            {(activeTab.allowUpload ?? false) && (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="aspect-square rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 flex flex-col items-center justify-center gap-1 transition-colors group"
+              >
+                <Upload
+                  size={20}
+                  className="text-gray-400 group-hover:text-blue-500 transition-colors"
+                />
+                <span className="text-xs text-gray-500 dark:text-gray-400 group-hover:text-blue-500">
+                  上传
+                </span>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => {
+                    handleUpload(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+              </button>
+            )}
           </div>
         </div>
 
@@ -159,7 +242,7 @@ export const MentionPopup = ({
         <div className="px-4 py-2 bg-gray-50 dark:bg-gray-800/50 border-t border-gray-100 dark:border-gray-700">
           <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
             <span>已引用 {selectedCount} 张</span>
-            <span>共 {images.length} 张</span>
+            <span>共 {activeTab.images.length} 张</span>
           </div>
         </div>
       </div>

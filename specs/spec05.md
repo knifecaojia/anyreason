@@ -2,7 +2,6 @@
 
 请你一定要做好基础信息收集，仔细分析后经过充分讨论辩证后给出方案
 
-
 ### 需求：
 
 AI场景测试已经跑通流程。下面需要创建内置的AI场景流程
@@ -17,13 +16,11 @@ AI场景测试已经跑通流程。下面需要创建内置的AI场景流程
 
 及其它你认为在漫剧生产过程中需要由agent 和工具组合实现的应用
 
-
 以上场景均可在AI场景编辑（原来的AI场景测试）中修改、调整和测试。（这里需要考虑是否对这种内置场景支持增删改查，以及如何在用户围绕剧本开展结构化、美术化创作过程中调用这些ai场景）
 
 新的场景可能存在新的系统内置提示词和工具?
 
 用户级的agent和提示词如何发挥作用？
-
 
 用户调用这些ai场景，交互方式应该比ai场景测试更简洁明了，应该符合llm 对话模式，在流式对话框中获得llm 输出反馈，跟踪观测并获得结果，在辅助控件中查看meta 和markdown输出，以及执行落库操作。6c4161f6c3cd4f339dc1b886ce04b870.6v7CZAUXEIr7M5It
 
@@ -34,3 +31,16 @@ AI场景测试已经跑通流程。下面需要创建内置的AI场景流程
 2、剧本剧集全文文本应该有 第X集/章/卷 来划分结构
 
 3、剧本切分为剧集的操作有代码通过正则表达式执行，多次执行为覆盖操作。
+
+
+### UI 设计参考
+
+无限画布支持 双击 右键菜单，支持文本、图像、视频节点 这些节点
+
+参考：
+
+F:\animate-serial\apps\anyreason\refs\images\tapnow image node.png 图片节点
+F:\animate-serial\apps\anyreason\refs\images\tapnow right click.png 右键菜单
+F:\animate-serial\apps\anyreason\refs\images\tapnow text node.png 文本节点
+F:\animate-serial\apps\anyreason\refs\images\tapnow video node.png 视频节点
+F:\animate-serial\apps\anyreason\refs\images\tapnow-double click.png 双击菜单

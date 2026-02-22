@@ -13,13 +13,14 @@ from starlette.concurrency import run_in_threadpool
 from app.core.exceptions import AppError
 from app.database import User, get_async_session
 from app.models import Asset, AssetBinding, Episode, FileNode, Storyboard
-from app.schemas import AssetBrief, EpisodeRead, StoryboardRead, ScriptHierarchyRead, ScriptRead, ScriptStatsRead
+from app.schemas import AssetBrief, AssetResourceRead, EpisodeRead, StoryboardRead, ScriptHierarchyRead, ScriptRead, ScriptStatsRead
 from app.schemas_response import ResponseBase
 from app.services.script_parse_service import script_parse_service
 from app.services.script_service import script_service
 from app.services.script_structure_service import script_structure_service
 from app.storage import get_minio_client
 from app.users import current_active_user
+from app.repositories import asset_repository
 
 
 router = APIRouter()
@@ -270,7 +271,23 @@ async def _build_script_hierarchy(*, db: AsyncSession, script_id: UUID) -> Scrip
             .where(AssetBinding.episode_id == ep.id)
             .order_by(Asset.asset_id.asc())
         )
-        assets = [AssetBrief.model_validate(a) for a in asset_res.scalars().all()]
+        assets_rows = list(asset_res.scalars().all())
+        assets: list[AssetBrief] = []
+        for asset in assets_rows:
+            resources = await asset_repository.list_resources_by_asset(
+                db=db,
+                asset_entity_id=asset.id,
+            )
+            assets.append(
+                AssetBrief(
+                    id=asset.id,
+                    asset_id=asset.asset_id,
+                    name=asset.name,
+                    type=str(asset.type),
+                    category=asset.category,
+                    resources=[AssetResourceRead.model_validate(r) for r in resources],
+                )
+            )
 
         out_eps.append(
             EpisodeRead(

@@ -123,6 +123,275 @@ async function vfsDownloadText(nodeId: string): Promise<string> {
   return await res.text();
 }
 
+export function stripMarkdownMetadata(raw: string): string {
+  const text = String(raw || "");
+  if (!text.trim()) return "";
+  let lines = text.replace(/\r\n/g, "\n").split("\n");
+  if (lines[0] && lines[0].charCodeAt(0) === 0xfeff) {
+    lines[0] = lines[0].slice(1);
+  }
+  const firstNonEmpty = lines.findIndex((line) => line.trim() !== "");
+  if (firstNonEmpty !== -1 && lines[firstNonEmpty].trim() === "---") {
+    const endIndex = lines.slice(firstNonEmpty + 1).findIndex((line) => line.trim() === "---");
+    lines = endIndex === -1 ? lines.slice(firstNonEmpty + 1) : lines.slice(firstNonEmpty + endIndex + 2);
+  }
+  const isMarkdownLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    return /^(#{1,6}\s|[-*+]\s+|\d+\.\s+|>\s+|```|`{3}|!\[|\[.+\]\(.+\))/.test(trimmed);
+  };
+  const isMetadataLine = (line: string) => /^[a-z_][a-z0-9_]*\s*:\s*/.test(line.trim());
+  let start = 0;
+  for (; start < lines.length; start += 1) {
+    const line = lines[start];
+    if (isMarkdownLine(line)) break;
+    if (!line.trim()) continue;
+    if (isMetadataLine(line)) continue;
+    break;
+  }
+  return lines.slice(start).join("\n").trim();
+}
+
+export function buildAssetCreateHref(sourceNodeId: string, seriesId: string): string {
+  return `/assets?mode=create&sourceNodeId=${encodeURIComponent(sourceNodeId)}&seriesId=${encodeURIComponent(seriesId)}`;
+}
+
+export function AssetDocumentViewer({
+  open,
+  title,
+  content,
+  loading,
+  generateHref,
+  onClose,
+}: {
+  open: boolean;
+  title: string;
+  content: string;
+  loading: boolean;
+  generateHref?: string | null;
+  onClose: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
+      <div className="w-full max-w-3xl rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden">
+        <div className="h-12 px-4 border-b border-border flex items-center justify-between">
+          <div className="font-bold text-sm truncate">{title}</div>
+          <div className="flex items-center gap-2">
+            {generateHref && (
+              <a
+                href={generateHref}
+                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors"
+              >
+                生成图片
+              </a>
+            )}
+            <button
+              onClick={onClose}
+              className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+              type="button"
+            >
+              关闭
+            </button>
+          </div>
+        </div>
+        <div className="p-4 max-h-[70vh] overflow-y-auto">
+          {loading ? (
+            <div className="text-sm text-textMuted flex items-center gap-2">
+              <Loader2 size={16} className="animate-spin" /> 加载中...
+            </div>
+          ) : (
+            <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripMarkdownMetadata(content)}</ReactMarkdown>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MarkdownCard({ node, onClick, onDelete }: { node: VfsNode; onClick: () => void; onDelete?: () => void }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [content, setContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let mounted = true;
+    async function load() {
+      try {
+        const res = await fetch(`/api/vfs/nodes/${node.id}/download`);
+        if (!res.ok) throw new Error("Failed");
+        const text = await res.text();
+        if (mounted) setContent(stripMarkdownMetadata(text));
+      } catch (e) {
+        if (mounted) setContent("");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, [node.id]);
+
+  const handleGenerateImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const seriesId = searchParams.get("seriesId");
+    if (!seriesId) return;
+    router.push(buildAssetCreateHref(node.id, seriesId));
+  };
+
+  return (
+    <div 
+      className="group relative flex flex-col gap-2 rounded-xl border border-border bg-gradient-to-br from-surface/80 to-surface/40 p-3 hover:border-primary/50 transition-all hover:shadow-lg cursor-pointer h-48 overflow-hidden"
+    >
+      <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2 mb-1 z-10">
+         <button onClick={onClick} className="text-xs font-bold text-textMain truncate flex-1 hover:text-primary text-left" title={node.name}>
+           {node.name.replace(".md", "")}
+         </button>
+         <div className="flex items-center gap-1">
+           <button 
+             onClick={handleGenerateImage}
+             className="text-textMuted hover:text-primary p-0.5 rounded transition-colors"
+             title="生成资产图片"
+           >
+             <ImageIcon size={12} />
+           </button>
+           {onDelete && (
+             <button onClick={(e) => { e.stopPropagation(); onDelete(); }} className="text-textMuted hover:text-red-400 p-0.5 rounded transition-colors">
+               <Trash2 size={12} />
+             </button>
+           )}
+         </div>
+      </div>
+      <div className="flex-1 overflow-hidden relative" onClick={onClick}>
+        {loading ? (
+           <div className="absolute inset-0 flex items-center justify-center text-textMuted">
+             <Loader2 size={14} className="animate-spin" />
+           </div>
+        ) : (
+           <div className="markdown-body prose prose-invert prose-xs max-w-none text-[10px] leading-relaxed opacity-70 group-hover:opacity-100 transition-opacity pointer-events-none select-none">
+             <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || "*无内容*"}</ReactMarkdown>
+           </div>
+        )}
+        <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
+      </div>
+    </div>
+  );
+}
+
+function AssetMarkdownCard({ group, onDelete, onOpen }: { group: { name: string; mdNode?: VfsNode; jsonNode?: VfsNode }; onDelete: (n: VfsNode) => void; onOpen: (n: VfsNode) => void }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [content, setContent] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!group.mdNode) return;
+    let mounted = true;
+    setLoading(true);
+    async function load() {
+      try {
+        const res = await fetch(`/api/vfs/nodes/${group.mdNode!.id}/download`);
+        if (!res.ok) throw new Error("Failed");
+        const text = await res.text();
+        if (mounted) setContent(stripMarkdownMetadata(text));
+      } catch (e) {
+        if (mounted) setContent("");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    }
+    load();
+    return () => { mounted = false; };
+  }, [group.mdNode]);
+
+  const handleGenerateImage = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const seriesId = searchParams.get("seriesId");
+    if (!seriesId || !group.mdNode) return;
+    router.push(buildAssetCreateHref(group.mdNode.id, seriesId));
+  };
+
+  const displayName = group.name.replace(/^(character|prop|location|vfx)_/i, "");
+  const typeLabel = group.name.startsWith("character") ? "Character" : group.name.startsWith("prop") ? "Prop" : group.name.startsWith("location") ? "Location" : "Asset";
+
+  return (
+    <div className="flex flex-col rounded-xl border border-border bg-gradient-to-br from-surface/80 to-surface/40 p-3 hover:border-primary/50 transition-colors h-56 group">
+      <div className="flex items-start justify-between gap-2 mb-2 shrink-0">
+        <div className="flex items-center gap-2 overflow-hidden">
+          <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center shrink-0">
+            <span className="text-sm font-bold text-primary">{displayName.charAt(0).toUpperCase()}</span>
+          </div>
+          <div className="overflow-hidden">
+            <div className="text-sm font-medium text-textMain truncate" title={displayName}>{displayName}</div>
+            <div className="text-[10px] text-textMuted">{typeLabel}</div>
+          </div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          {group.mdNode && (
+             <button 
+               onClick={handleGenerateImage}
+               className="p-1.5 rounded hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors"
+               title="生成资产图片"
+               type="button"
+             >
+               <ImageIcon size={12} />
+             </button>
+          )}
+          <button
+            onClick={() => onDelete(group.mdNode || group.jsonNode!)}
+            className="p-1.5 rounded hover:bg-red-500/20 text-textMuted hover:text-red-400 transition-colors"
+            type="button"
+          >
+            <Trash2 size={12} />
+          </button>
+        </div>
+      </div>
+      
+      <div 
+        className="flex-1 min-h-0 bg-background/20 rounded-lg p-2 mb-2 overflow-hidden relative cursor-pointer border border-transparent hover:border-primary/20 transition-colors"
+        onClick={() => group.mdNode && onOpen(group.mdNode)}
+      >
+        {group.mdNode ? (
+           loading ? (
+             <div className="flex items-center justify-center h-full text-textMuted"><Loader2 size={14} className="animate-spin" /></div>
+           ) : (
+             <>
+               <div className="markdown-body prose prose-invert prose-xs max-w-none text-[10px] leading-relaxed opacity-80 pointer-events-none select-none">
+                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{content || ""}</ReactMarkdown>
+               </div>
+               <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
+             </>
+           )
+        ) : (
+           <div className="text-xs text-textMuted flex items-center justify-center h-full italic">无文档预览</div>
+        )}
+      </div>
+
+      <div className="flex items-center gap-2 shrink-0">
+         {group.mdNode && (
+            <button
+              onClick={() => onOpen(group.mdNode!)}
+              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center justify-center gap-1"
+            >
+              <FileText size={12} /> 文档
+            </button>
+         )}
+         {group.jsonNode && (
+            <button
+              onClick={() => onOpen(group.jsonNode!)}
+              className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-surface/60 text-textMuted hover:bg-surfaceHighlight transition-colors flex items-center justify-center gap-1"
+            >
+              <Code size={12} /> JSON
+            </button>
+         )}
+      </div>
+    </div>
+  );
+}
+
 export default function Page() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -271,11 +540,6 @@ export default function Page() {
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerContent, setViewerContent] = useState("");
   const [viewerNode, setViewerNode] = useState<VfsNode | null>(null);
-  const [viewerPrompt, setViewerPrompt] = useState("");
-  const [viewerGenTaskId, setViewerGenTaskId] = useState<string | null>(null);
-  const [viewerGenResultNodeId, setViewerGenResultNodeId] = useState<string | null>(null);
-  const [viewerGenSubmitting, setViewerGenSubmitting] = useState(false);
-  const [viewerGenError, setViewerGenError] = useState<string | null>(null);
 
   const refreshHierarchy = async (targetScriptId: string) => {
     setEpisodesLoading(true);
@@ -698,21 +962,9 @@ export default function Page() {
         }
         const allDone = statuses.every((s) => s.state.status === "succeeded");
         if (allDone) {
-          const finishedIds = statuses.map((s) => s.meta.id);
-          const captureViewerTask = viewerGenTaskId && finishedIds.includes(viewerGenTaskId) ? viewerGenTaskId : null;
           setTasksRunning([]);
           await refreshHierarchy(scriptId);
           await refreshScriptStats(scriptId);
-          if (captureViewerTask) {
-            try {
-              const res = await fetch(`/api/tasks/${encodeURIComponent(captureViewerTask)}`, { cache: "no-store" });
-              if (res.ok) {
-                const json = (await res.json()) as { data?: { result_json?: Record<string, unknown> } };
-                const fileNodeId = json.data?.result_json?.file_node_id;
-                if (typeof fileNodeId === "string" && fileNodeId) setViewerGenResultNodeId(fileNodeId);
-              }
-            } catch {}
-          }
           return;
         }
         await new Promise((r) => setTimeout(r, 1500));
@@ -756,75 +1008,17 @@ export default function Page() {
     setTasksRunning(created);
   };
 
-  const guessPromptFromMarkdown = (md: string, title: string) => {
-    const raw = String(md || "").trim();
-    const m1 = raw.match(/prompt_en\s*[:：]\s*(.+)$/im);
-    if (m1 && m1[1]) return m1[1].trim();
-    const m2 = raw.match(/prompt\s*[:：]\s*(.+)$/im);
-    if (m2 && m2[1]) return m2[1].trim();
-    const m3 = raw.match(/^#\s+(.+)$/m);
-    const heading = m3 && m3[1] ? m3[1].trim() : "";
-    if (heading) return heading;
-    return title || "";
-  };
-
   const openNode = async (node: VfsNode) => {
     setViewerOpen(true);
     setViewerNode(node);
     setViewerTitle(node.name);
     setViewerContent("");
-    setViewerPrompt("");
-    setViewerGenTaskId(null);
-    setViewerGenResultNodeId(null);
-    setViewerGenSubmitting(false);
-    setViewerGenError(null);
     setViewerLoading(true);
     try {
       const content = await vfsDownloadText(node.id);
-      setViewerContent(content);
-      setViewerPrompt(guessPromptFromMarkdown(content, node.name));
+      setViewerContent(stripMarkdownMetadata(content));
     } finally {
       setViewerLoading(false);
-    }
-  };
-
-  const startViewerImageGeneration = async () => {
-    if (!scriptId) return;
-    if (!viewerNode?.parent_id) {
-      setViewerGenError("当前文件没有可写入的父目录");
-      return;
-    }
-    const prompt = viewerPrompt.trim();
-    if (!prompt) {
-      setViewerGenError("请输入生成提示词");
-      return;
-    }
-    setViewerGenSubmitting(true);
-    setViewerGenError(null);
-    setViewerGenResultNodeId(null);
-    try {
-      const base = viewerNode.name.replace(/\.[^/.]+$/, "").trim() || "generated";
-      const t = await createTask({
-        type: "asset_image_generate",
-        entity_type: "project",
-        entity_id: scriptId,
-        input_json: {
-          project_id: scriptId,
-          parent_node_id: viewerNode.parent_id,
-          filename: `${base}.png`,
-          prompt,
-          binding_key: "image",
-          model_config_id: null,
-          resolution: null,
-          images: [],
-        },
-      });
-      setViewerGenTaskId(t.id);
-      setTasksRunning([{ id: t.id, label: "生成图片" }]);
-    } catch (e) {
-      setViewerGenError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setViewerGenSubmitting(false);
     }
   };
 
@@ -940,6 +1134,8 @@ export default function Page() {
       setAssetChildren((prev) => ({ ...prev, [node.parent_id as string]: nodes.sort((a, b) => a.name.localeCompare(b.name)) }));
     }
   };
+
+  const [storyboardExpanded, setStoryboardExpanded] = useState(true);
 
   if (!isWriteMode) {
     return (
@@ -1745,7 +1941,16 @@ export default function Page() {
                   ) : (
                     <div className="space-y-6">
                       <div className="rounded-xl border border-border bg-background/20 overflow-hidden">
-                        <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/20 font-bold text-sm">故事板结果</div>
+                        <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/20 flex items-center justify-between">
+                          <button
+                            onClick={() => setStoryboardExpanded(!storyboardExpanded)}
+                            className="font-bold text-sm flex items-center gap-2 hover:text-primary transition-colors"
+                            type="button"
+                          >
+                            {storyboardExpanded ? "▼" : "▶"} 故事板结果
+                          </button>
+                        </div>
+                        {storyboardExpanded && (
                         <div className="p-4">
                           {!activeEpisode.storyboard_root_node_id ? (
                             <div className="text-sm text-textMuted">暂无故事板结果</div>
@@ -1780,22 +1985,21 @@ export default function Page() {
                               ) : storyboardNodes.length === 0 ? (
                                 <div className="text-sm text-textMuted">暂无文档</div>
                               ) : (
-                                <div className="space-y-2">
-                                  {storyboardNodes.map((n) => (
-                                    <div key={n.id} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/30 px-3 py-2">
-                                      <button onClick={() => void openNode(n)} className="text-left text-sm text-textMain truncate hover:text-primary transition-colors" type="button">
-                                        {n.name}
-                                      </button>
-                                      <button onClick={() => void deleteStoryboardDoc(n)} className="p-1.5 rounded-lg hover:bg-surfaceHighlight text-textMuted hover:text-red-400 transition-colors" type="button">
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                  ))}
-                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                                {storyboardNodes.map((n) => (
+                                  <MarkdownCard
+                                    key={n.id}
+                                    node={n}
+                                    onClick={() => void openNode(n)}
+                                    onDelete={() => void deleteStoryboardDoc(n)}
+                                  />
+                                ))}
+                              </div>
                               )}
                             </div>
                           )}
                         </div>
+                        )}
                       </div>
 
                       <div className="rounded-xl border border-border bg-background/20 overflow-hidden">
@@ -1860,56 +2064,14 @@ export default function Page() {
                                             {(assetChildren[n.id] || []).length === 0 ? (
                                               <div className="text-xs text-textMuted">空</div>
                                             ) : (
-                                              <div className="grid grid-cols-2 gap-3">
+                                              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                                                 {groupAssetsByName(assetChildren[n.id] || []).map((group) => (
-                                                  <div key={group.name} className="rounded-xl border border-border bg-gradient-to-br from-surface/80 to-surface/40 p-3 hover:border-primary/50 transition-colors">
-                                                    <div className="flex items-start justify-between gap-2 mb-2">
-                                                      <div className="flex items-center gap-2">
-                                                        <div className="w-8 h-8 rounded-lg bg-primary/20 flex items-center justify-center">
-                                                          <span className="text-sm font-bold text-primary">
-                                                            {group.name.charAt(0)}
-                                                          </span>
-                                                        </div>
-                                                        <div>
-                                                          <div className="text-sm font-medium text-textMain truncate max-w-[120px]">
-                                                            {group.name.replace(/^(character|prop|location|vfx)_/i, "")}
-                                                          </div>
-                                                          <div className="text-[10px] text-textMuted">
-                                                            {n.name === "角色" ? "Character" : n.name === "道具" ? "Prop" : n.name === "地点" ? "Location" : "Asset"}
-                                                          </div>
-                                                        </div>
-                                                      </div>
-                                                      <button
-                                                        onClick={() => void deleteAssetNode(group.mdNode || group.jsonNode!)}
-                                                        className="p-1 rounded hover:bg-red-500/20 text-textMuted hover:text-red-400 transition-colors"
-                                                        type="button"
-                                                      >
-                                                        <Trash2 size={12} />
-                                                      </button>
-                                                    </div>
-                                                    <div className="flex items-center gap-2">
-                                                      {group.mdNode && (
-                                                        <button
-                                                          onClick={() => void openNode(group.mdNode!)}
-                                                          className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-primary/10 text-primary hover:bg-primary/20 transition-colors flex items-center justify-center gap-1"
-                                                          type="button"
-                                                        >
-                                                          <FileText size={12} />
-                                                          文档
-                                                        </button>
-                                                      )}
-                                                      {group.jsonNode && (
-                                                        <button
-                                                          onClick={() => void openNode(group.jsonNode!)}
-                                                          className="flex-1 px-2 py-1.5 rounded-lg text-xs font-medium bg-surface/60 text-textMuted hover:bg-surfaceHighlight transition-colors flex items-center justify-center gap-1"
-                                                          type="button"
-                                                        >
-                                                          <Code size={12} />
-                                                          JSON
-                                                        </button>
-                                                      )}
-                                                    </div>
-                                                  </div>
+                                                  <AssetMarkdownCard
+                                                    key={group.name}
+                                                    group={group}
+                                                    onDelete={(node) => void deleteAssetNode(node)}
+                                                    onOpen={(node) => void openNode(node)}
+                                                  />
                                                 ))}
                                               </div>
                                             )}
@@ -2054,69 +2216,14 @@ export default function Page() {
         </div>
       </div>
 
-      {viewerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-          <div className="w-full max-w-3xl rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden">
-            <div className="h-12 px-4 border-b border-border flex items-center justify-between">
-              <div className="font-bold text-sm truncate">{viewerTitle}</div>
-              <button
-                onClick={() => setViewerOpen(false)}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
-                type="button"
-              >
-                关闭
-              </button>
-            </div>
-            <div className="p-4 border-b border-border bg-background/20 space-y-2">
-              <div className="text-xs text-textMuted">生成提示词</div>
-              <textarea
-                value={viewerPrompt}
-                onChange={(e) => setViewerPrompt(e.target.value)}
-                className="w-full min-h-[88px] bg-transparent border border-border rounded-xl p-3 text-xs text-textMain outline-none resize-y"
-                placeholder="输入用于生成图片的提示词..."
-                spellCheck={false}
-              />
-              <div className="flex items-center justify-between gap-3">
-                <div className="text-[11px] text-textMuted truncate">
-                  {viewerGenTaskId ? `任务：${viewerGenTaskId}` : " "}
-                </div>
-                <div className="flex items-center gap-2">
-                  {viewerGenResultNodeId && (
-                    <a
-                      href={`/api/vfs/nodes/${encodeURIComponent(viewerGenResultNodeId)}/download`}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      下载生成图
-                    </a>
-                  )}
-                  <button
-                    onClick={() => void startViewerImageGeneration()}
-                    disabled={viewerLoading || viewerGenSubmitting || tasksRunning.length > 0}
-                    className="px-4 py-2 rounded-xl bg-primary text-white text-xs font-bold hover:bg-primary/90 transition-colors disabled:opacity-50"
-                    type="button"
-                  >
-                    {viewerGenSubmitting ? "提交中..." : "生成图片"}
-                  </button>
-                </div>
-              </div>
-              {viewerGenError && <div className="text-xs text-red-400 whitespace-pre-wrap">{viewerGenError}</div>}
-            </div>
-            <div className="p-4 max-h-[70vh] overflow-y-auto">
-              {viewerLoading ? (
-                <div className="text-sm text-textMuted flex items-center gap-2">
-                  <Loader2 size={16} className="animate-spin" /> 加载中...
-                </div>
-              ) : (
-                <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{viewerContent}</ReactMarkdown>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      <AssetDocumentViewer
+        open={viewerOpen}
+        title={viewerTitle}
+        content={viewerContent}
+        loading={viewerLoading}
+        generateHref={viewerNode && scriptId ? buildAssetCreateHref(viewerNode.id, scriptId) : null}
+        onClose={() => setViewerOpen(false)}
+      />
 
       {assetDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">

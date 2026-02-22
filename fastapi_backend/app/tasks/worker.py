@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from app.config import settings
-from app.tasks.redis_client import get_redis
+from app.tasks.redis_client import get_redis, close_redis
 from app.tasks.process_task import process_task
 
 
@@ -26,11 +26,25 @@ def _load_task_handler_registry():
 
 
 async def _worker_loop() -> None:
-    r = get_redis()
+    print("[task-worker] connecting to redis...", flush=True)
+    
+    # 尝试连接 Redis，带有重试逻辑
+    while True:
+        try:
+            r = get_redis()
+            await r.ping()
+            print("[task-worker] connected to redis.", flush=True)
+            break
+        except Exception as e:
+            print(f"[task-worker] failed to connect to redis: {e}. Retrying in 5s...", flush=True)
+            await asyncio.sleep(5)
+
     while True:
         try:
             item = await r.brpop(settings.TASK_QUEUE_KEY, timeout=5)
-        except Exception:
+        except Exception as e:
+            # 只有在非常严重的错误时才打印，避免刷屏
+            # print(f"[task-worker] redis error: {e}", flush=True)
             await asyncio.sleep(0.5)
             continue
         if not item:
@@ -44,7 +58,16 @@ async def _worker_loop() -> None:
 
 
 def _run_worker() -> None:
-    asyncio.run(_worker_loop())
+    try:
+        asyncio.run(_worker_loop())
+    finally:
+        # 确保在退出时关闭连接池
+        try:
+            loop = asyncio.new_event_loop()
+            loop.run_until_complete(close_redis())
+            loop.close()
+        except Exception:
+            pass
 
 
 def main() -> None:
@@ -63,6 +86,8 @@ def main() -> None:
             def __call__(self, change, path: str) -> bool:
                 p = path.replace("\\", "/")
                 if "/.venv/" in p:
+                    return False
+                if "/logs/" in p or "/temp/" in p:
                     return False
                 return p.endswith(".py")
 

@@ -14,6 +14,7 @@ from sqlalchemy.orm import selectinload
 
 from app.ai_scene_test.runner import run_scene_test_chat
 from app.ai_scene_test.tool_registry import TOOL_REGISTRY
+from app.core.exceptions import AppError
 from app.database import User, get_async_session
 from app.models import BuiltinAgent, BuiltinAgentPromptVersion, Episode, Scene
 from app.schemas_ai_chat import (
@@ -329,7 +330,15 @@ async def send_message(
 
         try:
             await task
+        except AppError as e:
+            import traceback
+            traceback.print_exc()
+            msg = e.msg
+            yield f"data: {json.dumps({'type': 'error', 'message': msg}, ensure_ascii=False)}\n\n".encode("utf-8")
+            return
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             msg = str(e) or "error"
             yield f"data: {json.dumps({'type': 'error', 'message': msg}, ensure_ascii=False)}\n\n".encode("utf-8")
             return

@@ -23,7 +23,15 @@ const sceneLabels: Record<string, string> = {
   character_extract: "角色提取",
   storyboard_generate: "分镜生成",
   script_analyze: "剧本分析",
+  scene_storyboard: "分镜绘制",
+  script_expert: "剧本专家",
 };
+
+function truncateText(text: string, maxLength: number) {
+  if (!text) return "";
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + "...";
+}
 
 export function ChatSessionList({
   sessions,
@@ -123,8 +131,8 @@ export function ChatSessionList({
                 <div className="flex-1 min-w-0">
                   <div className="text-sm text-text truncate">{session.title}</div>
                   <div className="flex items-center gap-2 mt-1">
-                    <span className="text-xs text-textMuted">
-                      {sceneLabels[session.scene_code] || session.scene_code}
+                    <span className="text-xs text-textMuted" title={sceneLabels[session.scene_code] || session.scene_code}>
+                      {truncateText(sceneLabels[session.scene_code] || session.scene_code, 6)}
                     </span>
                     <span className="text-xs text-textMuted">·</span>
                     <span className="text-xs text-textMuted">

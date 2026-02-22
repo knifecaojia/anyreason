@@ -295,6 +295,13 @@ async def ensure_builtin_agent_platform_assets(*, force: bool = False) -> None:
     await asyncio.wait_for(_run(), timeout=30)
     logger.info("db:seed_agent_platform done")
 
+    # Also seed models
+    try:
+        from seed_models import seed_models
+        await seed_models()
+    except Exception as e:
+        logger.error(f"db:seed_models failed: {e}")
+
 
 async def get_async_session() -> AsyncGenerator[AsyncSession, None]:
     async with async_session_maker() as session:

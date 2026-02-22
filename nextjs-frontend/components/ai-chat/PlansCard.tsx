@@ -4,25 +4,12 @@ import { useState, useMemo } from "react";
 import { Package, ChevronDown, ChevronRight, Check, Sparkles } from "lucide-react";
 import { PlanData } from "./types";
 
-interface PlanPreview {
-  raw_output_text?: string;
-  summary?: string;
-  files?: Array<{ name?: string; type?: string }>;
-}
-
-interface PlanDataWithPreview {
-  id: string;
-  kind: string;
-  tool_id: string;
-  inputs: Record<string, unknown>;
-  preview?: PlanPreview;
-}
-
 interface PlansCardProps {
-  plans: PlanDataWithPreview[];
-  onExecute?: (selectedPlans: PlanDataWithPreview[]) => void;
+  plans: PlanData[];
+  onExecute?: (selectedPlans: PlanData[]) => void;
   isExecuting?: boolean;
   defaultExpanded?: boolean;
+  applyResultsByPlanId?: Record<string, unknown>;
 }
 
 const kindLabels: Record<string, string> = {
@@ -35,9 +22,17 @@ const kindLabels: Record<string, string> = {
   vfx_create: "特效创建",
 };
 
-export function PlansCard({ plans, onExecute, isExecuting, defaultExpanded = false }: PlansCardProps) {
+export function PlansCard({ plans, onExecute, isExecuting, defaultExpanded = false, applyResultsByPlanId }: PlansCardProps) {
   const [expanded, setExpanded] = useState(defaultExpanded);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set(plans.map((p) => p.id)));
+
+  const copyText = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      window.prompt("复制失败，请手动复制：", text);
+    }
+  };
 
   const summary = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -97,6 +92,24 @@ export function PlansCard({ plans, onExecute, isExecuting, defaultExpanded = fal
               const isSelected = selectedIds.has(plan.id);
               const preview = plan.preview || {};
               const files = Array.isArray(preview.files) ? preview.files : [];
+              const applyResult = applyResultsByPlanId ? (applyResultsByPlanId[plan.id] as any) : null;
+              const shots = plan.kind === "storyboard_apply" && Array.isArray((plan.inputs as any)?.shots) ? (((plan.inputs as any).shots as any[]) || []) : [];
+              const storyboardCount = typeof (preview as any)?.count === "number" ? Number((preview as any).count) : shots.length;
+              const storyboardWarning = typeof (preview as any)?.warning === "string" ? String((preview as any).warning) : "";
+              const storyboardVirtual = Boolean((preview as any)?.virtual);
+              const createdList = Array.isArray(applyResult?.data?.created) ? (applyResult.data.created as any[]) : [];
+              const createdShotCodes = createdList
+                .map((x) => (x && typeof x === "object" && typeof (x as any).shot_code === "string" ? String((x as any).shot_code) : ""))
+                .filter((x) => x);
+              const appliedOk = typeof applyResult?.code === "number" ? applyResult.code === 200 : false;
+              const appliedErr =
+                typeof applyResult?.msg === "string"
+                  ? String(applyResult.msg)
+                  : typeof applyResult?.detail === "string"
+                    ? String(applyResult.detail)
+                    : typeof applyResult?.body === "string"
+                      ? String(applyResult.body)
+                      : "";
               
               return (
                 <div
@@ -149,6 +162,95 @@ export function PlansCard({ plans, onExecute, isExecuting, defaultExpanded = fal
                           {preview.raw_output_text.slice(0, 100)}
                           {preview.raw_output_text.length > 100 && "..."}
                         </p>
+                      )}
+
+                      {plan.kind === "storyboard_apply" && (
+                        <div className="mt-2 text-xs text-textMuted">
+                          镜头 {storyboardCount}
+                          {storyboardVirtual ? " · virtual" : ""}
+                          {storyboardWarning ? ` · ${storyboardWarning}` : ""}
+                        </div>
+                      )}
+
+                      {plan.kind === "storyboard_apply" && shots.length > 0 && (
+                        <details
+                          className="mt-2 px-3 py-2 rounded-md bg-background/30 border border-border"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <summary className="cursor-pointer text-xs font-bold text-textMain">查看分镜预览</summary>
+                          <div className="mt-2 space-y-2">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void copyText(JSON.stringify(shots, null, 2));
+                                }}
+                                className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+                              >
+                                复制 shots JSON
+                              </button>
+                            </div>
+                            <div className="space-y-2">
+                              {shots.slice(0, 20).map((s: any, idx: number) => {
+                                const shotType = String(s?.shot_type || "");
+                                const angle = String(s?.camera_angle || "");
+                                const move = String(s?.camera_move || "");
+                                const desc = String(s?.description || "");
+                                const dialogue = String(s?.dialogue || "");
+                                const md = [
+                                  `#${idx + 1} ${shotType || "shot"}`,
+                                  "",
+                                  "## 画面描述",
+                                  desc || "（无画面描述）",
+                                  dialogue ? ["", "## 台词", dialogue].join("\n") : "",
+                                ]
+                                  .filter((x) => typeof x === "string" && x.length > 0)
+                                  .join("\n");
+                                return (
+                                  <details key={idx} className="px-3 py-2 rounded-md bg-background border border-border">
+                                    <summary className="cursor-pointer text-sm font-bold text-textMain">
+                                      #{idx + 1} {shotType || "shot"} {angle ? `· ${angle}` : ""} {move ? `· ${move}` : ""}
+                                    </summary>
+                                    <pre className="mt-2 w-full max-h-[220px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs whitespace-pre-wrap">
+                                      {md}
+                                    </pre>
+                                  </details>
+                                );
+                              })}
+                              {shots.length > 20 && <div className="text-[11px] text-textMuted">仅展示前 20 条，完整内容请复制 JSON。</div>}
+                            </div>
+                          </div>
+                        </details>
+                      )}
+
+                      {applyResult && (
+                        <div
+                          className={`mt-2 px-3 py-2 rounded-md border text-xs ${
+                            appliedOk ? "border-green-500/30 bg-green-500/10 text-green-200" : "border-border bg-background/30 text-textMuted"
+                          }`}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-bold">{appliedOk ? "已执行" : "执行结果"}</div>
+                              {createdShotCodes.length > 0 && <div className="mt-1 break-words">创建：{createdShotCodes.slice(0, 10).join("、")}</div>}
+                              {!appliedOk && appliedErr ? <div className="mt-1 break-words">{appliedErr}</div> : null}
+                            </div>
+                            {createdShotCodes.length > 0 && (
+                              <button
+                                type="button"
+                                className="shrink-0 px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void copyText(createdShotCodes.join("\n"));
+                                }}
+                              >
+                                复制 shot_code
+                              </button>
+                            )}
+                          </div>
+                        </div>
                       )}
                     </div>
                   </div>

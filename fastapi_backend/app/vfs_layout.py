@@ -6,6 +6,7 @@ import re
 EPISODES_FOLDER_NAME = "分集"
 ASSETS_FOLDER_NAME = "资产"
 BINDINGS_FOLDER_NAME = "绑定"
+STORYBOARD_FOLDER_NAME = "故事板"
 
 ASSET_TYPE_FOLDER_NAMES: dict[str, str] = {
     "character": "角色",

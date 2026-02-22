@@ -22,6 +22,15 @@ async function authedFetch<T>(opts: { method?: string; path: string; body?: unkn
   });
 
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+       // Token invalid or expired
+       // Return null or throw specific error that layout can handle?
+       // For Server Actions used in Client Components, throwing error is okay.
+       // For Server Components (like Layout), this will crash the page if not caught.
+       // Let's return null for getMe to indicate not logged in, but authedFetch is generic.
+       // We should update getMe to handle 401 gracefully.
+       throw new Error("Unauthorized");
+    }
     const text = await res.text();
     throw new Error(`请求失败 ${res.status}: ${text}`);
   }
@@ -38,7 +47,16 @@ export type Me = {
 };
 
 export async function getMe() {
-  return authedFetch<Me>({ path: "/api/v1/users/me" });
+  try {
+    return await authedFetch<Me>({ path: "/api/v1/users/me" });
+  } catch (e: any) {
+    if (e.message === "Unauthorized" || e.message?.includes("未登录")) {
+        return null; 
+    }
+    // Other errors might be temporary network issues
+    console.error("getMe error:", e);
+    return null;
+  }
 }
 
 export async function updateMePassword(input: { current_password: string; new_password: string }) {

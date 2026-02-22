@@ -25,4 +25,5 @@ export type TaskEventPayload = {
   progress?: number;
   error?: string;
   payload?: Record<string, unknown>;
+  result_json?: Record<string, unknown>;
 };

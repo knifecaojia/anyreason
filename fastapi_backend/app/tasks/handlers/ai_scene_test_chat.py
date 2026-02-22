@@ -50,6 +50,27 @@ class AiSceneTestChatHandler(BaseTaskHandler):
 
         await reporter.progress(progress=10, payload={"stage": "running"})
 
+
+        def _sanitize_preview(preview: Any) -> Any:
+            if not isinstance(preview, dict):
+                return preview
+            p = preview.copy()
+            if "files" in p and isinstance(p["files"], list):
+                new_files = []
+                for f in p["files"]:
+                    if isinstance(f, dict):
+                        nf = f.copy()
+                        # Truncate content_md to avoid huge payloads in logs/results
+                        if "content_md" in nf and len(str(nf["content_md"] or "")) > 1000:
+                            nf["content_md"] = str(nf["content_md"])[:1000] + "... (truncated)"
+                        if "details_md" in nf and len(str(nf["details_md"] or "")) > 1000:
+                            nf["details_md"] = str(nf["details_md"])[:1000] + "... (truncated)"
+                        new_files.append(nf)
+                    else:
+                        new_files.append(f)
+                p["files"] = new_files
+            return p
+
         while True:
             if bg.done() and trace_queue.empty():
                 break
@@ -68,16 +89,22 @@ class AiSceneTestChatHandler(BaseTaskHandler):
                 continue
 
             if isinstance(evt, dict):
+                # Keep raw event for result, but we might need to sanitize it later if too big
+                # For now, append raw event to local list
                 if len(trace_events) < 200:
                     trace_events.append(evt)
+                
                 typ = str(evt.get("type") or "event")
                 payload: dict[str, Any] = {"type": typ}
                 for k in ("tool_id", "label", "agent_code", "version", "output_type", "message"):
                     if k in evt and evt.get(k) is not None:
                         payload[k] = evt.get(k)
                 if "preview" in evt and evt.get("preview") is not None:
-                    payload["preview"] = evt.get("preview")
+                    # Sanitize preview for real-time log to avoid WebSocket/DB bloat
+                    payload["preview"] = _sanitize_preview(evt.get("preview"))
+                
                 await reporter.log(message="trace", level="info", payload=payload)
+                
                 if typ in {"tool_start", "agent_run_start"}:
                     await reporter.progress(progress=35, payload={"stage": "working"})
                 if typ in {"tool_done", "agent_run_done"}:
@@ -99,10 +126,18 @@ class AiSceneTestChatHandler(BaseTaskHandler):
                     plans_json.append(dict(p))
                 except Exception:
                     continue
+        
+        # Sanitize trace_events for final result
+        final_trace_events = []
+        for evt in trace_events:
+            new_evt = evt.copy()
+            if "preview" in new_evt:
+                new_evt["preview"] = _sanitize_preview(new_evt["preview"])
+            final_trace_events.append(new_evt)
 
         return {
             "output_text": output_text,
             "plans": plans_json,
-            "trace_events": trace_events,
+            "trace_events": final_trace_events,
             "archive": archive,
         }

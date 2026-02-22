@@ -15,14 +15,22 @@ export interface AssetVariant {
   thumbnail: string;
 }
 
+export interface AssetResourceThumb {
+  id: string;
+  thumbnail: string;
+}
+
 export interface Asset {
   id: string;
+  assetId?: string;
   name: string;
   type: AssetType;
   thumbnail: string;
   tags: string[];
   createdAt: string;
   variants?: AssetVariant[];
+  resources?: AssetResourceThumb[];
+  source?: "manual" | "script_extraction";
 }
 
 export type ProjectStatus =

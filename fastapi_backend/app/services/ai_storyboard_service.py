@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from typing import Any
 from uuid import UUID
 
@@ -10,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_gateway import ai_gateway_service
 from app.core.exceptions import AppError
-from app.models import AIModelConfig, Episode, Project, Storyboard, Script
+from app.models import AIModelConfig, Episode, Project, Storyboard, Script, Asset, AssetBinding
 from app.schemas import AIShotDraft
 
 
@@ -375,6 +376,45 @@ class AIStoryboardService:
                 active_assets=list(s.active_assets or []),
             )
             db.add(row)
+            await db.flush()
+
+            # Auto-create assets and bindings from script extraction
+            active_assets_list = list(s.active_assets or [])
+            unique_assets = list(set(n.strip() for n in active_assets_list if n.strip()))
+            
+            for name in unique_assets:
+                # Find existing asset in project
+                res_asset = await db.execute(select(Asset).where(
+                    Asset.project_id == episode.project_id, 
+                    Asset.name == name
+                ))
+                asset = res_asset.scalars().first()
+                
+                if not asset:
+                    # Create new draft asset
+                    asset = Asset(
+                        project_id=episode.project_id,
+                        asset_id=uuid.uuid4().hex[:8],
+                        name=name,
+                        type="character", # Default type
+                        lifecycle_status="draft",
+                        source="script_extraction",
+                    )
+                    db.add(asset)
+                    await db.flush()
+                
+                # Create binding if not exists
+                res_binding = await db.execute(select(AssetBinding).where(
+                    AssetBinding.storyboard_id == row.id,
+                    AssetBinding.asset_entity_id == asset.id
+                ))
+                if not res_binding.scalars().first():
+                    binding = AssetBinding(
+                        storyboard_id=row.id,
+                        asset_entity_id=asset.id,
+                    )
+                    db.add(binding)
+
             created_count += 1
             
         # If replace mode, we should delete the original storyboard acting as "Scene" placeholder

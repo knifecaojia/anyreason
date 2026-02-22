@@ -39,10 +39,13 @@ export interface PlanData {
   kind: string;
   tool_id: string;
   inputs: Record<string, unknown>;
-  preview?: {
+  preview?: Record<string, unknown> & {
     raw_output_text?: string;
     summary?: string;
     files?: Array<{ name?: string; type?: string }>;
+    count?: number;
+    warning?: string | null;
+    virtual?: boolean;
   };
 }
 

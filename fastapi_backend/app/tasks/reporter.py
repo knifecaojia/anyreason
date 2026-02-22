@@ -96,6 +96,7 @@ class TaskReporter:
                     "event_type": "succeeded",
                     "status": self._task.status,
                     "progress": 100,
+                    "result_json": jsonable_encoder(result_json or {}),
                 }
             )
         )

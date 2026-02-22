@@ -22,15 +22,41 @@ from app.vfs_layout import (
     ASSET_TYPE_FOLDER_NAMES,
     BINDINGS_FOLDER_NAME,
     EPISODES_FOLDER_NAME,
+    STORYBOARD_FOLDER_NAME,
     asset_doc_filename,
     asset_filename,
     bindings_filename,
     episode_filename,
+    safe_filename,
 )
 from app.vfs_renderers.asset_doc_renderer import render_asset_doc_md
 
 
 router = APIRouter(prefix="/apply-plans")
+
+
+def _render_shot_md(shot_code: str, draft: AIShotDraft) -> str:
+    lines = [f"# {shot_code}"]
+    lines.append("")
+    if draft.shot_type or draft.camera_move:
+        st = draft.shot_type or "-"
+        cm = draft.camera_move or "-"
+        lines.append(f"**景别/视角**: {st} / {cm}")
+
+    if draft.description:
+        lines.append(f"**画面内容描述**: {draft.description}")
+
+    if draft.dialogue:
+        lines.append(f"**对白/音效**: {draft.dialogue}")
+
+    if draft.active_assets:
+        assets_str = " ".join([f"@{a}" for a in draft.active_assets])
+        lines.append(f"**资产调用**: {assets_str}")
+
+    if draft.narrative_function:
+        lines.append(f"**导演意图**: {draft.narrative_function}")
+
+    return "\n".join(lines) + "\n"
 
 
 class ApplyExecuteRequest(BaseModel):
@@ -359,32 +385,98 @@ async def api_execute_apply_plan(
 
     if plan.kind == "storyboard_apply" and plan.tool_id == "storyboard_apply":
         storyboard_id_raw = (plan.inputs or {}).get("storyboard_id")
+        episode_id_raw = (plan.inputs or {}).get("episode_id")
+        scene_number_raw = (plan.inputs or {}).get("scene_number")
+        scene_code_raw = (plan.inputs or {}).get("scene_code")
         mode = str((plan.inputs or {}).get("mode") or "replace").strip() or "replace"
         shots_raw = (plan.inputs or {}).get("shots") or []
-        if not storyboard_id_raw:
-            raise HTTPException(status_code=400, detail="storyboard_id_required")
-        try:
-            storyboard_id = UUID(str(storyboard_id_raw))
-        except Exception:
-            raise HTTPException(status_code=400, detail="invalid_storyboard_id")
+        storyboard_id: UUID | None = None
+        if storyboard_id_raw:
+            try:
+                storyboard_id = UUID(str(storyboard_id_raw))
+            except Exception:
+                raise HTTPException(status_code=400, detail="invalid_storyboard_id")
         if mode not in {"replace", "append"}:
             raise HTTPException(status_code=400, detail="invalid_mode")
         if not isinstance(shots_raw, list) or not shots_raw:
             raise HTTPException(status_code=400, detail="invalid_shots")
 
-        row = (
-            await db.execute(
-                select(Storyboard, Episode)
-                .join(Episode, Storyboard.episode_id == Episode.id)
-                .where(Storyboard.id == storyboard_id, Episode.project_id == project_id)
+        episode: Episode | None = None
+        scene_number: int | None = None
+        scene_code = str(scene_code_raw or "").strip() or None
+        location = None
+        location_type = None
+        time_of_day = None
+
+        if storyboard_id is not None:
+            row = (
+                await db.execute(
+                    select(Storyboard, Episode)
+                    .join(Episode, Storyboard.episode_id == Episode.id)
+                    .where(Storyboard.id == storyboard_id, Episode.project_id == project_id)
+                )
+            ).first()
+            if not row:
+                raise HTTPException(status_code=404, detail="storyboard_not_found")
+            storyboard, episode = row
+            if not storyboard.scene_number:
+                raise HTTPException(status_code=400, detail="scene_number_required")
+            scene_number = int(storyboard.scene_number)
+            if not scene_code:
+                scene_code = str(storyboard.scene_code or "").strip() or None
+            location = storyboard.location
+            location_type = storyboard.location_type
+            time_of_day = storyboard.time_of_day
+        else:
+            if not episode_id_raw:
+                raise HTTPException(status_code=400, detail="storyboard_id_or_episode_id_required")
+            try:
+                episode_id = UUID(str(episode_id_raw))
+            except Exception:
+                raise HTTPException(status_code=400, detail="invalid_episode_id")
+            episode = await db.get(Episode, episode_id)
+            if episode is None or episode.project_id != project_id:
+                raise HTTPException(status_code=404, detail="episode_not_found")
+
+            if scene_number_raw is not None and str(scene_number_raw).strip() != "":
+                try:
+                    scene_number = int(scene_number_raw)
+                except Exception:
+                    raise HTTPException(status_code=400, detail="invalid_scene_number")
+                if scene_number <= 0:
+                    raise HTTPException(status_code=400, detail="invalid_scene_number")
+            else:
+                max_res = await db.execute(
+                    select(func.coalesce(func.max(Storyboard.scene_number), 0)).where(
+                        Storyboard.episode_id == episode.id,
+                    )
+                )
+                scene_number = int(max_res.scalar_one() or 0) + 1
+            if not scene_code:
+                scene_code = f"EP{int(episode.episode_number):03d}_SC{int(scene_number):02d}"
+            location = (plan.inputs or {}).get("location")
+            location_type = (plan.inputs or {}).get("location_type")
+            time_of_day = (plan.inputs or {}).get("time_of_day")
+
+        storyboard_root_id = None
+        if episode.storyboard_root_node_id:
+            node = await db.get(FileNode, episode.storyboard_root_node_id)
+            if node and node.is_folder:
+                storyboard_root_id = node.id
+
+        if not storyboard_root_id:
+            folder = await vfs_service.create_folder(
+                db=db,
+                user_id=user.id,
+                name=STORYBOARD_FOLDER_NAME,
+                parent_id=None,
+                workspace_id=None,
+                project_id=project_id,
             )
-        ).first()
-        if not row:
-            raise HTTPException(status_code=404, detail="storyboard_not_found")
-        storyboard, episode = row
-        if not storyboard.scene_number:
-            raise HTTPException(status_code=400, detail="scene_number_required")
-        scene_number = int(storyboard.scene_number)
+            storyboard_root_id = folder.id
+            episode.storyboard_root_node_id = folder.id
+            db.add(episode)
+            await db.flush()
 
         if mode == "replace":
             await db.execute(delete(Storyboard).where(Storyboard.episode_id == episode.id, Storyboard.scene_number == scene_number))
@@ -407,14 +499,14 @@ async def api_execute_apply_plan(
                 episode_id=episode.id,
                 shot_code=shot_code,
                 shot_number=shot_number,
-                scene_code=storyboard.scene_code,
+                scene_code=scene_code,
                 scene_number=scene_number,
                 shot_type=(draft.shot_type or "").strip() or None,
                 camera_move=(draft.camera_move or "").strip() or None,
                 narrative_function=(draft.narrative_function or "").strip() or None,
-                location=storyboard.location,
-                location_type=storyboard.location_type,
-                time_of_day=storyboard.time_of_day,
+                location=(str(location).strip() if location is not None else None) or None,
+                location_type=(str(location_type).strip() if location_type is not None else None) or None,
+                time_of_day=(str(time_of_day).strip() if time_of_day is not None else None) or None,
                 description=(draft.description or "").strip() or None,
                 dialogue=(draft.dialogue or "").strip() or None,
                 duration_estimate=draft.duration_estimate,
@@ -424,8 +516,32 @@ async def api_execute_apply_plan(
             await db.flush()
             created_rows.append({"storyboard_id": str(r.id), "shot_code": r.shot_code, "shot_number": int(r.shot_number)})
 
+            md_content = _render_shot_md(shot_code, draft)
+            md_filename = f"{shot_code}.md"
+            await vfs_service.upsert_text_file(
+                db=db,
+                user_id=user.id,
+                name=md_filename,
+                content=md_content,
+                parent_id=storyboard_root_id,
+                workspace_id=None,
+                project_id=project_id,
+                content_type="text/markdown; charset=utf-8",
+            )
+
         await db.commit()
-        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_rows, "provenance": provenance})
+        return ResponseBase(
+            code=200,
+            msg="OK",
+            data={
+                "plan_id": str(plan.id),
+                "episode_id": str(episode.id),
+                "scene_number": int(scene_number or 0),
+                "scene_code": scene_code,
+                "created": created_rows,
+                "provenance": provenance,
+            },
+        )
 
     if plan.kind == "image_prompt_upsert" and plan.tool_id == "image_prompt_upsert":
         prompts_raw = (plan.inputs or {}).get("prompts") or []

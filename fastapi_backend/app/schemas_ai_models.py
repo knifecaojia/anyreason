@@ -22,6 +22,8 @@ class AIModelConfigRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    model_config = {"from_attributes": True}
+
 
 class AdminAIModelConfigCreateRequest(BaseModel):
     category: AICategory
@@ -50,6 +52,8 @@ class AIModelBindingRead(BaseModel):
     ai_model_config_id: UUID | None = None
     created_at: datetime
     updated_at: datetime
+
+    model_config = {"from_attributes": True}
 
 
 class AdminAIModelBindingUpsertRequest(BaseModel):

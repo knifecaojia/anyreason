@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
-import { Check, Eye, EyeOff, Filter, MessageSquare, Plus, RefreshCw, Search, Settings as SettingsIcon, X } from "lucide-react";
-import type { AICategory } from "@/components/actions/ai-model-actions";
+import { Check, Eye, EyeOff, Filter, MessageSquare, Plus, RefreshCw, Search, Settings as SettingsIcon, X, Trash2, Edit } from "lucide-react";
+import type { AICategory, AIModelConfig, AIModelBinding } from "@/components/actions/ai-model-actions";
 
 import { ModelTestModal } from "./ModelTestModal";
 
@@ -13,12 +14,13 @@ export function ModelsSection(props: {
   aiConfigError: string | null;
   aiConfigSubmitting: boolean;
   aiConfigLoading: boolean;
-  aiModelConfigs: any[];
+  aiModelConfigs: AIModelConfig[];
   deleteModelConfig: (id: string) => Promise<void>;
+  batchDeleteModelConfigs: (ids: string[]) => Promise<void>;
   bindingForm: any;
   setBindingForm: (updater: any) => void;
   submitUpsertBinding: () => Promise<void>;
-  aiBindings: any[];
+  aiBindings: AIModelBinding[];
   deleteBinding: (id: string) => Promise<void>;
   openModelTestChat: () => void;
   modelTestChatOpen: boolean;
@@ -88,6 +90,7 @@ export function ModelsSection(props: {
     aiConfigLoading,
     aiModelConfigs,
     deleteModelConfig,
+    batchDeleteModelConfigs,
     bindingForm,
     setBindingForm,
     submitUpsertBinding,
@@ -153,6 +156,50 @@ export function ModelsSection(props: {
     saveCatalogConfig,
   } = props;
 
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const toggleSelect = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedIds(next);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === aiModelConfigs.length && aiModelConfigs.length > 0) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(aiModelConfigs.map((c) => c.id)));
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedIds.size === 0) return;
+    // window.confirm is handled in batchDeleteModelConfigs
+    await batchDeleteModelConfigs(Array.from(selectedIds));
+    setSelectedIds(new Set());
+  };
+
+  const handleEdit = (config: any) => {
+    // Try to find original catalog item to get metadata like default_base_url
+    const originalItem = filteredCatalogItems.find(
+      (i) => i.manufacturer_code === config.manufacturer && i.model_code === config.model,
+    );
+
+    // Construct a catalog item compatible object to reuse the modal
+    const item = {
+      category: config.category,
+      manufacturer_code: config.manufacturer,
+      manufacturer_name: originalItem?.manufacturer_name || config.manufacturer,
+      model_code: config.model,
+      model_name: originalItem?.model_name || config.model,
+      default_base_url: originalItem?.default_base_url || "",
+      is_image_generation: config.category === "image",
+      is_video_generation: config.category === "video",
+    };
+    openCatalogConfig(item);
+  };
+
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-fade-in px-2 pb-10">
       <div className="flex justify-between items-end border-b border-border pb-6">
@@ -203,6 +250,15 @@ export function ModelsSection(props: {
             <p className="text-sm text-textMuted mt-1">从模型清单点选，进入配置弹窗填写 Base URL / API Key。</p>
           </div>
           <div className="flex items-center gap-2">
+            {selectedIds.size > 0 && (
+              <button
+                onClick={handleBatchDelete}
+                className="flex items-center gap-2 text-sm font-bold bg-red-500/10 border border-red-500/20 hover:bg-red-500/20 text-red-500 px-4 py-2 rounded-lg transition-all"
+                type="button"
+              >
+                <Trash2 size={16} /> 批量删除 ({selectedIds.size})
+              </button>
+            )}
             <button
               onClick={openModelTestChat}
               className="flex items-center gap-2 text-sm font-bold bg-surfaceHighlight border border-border hover:border-primary/40 text-textMain px-4 py-2 rounded-lg transition-all disabled:opacity-60"
@@ -233,6 +289,14 @@ export function ModelsSection(props: {
           <table className="w-full text-sm text-left">
             <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
               <tr>
+                <th className="px-4 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={aiModelConfigs.length > 0 && selectedIds.size === aiModelConfigs.length}
+                    onChange={toggleSelectAll}
+                    className="rounded border-border"
+                  />
+                </th>
                 <th className="px-4 py-3">厂商</th>
                 <th className="px-4 py-3">模型</th>
                 <th className="px-4 py-3">Base URL</th>
@@ -244,14 +308,14 @@ export function ModelsSection(props: {
             <tbody className="divide-y divide-border">
               {aiConfigLoading && (
                 <tr>
-                  <td className="px-4 py-6 text-textMuted" colSpan={6}>
+                  <td className="px-4 py-6 text-textMuted" colSpan={7}>
                     加载中...
                   </td>
                 </tr>
               )}
               {!aiConfigLoading && aiModelConfigs.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-textMuted" colSpan={6}>
+                  <td className="px-4 py-6 text-textMuted" colSpan={7}>
                     暂无配置。
                   </td>
                 </tr>
@@ -259,18 +323,33 @@ export function ModelsSection(props: {
               {!aiConfigLoading &&
                 aiModelConfigs.map((c) => (
                   <tr key={c.id} className="hover:bg-surfaceHighlight/30 transition-colors">
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(c.id)}
+                        onChange={() => toggleSelect(c.id)}
+                        className="rounded border-border"
+                      />
+                    </td>
                     <td className="px-4 py-3 font-medium text-textMain">{c.manufacturer}</td>
                     <td className="px-4 py-3 text-xs text-textMain font-mono">{c.model}</td>
                     <td className="px-4 py-3 text-xs text-textMuted font-mono truncate max-w-[18rem]">{c.base_url || "-"}</td>
                     <td className="px-4 py-3 text-xs text-textMuted">{c.has_api_key ? "已配置" : "未配置"}</td>
                     <td className="px-4 py-3 text-xs text-textMain">{c.enabled ? "是" : "否"}</td>
-                    <td className="px-4 py-3 text-right">
+                    <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
                       <button
-                        className="px-3 py-1.5 bg-surfaceHighlight border border-border hover:border-red-500/50 rounded-lg text-xs font-medium transition-all text-red-200"
+                        className="px-3 py-1.5 bg-surfaceHighlight border border-border hover:border-primary/50 rounded-lg text-xs font-medium transition-all text-textMain hover:text-primary flex items-center gap-1"
+                        type="button"
+                        onClick={() => handleEdit(c)}
+                      >
+                        <Edit size={12} /> 编辑
+                      </button>
+                      <button
+                        className="px-3 py-1.5 bg-surfaceHighlight border border-border hover:border-red-500/50 rounded-lg text-xs font-medium transition-all text-red-200 flex items-center gap-1"
                         type="button"
                         onClick={() => void deleteModelConfig(c.id)}
                       >
-                        删除
+                        <Trash2 size={12} /> 删除
                       </button>
                     </td>
                   </tr>

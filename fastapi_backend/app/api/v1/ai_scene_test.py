@@ -13,6 +13,8 @@ from app.ai_scene_test.tool_registry import TOOL_REGISTRY
 from app.database import User, get_async_session
 from app.rbac import require_permissions
 from app.schemas_ai_scene_test import AISceneTestChatRequest, AISceneTestChatResponse, AISceneTestOptionsResponse
+from app.models import BuiltinAgent, BuiltinAgentPromptVersion
+from sqlalchemy import select
 from app.schemas_response import ResponseBase
 from app.services.builtin_agent_version_service import builtin_agent_version_service
 from app.users import current_active_user
@@ -57,6 +59,22 @@ async def admin_ai_scene_test_options(
     tools.sort(key=lambda x: x["tool_id"])
 
     return ResponseBase(code=200, msg="OK", data=AISceneTestOptionsResponse(agents=agent_opts, tools=tools))
+
+
+async def _resolve_default_version(*, db: AsyncSession, agent_code: str) -> int:
+    try:
+        stmt = (
+            select(BuiltinAgentPromptVersion.version)
+            .join(BuiltinAgent, BuiltinAgentPromptVersion.builtin_agent_id == BuiltinAgent.id)
+            .where(BuiltinAgent.agent_code == agent_code)
+            .order_by(BuiltinAgentPromptVersion.is_default.desc(), BuiltinAgentPromptVersion.version.desc())
+            .limit(1)
+        )
+        res = await db.execute(stmt)
+        v = res.scalar_one_or_none()
+        return int(v) if v else 1
+    except Exception:
+        return 1
 
 
 async def _run_scene_test_chat(

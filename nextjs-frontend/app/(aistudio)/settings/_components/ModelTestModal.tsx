@@ -1,8 +1,8 @@
 "use client";
 
 import { useMemo, useRef, useState, type RefObject } from "react";
-import { ArrowUp, Check, Download, Plus, X, ZoomIn } from "lucide-react";
-import { MentionPopup } from "@/components/settings/MentionPopup";
+import { Download, X, ZoomIn } from "lucide-react";
+import { ImagePromptComposer } from "@/components/aistudio/ImagePromptComposer";
 import type { AICategory } from "@/components/actions/ai-model-actions";
 
 function parseResolution(value: string): { w: number; h: number } | null {
@@ -161,7 +161,6 @@ export function ModelTestModal(props: {
     return computeResolutionFrom({ aspectKey, baseSize, useCustom, customW, customH });
   }, [aspectOptions, aspectKey, baseSize, customH, customW, useCustom]);
 
-  const uploadInputRef = useRef<HTMLInputElement | null>(null);
   const [imagePreview, setImagePreview] = useState<{
     src: string;
     downloadHref: string;
@@ -509,258 +508,153 @@ export function ModelTestModal(props: {
                   </button>
                 </div>
               ) : (activeModelTab as AICategory) === "image" || (activeModelTab as AICategory) === "video" ? (
-                <div className="rounded-2xl border border-border bg-background/40 p-0 overflow-hidden relative">
-                  <div className="flex flex-col">
-                    <div className="px-4 pt-4 pb-2">
-                      <div className="flex items-center gap-2 overflow-x-auto pb-2">
-                        {modelTestSessionImageAttachmentNodeIds.map((id, idx) => {
-                          const n = idx + 1;
-                          const url = `/api/vfs/nodes/${encodeURIComponent(id)}/download`;
-                          const isSelected = parseMentionIndices(modelTestImagePrompt).includes(n);
-                          return (
-                            <div
-                              key={id}
-                              className={`relative group h-14 w-14 rounded-lg overflow-hidden border-2 shrink-0 cursor-pointer transition-all ${
-                                isSelected ? "border-blue-500 bg-blue-50 dark:bg-blue-900/20" : "border-gray-200 dark:border-gray-700 hover:border-blue-300"
-                              }`}
-                              onClick={() => setImagePreview({ src: url, downloadHref: url, title: `参考图 @${n}` })}
-                              title="点击放大预览"
-                            >
-                              <img src={url} alt="ref" className="h-full w-full object-cover" />
-                              <button
-                                type="button"
-                                className="absolute bottom-0 left-0 right-0 bg-black/70 text-white text-[10px] py-0.5 text-center font-mono hover:bg-black/80 transition-colors"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  insertModelTestImageMention(n);
-                                }}
-                                disabled={modelTestSubmitting}
-                                aria-label={`插入 @${n}`}
-                              >
-                                @{n}
-                              </button>
-                              {isSelected && (
-                                <div className="absolute top-1 left-1 bg-blue-500 text-white rounded-full p-0.5 shadow-lg">
-                                  <Check size={10} strokeWidth={3} />
-                                </div>
-                              )}
-                              <div className="absolute inset-0 bg-blue-500/0 group-hover:bg-blue-500/10 transition-colors" />
-                              <button
-                                type="button"
-                                className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg hover:bg-red-600"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  removeModelTestSessionImageAttachment(id);
-                                }}
-                                disabled={modelTestSubmitting}
-                                title="移除"
-                              >
-                                <X size={10} />
-                              </button>
-                            </div>
-                          );
-                        })}
-
-                        <input
-                          ref={uploadInputRef}
-                          type="file"
-                          accept="image/*"
-                          multiple
-                          className="hidden"
-                          disabled={modelTestSubmitting}
+                <ImagePromptComposer
+                  prompt={modelTestImagePrompt}
+                  onPromptChange={handlePromptChange}
+                  onPromptKeyDown={(e) => {
+                    if (e.key === "Escape") {
+                      setMentionPopupOpen(false);
+                      return;
+                    }
+                    if (e.key !== "Enter") return;
+                    if (e.shiftKey) return;
+                    e.preventDefault();
+                    void submitModelTestImage();
+                  }}
+                  promptRef={modelTestImagePromptRef}
+                  images={modelTestSessionImageAttachmentNodeIds.map((id, idx) => ({
+                    id,
+                    url: `/api/vfs/nodes/${encodeURIComponent(id)}/download`,
+                    index: idx + 1,
+                    isSelected: parseMentionIndices(modelTestImagePrompt).includes(idx + 1),
+                  }))}
+                  mentionPopupOpen={mentionPopupOpen}
+                  mentionPosition={mentionPosition}
+                  onMentionSelect={handleMentionSelect}
+                  onCloseMention={() => setMentionPopupOpen(false)}
+                  onUpload={addModelTestImages}
+                  onPreview={(url, title) =>
+                    setImagePreview({
+                      src: url,
+                      downloadHref: url,
+                      title,
+                    })
+                  }
+                  onInsertMention={insertModelTestImageMention}
+                  onRemoveAttachment={removeModelTestSessionImageAttachment}
+                  disabled={modelTestSubmitting}
+                  submitDisabled={modelTestSubmitting || !modelTestImagePrompt.trim()}
+                  onSubmit={() => void submitModelTestImage()}
+                  placeholder={(activeModelTab as AICategory) === "video" ? "请输入视频生成提示词，输入 @ 引用参考图..." : "请描述你想生成的图片，输入 @ 引用参考图"}
+                  generationLabel={(activeModelTab as AICategory) === "video" ? "视频生成" : "图片生成"}
+                  modelLabel={(() => {
+                    const cfg = aiModelConfigs.find((c) => c.id === modelTestModelConfigId);
+                    if (!cfg) return "未选择模型";
+                    return `${cfg.model}`;
+                  })()}
+                  attachmentCountLabel={`参考 ${modelTestSessionImageAttachmentNodeIds.length}/14`}
+                  leftControls={
+                    <>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <div className="text-xs text-textMuted">宽高比</div>
+                        <select
+                          value={aspectKey}
                           onChange={(e) => {
-                            const files = e.target.files;
-                            addModelTestImages(files);
-                            e.target.value = "";
+                            const nextAspectKey = e.target.value;
+                            setUseCustom(false);
+                            setAspectKey(nextAspectKey);
+                            setModelTestImageResolution(
+                              computeResolutionFrom({ aspectKey: nextAspectKey, baseSize, useCustom: false, customW, customH }),
+                            );
                           }}
-                        />
+                          className="bg-surfaceHighlight border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none"
+                          disabled={modelTestSubmitting}
+                        >
+                          {aspectOptions.map((o) => (
+                            <option key={o.key} value={o.key}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </select>
+                        <div className="text-xs text-textMuted">分辨率</div>
+                        <select
+                          value={String(baseSize)}
+                          onChange={(e) => {
+                            const nextBaseSize = Number(e.target.value);
+                            setUseCustom(false);
+                            setBaseSize(nextBaseSize);
+                            setModelTestImageResolution(
+                              computeResolutionFrom({ aspectKey, baseSize: nextBaseSize, useCustom: false, customW, customH }),
+                            );
+                          }}
+                          className="bg-surfaceHighlight border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none"
+                          disabled={modelTestSubmitting}
+                        >
+                          {[512, 768, 1024, 1536, 2048].map((s) => (
+                            <option key={s} value={String(s)}>
+                              {s}
+                            </option>
+                          ))}
+                        </select>
                         <button
                           type="button"
-                          className="h-14 w-14 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-600 hover:border-blue-400 dark:hover:border-blue-500 flex items-center justify-center cursor-pointer transition-colors group shrink-0"
-                          onClick={() => uploadInputRef.current?.click()}
+                          className="px-3 py-1.5 rounded-lg border border-border bg-surfaceHighlight/40 hover:bg-surfaceHighlight/60 text-xs font-bold text-textMain transition-colors"
+                          onClick={() => {
+                            setUseCustom(false);
+                            setModelTestImageResolution(
+                              computeResolutionFrom({ aspectKey, baseSize, useCustom: false, customW, customH }),
+                            );
+                          }}
                           disabled={modelTestSubmitting}
-                          aria-label="上传参考图"
                         >
-                          <Plus size={16} className="text-gray-400 group-hover:text-blue-500 transition-colors" />
+                          应用 {computedResolution}
                         </button>
                       </div>
-                      <div className="text-[11px] text-textMuted">
-                        参考图最多 14 张，点击缩略图可插入对应的 @ 序号；也可在输入框中键入 @ 选择。
-                      </div>
-                    </div>
-
-                    <div className="p-4 relative">
-                      <textarea
-                        ref={modelTestImagePromptRef}
-                        value={modelTestImagePrompt}
-                        onChange={handlePromptChange}
-                        onKeyDown={(e) => {
-                          if (e.key === "Escape") {
-                            setMentionPopupOpen(false);
-                            return;
-                          }
-                          if (e.key !== "Enter") return;
-                          if (e.shiftKey) return;
-                          e.preventDefault();
-                          void submitModelTestImage();
-                        }}
-                        className="w-full bg-transparent outline-none text-sm text-textMain placeholder:text-textMuted resize-none min-h-[80px]"
-                        placeholder={(activeModelTab as AICategory) === "video" ? "请输入视频生成提示词，输入 @ 引用参考图..." : "请描述你想生成的图片，输入 @ 引用参考图"}
-                        disabled={modelTestSubmitting}
-                      />
-
-                      <MentionPopup
-                        isOpen={mentionPopupOpen}
-                        position={mentionPosition || { top: 0, left: 0 }}
-                        images={modelTestSessionImageAttachmentNodeIds.map((id, idx) => ({
-                          id,
-                          url: `/api/vfs/nodes/${encodeURIComponent(id)}/download`,
-                          index: idx + 1,
-                          isSelected: parseMentionIndices(modelTestImagePrompt).includes(idx + 1),
-                        }))}
-                        onSelect={handleMentionSelect}
-                        onClose={() => setMentionPopupOpen(false)}
-                        onUpload={addModelTestImages}
-                      />
-                    </div>
-
-                    <div className="px-4 pb-4 flex items-center justify-between gap-3 border-t border-border pt-3 mt-2">
-                      <div className="flex-1 min-w-0 flex flex-wrap items-center gap-2">
-                        <div className="px-3 py-2 rounded-xl border border-border bg-surfaceHighlight/40 text-xs font-bold text-textMain">
-                          {(activeModelTab as AICategory) === "video" ? "视频生成" : "图片生成"}
-                        </div>
-                        <div className="px-3 py-2 rounded-xl border border-border bg-surfaceHighlight/40 text-xs font-bold text-textMain">
-                          {(() => {
-                            const cfg = aiModelConfigs.find((c) => c.id === modelTestModelConfigId);
-                            if (!cfg) return "未选择模型";
-                            return `${cfg.model}`;
-                          })()}
-                        </div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <div className="text-xs text-textMuted">宽高比</div>
-                          <select
-                            value={aspectKey}
+                      <details className="rounded-xl border border-border bg-surfaceHighlight/20 px-3 py-2">
+                        <summary className="cursor-pointer text-xs font-bold text-textMain select-none">高级</summary>
+                        <div className="mt-2 flex items-center gap-2 flex-wrap">
+                          <div className="text-xs text-textMuted">W</div>
+                          <input
+                            value={String(customW || "")}
                             onChange={(e) => {
-                              const nextAspectKey = e.target.value;
-                              setUseCustom(false);
-                              setAspectKey(nextAspectKey);
-                              setModelTestImageResolution(
-                                computeResolutionFrom({ aspectKey: nextAspectKey, baseSize, useCustom: false, customW, customH }),
-                              );
+                              const v = Number(e.target.value || 0);
+                              setCustomW(v);
+                              setUseCustom(true);
                             }}
-                            className="bg-surfaceHighlight border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none"
+                            className="w-24 bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none font-mono"
+                            type="number"
+                            min={64}
+                            step={64}
                             disabled={modelTestSubmitting}
-                          >
-                            {aspectOptions.map((o) => (
-                              <option key={o.key} value={o.key}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </select>
-                          <div className="text-xs text-textMuted">分辨率</div>
-                          <select
-                            value={String(baseSize)}
+                          />
+                          <div className="text-xs text-textMuted">H</div>
+                          <input
+                            value={String(customH || "")}
                             onChange={(e) => {
-                              const nextBaseSize = Number(e.target.value);
-                              setUseCustom(false);
-                              setBaseSize(nextBaseSize);
-                              setModelTestImageResolution(
-                                computeResolutionFrom({ aspectKey, baseSize: nextBaseSize, useCustom: false, customW, customH }),
-                              );
+                              const v = Number(e.target.value || 0);
+                              setCustomH(v);
+                              setUseCustom(true);
                             }}
-                            className="bg-surfaceHighlight border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none"
+                            className="w-24 bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none font-mono"
+                            type="number"
+                            min={64}
+                            step={64}
                             disabled={modelTestSubmitting}
-                          >
-                            {[512, 768, 1024, 1536, 2048].map((s) => (
-                              <option key={s} value={String(s)}>
-                                {s}
-                              </option>
-                            ))}
-                          </select>
+                          />
                           <button
                             type="button"
                             className="px-3 py-1.5 rounded-lg border border-border bg-surfaceHighlight/40 hover:bg-surfaceHighlight/60 text-xs font-bold text-textMain transition-colors"
-                            onClick={() => {
-                              setUseCustom(false);
-                              setModelTestImageResolution(
-                                computeResolutionFrom({ aspectKey, baseSize, useCustom: false, customW, customH }),
-                              );
-                            }}
-                            disabled={modelTestSubmitting}
+                            onClick={() => setModelTestImageResolution(computedResolution)}
+                            disabled={modelTestSubmitting || !(customW > 0 && customH > 0)}
                           >
-                            应用 {computedResolution}
+                            设置为 {computedResolution}
                           </button>
+                          <div className="text-[11px] text-textMuted">当前：{modelTestImageResolution || "auto"}</div>
                         </div>
-                        <details className="rounded-xl border border-border bg-surfaceHighlight/20 px-3 py-2">
-                          <summary className="cursor-pointer text-xs font-bold text-textMain select-none">高级</summary>
-                          <div className="mt-2 flex items-center gap-2 flex-wrap">
-                            <div className="text-xs text-textMuted">W</div>
-                            <input
-                              value={String(customW || "")}
-                              onChange={(e) => {
-                                const v = Number(e.target.value || 0);
-                                setCustomW(v);
-                                setUseCustom(true);
-                              }}
-                              className="w-24 bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none font-mono"
-                              type="number"
-                              min={64}
-                              step={64}
-                              disabled={modelTestSubmitting}
-                            />
-                            <div className="text-xs text-textMuted">H</div>
-                            <input
-                              value={String(customH || "")}
-                              onChange={(e) => {
-                                const v = Number(e.target.value || 0);
-                                setCustomH(v);
-                                setUseCustom(true);
-                              }}
-                              className="w-24 bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none font-mono"
-                              type="number"
-                              min={64}
-                              step={64}
-                              disabled={modelTestSubmitting}
-                            />
-                            <button
-                              type="button"
-                              className="px-3 py-1.5 rounded-lg border border-border bg-surfaceHighlight/40 hover:bg-surfaceHighlight/60 text-xs font-bold text-textMain transition-colors"
-                              onClick={() => setModelTestImageResolution(computedResolution)}
-                              disabled={modelTestSubmitting || !(customW > 0 && customH > 0)}
-                            >
-                              设置为 {computedResolution}
-                            </button>
-                            <div className="text-[11px] text-textMuted">当前：{modelTestImageResolution || "auto"}</div>
-                          </div>
-                        </details>
-                        <div className="px-3 py-2 rounded-xl border border-border bg-surfaceHighlight/40 text-xs font-bold text-textMain">
-                          参考 {modelTestSessionImageAttachmentNodeIds.length}/14
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-3">
-                        <button
-                          type="button"
-                          className="h-10 w-10 rounded-full bg-surfaceHighlight hover:bg-surface border border-border text-textMain flex items-center justify-center transition-colors disabled:opacity-60"
-                          onClick={() => uploadInputRef.current?.click()}
-                          disabled={modelTestSubmitting}
-                          aria-label="上传参考图"
-                        >
-                          <Plus size={18} />
-                        </button>
-                        <div className="text-xs text-textMuted whitespace-nowrap">1/张</div>
-                        <button
-                          type="button"
-                          onClick={() => void submitModelTestImage()}
-                          className="h-10 w-10 rounded-full bg-primary hover:bg-blue-600 disabled:opacity-60 text-white flex items-center justify-center transition-colors"
-                          disabled={modelTestSubmitting || !modelTestImagePrompt.trim()}
-                        >
-                          <ArrowUp size={18} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                      </details>
+                    </>
+                  }
+                />
               ) : (
                 <div className="text-sm text-textMuted p-4">请选择测试类型</div>
               )}

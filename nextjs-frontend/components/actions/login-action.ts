@@ -76,11 +76,15 @@ export async function login(prevState: unknown, formData: FormData) {
     if (typeof token !== "string") {
       return { server_validation_error: "登录失败：未收到 access_token" };
     }
-    (await cookies()).set("accessToken", token, {
+    
+    // Set cookie
+    const cookieStore = await cookies();
+    cookieStore.set("accessToken", token, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
+      maxAge: 60 * 60 * 24 * 7, // 7 days
     });
   } catch (err) {
     const msg = getErrorMessage(err);

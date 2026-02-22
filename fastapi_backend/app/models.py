@@ -377,6 +377,8 @@ class Asset(Base):
     type = Column(asset_type_enum, nullable=False)
     category = Column(String(50), nullable=True)
     lifecycle_status = Column(String(20), nullable=False, server_default=text("'draft'"))
+    source = Column(String(50), nullable=False, server_default=text("'manual'"))
+    script_id = Column(UUID(as_uuid=True), ForeignKey("scripts.id", ondelete="SET NULL"), nullable=True)
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 

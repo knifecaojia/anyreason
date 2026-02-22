@@ -20,23 +20,32 @@ export async function POST(request: Request, context: { params: Promise<{ sessio
   const { sessionId } = await context.params;
   const payload = await request.text();
 
-  const upstream = await fetch(
-    `${getApiBaseUrl()}/api/v1/ai/chat/sessions/${sessionId}/messages`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
-      },
-      body: payload,
-      cache: "no-store",
-    }
-  );
+  const url = `${getApiBaseUrl()}/api/v1/ai/chat/sessions/${sessionId}/messages`;
+  console.log(`Proxying request to: ${url}`);
 
-  const headers = new Headers();
-  headers.set("content-type", upstream.headers.get("content-type") || "text/event-stream");
-  headers.set("cache-control", "no-cache");
-  headers.set("x-accel-buffering", "no");
+  try {
+    const upstream = await fetch(
+      url,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "Connection": "close",
+        },
+        body: payload,
+        cache: "no-store",
+      }
+    );
 
-  return new Response(upstream.body, { status: upstream.status, headers });
+    const headers = new Headers();
+    headers.set("content-type", upstream.headers.get("content-type") || "text/event-stream");
+    headers.set("cache-control", "no-cache");
+    headers.set("x-accel-buffering", "no");
+
+    return new Response(upstream.body, { status: upstream.status, headers });
+  } catch (error) {
+    console.error("Proxy fetch error:", error);
+    return new NextResponse(JSON.stringify({ error: String(error) }), { status: 500 });
+  }
 }

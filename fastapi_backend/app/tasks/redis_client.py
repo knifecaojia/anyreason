@@ -1,20 +1,54 @@
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 
+from redis.asyncio import ConnectionPool
 from redis.asyncio import Redis
-from redis.asyncio import from_url
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 
-@lru_cache(maxsize=1)
+# 全局连接池，最大连接数限制为 50，避免耗尽端口
+_pool: ConnectionPool | None = None
+
+
+def get_connection_pool() -> ConnectionPool:
+    global _pool
+    if _pool is None:
+        logger.info(f"Creating Redis connection pool: {settings.REDIS_URL}")
+        _pool = ConnectionPool.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            max_connections=50,  # 限制最大连接数
+            socket_connect_timeout=5,
+            socket_timeout=30,
+            retry_on_timeout=True,
+            health_check_interval=30,
+        )
+    return _pool
+
+
+# @lru_cache(maxsize=1)
 def get_redis() -> Redis:
-    return from_url(
+    """
+    获取 Redis 客户端实例。
+    复用全局连接池，确保连接数可控。
+    """
+    return Redis.from_url(
         settings.REDIS_URL,
         decode_responses=True,
-        socket_connect_timeout=2,
-        socket_timeout=15,
-        retry_on_timeout=True,
-        health_check_interval=30,
+        password=settings.REDIS_PASSWORD if hasattr(settings, "REDIS_PASSWORD") else "redis", # 显式传递密码
     )
+
+
+async def close_redis() -> None:
+    """
+    显式关闭 Redis 连接池，释放资源。
+    """
+    global _pool
+    if _pool is not None:
+        logger.info("Closing Redis connection pool...")
+        await _pool.disconnect()
+        _pool = None

@@ -1856,6 +1856,18 @@ export default function Page() {
     }
   };
 
+  const batchDeleteModelConfigs = async (ids: string[]) => {
+    if (!window.confirm(`确认删除选中的 ${ids.length} 项模型配置？`)) return;
+    setAiConfigError(null);
+    try {
+      await Promise.all(ids.map((id) => aiAdminDeleteModelConfig(id)));
+      await refreshAIModelConfig();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "批量删除失败";
+      setAiConfigError(msg);
+    }
+  };
+
   const submitUpsertBinding = async () => {
     if (!bindingForm.key.trim()) {
       setAiConfigError("用途 key 不能为空");
@@ -2066,6 +2078,7 @@ export default function Page() {
             aiConfigLoading={aiConfigLoading}
             aiModelConfigs={aiModelConfigs}
             deleteModelConfig={deleteModelConfig}
+            batchDeleteModelConfigs={batchDeleteModelConfigs}
             bindingForm={bindingForm}
             setBindingForm={setBindingForm}
             submitUpsertBinding={submitUpsertBinding}

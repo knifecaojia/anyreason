@@ -16,6 +16,12 @@ def _transform_tasks(items):
 
 
 async def create_task(*, db: AsyncSession, user_id: UUID, task_data: dict) -> Task:
+    # Handle project_id if present in task_data but not in model constructor
+    # Assuming Task model might not have project_id yet or we need to pass it
+    # Check if Task model has project_id column. If so, it should be in task_data.
+    # If not, we might need to remove it or update the model.
+    # Let's assume the user wants to add project_id support to tasks.
+    # But first, let's just pass task_data as is, assuming keys match model columns.
     row = Task(**task_data, user_id=user_id)
     db.add(row)
     await db.commit()

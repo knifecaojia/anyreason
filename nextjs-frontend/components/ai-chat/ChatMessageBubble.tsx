@@ -10,12 +10,14 @@ interface ChatMessageBubbleProps {
   message: AIChatMessage;
   onExecutePlans?: (plans: PlanData[]) => void;
   isExecutingPlans?: boolean;
+  applyResultsByPlanId?: Record<string, unknown>;
 }
 
 export function ChatMessageBubble({
   message,
   onExecutePlans,
   isExecutingPlans,
+  applyResultsByPlanId,
 }: ChatMessageBubbleProps) {
   const isUser = message.role === "user";
   const hasPlans = message.plans && message.plans.length > 0;
@@ -54,6 +56,7 @@ export function ChatMessageBubble({
               plans={message.plans!}
               onExecute={onExecutePlans}
               isExecuting={isExecutingPlans}
+              applyResultsByPlanId={applyResultsByPlanId}
             />
           </div>
         )}
@@ -75,6 +78,7 @@ interface ChatMessageListProps {
   streamingContent?: string;
   streamingPlans?: PlanData[];
   streamingTrace?: AIChatMessage["trace"];
+  applyResultsByPlanId?: Record<string, unknown>;
 }
 
 export function ChatMessageList({
@@ -84,6 +88,7 @@ export function ChatMessageList({
   streamingContent,
   streamingPlans,
   streamingTrace,
+  applyResultsByPlanId,
 }: ChatMessageListProps) {
   return (
     <div className="space-y-4">
@@ -93,6 +98,7 @@ export function ChatMessageList({
           message={msg}
           onExecutePlans={onExecutePlans}
           isExecutingPlans={isExecutingPlans}
+          applyResultsByPlanId={applyResultsByPlanId}
         />
       ))}
 
@@ -108,6 +114,7 @@ export function ChatMessageList({
           }}
           onExecutePlans={onExecutePlans}
           isExecutingPlans={isExecutingPlans}
+          applyResultsByPlanId={applyResultsByPlanId}
         />
       )}
     </div>

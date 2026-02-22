@@ -16,8 +16,6 @@ import {
   FileText,
   ChevronDown,
   Film,
-  PlusCircle,
-  List,
 
   Cpu,
   Users,
@@ -314,19 +312,12 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
                 </p>
               )}
 
-              <SidebarGroup
+              <SidebarItem
+                to="/scripts"
                 icon={FileText}
                 label="剧本管理"
                 collapsed={collapsed}
-                active={pathname.includes("/scripts")}
-              >
-                <SubItem to="/scripts?mode=list" icon={List} label="剧本清单" />
-                <SubItem
-                  to="/scripts?mode=write"
-                  icon={PlusCircle}
-                  label="剧本创作"
-                />
-              </SidebarGroup>
+              />
 
               <SidebarItem
                 to="/assets"

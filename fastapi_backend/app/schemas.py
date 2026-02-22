@@ -105,12 +105,24 @@ class SceneUpdate(BaseModel):
     time_of_day: str | None = None
 
 
+class AssetResourceRead(BaseModel):
+    id: UUID
+    variant_id: UUID
+    res_type: str
+    minio_bucket: str
+    minio_key: str
+    meta_data: dict[str, Any] = Field(default_factory=dict)
+
+    model_config = {"from_attributes": True}
+
+
 class AssetBrief(BaseModel):
     id: UUID
     asset_id: str
     name: str
     type: str
     category: str | None = None
+    resources: list[AssetResourceRead] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -131,13 +143,16 @@ class AssetVariantRead(BaseModel):
 class AssetRead(BaseModel):
     id: UUID
     project_id: UUID | None = None
+    script_id: UUID | None = None
     asset_id: str
     name: str
     type: str
     category: str | None = None
     lifecycle_status: str
+    source: str
     tags: list[str] = Field(default_factory=list)
     variants: list[AssetVariantRead] = Field(default_factory=list)
+    resources: list[AssetResourceRead] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}
 
@@ -164,6 +179,13 @@ class AssetVariantUpdate(BaseModel):
     attributes: dict[str, Any] | None = None
     prompt_template: str | None = None
     is_default: bool | None = None
+
+
+class AssetResourceCreateRequest(BaseModel):
+    file_node_ids: list[UUID]
+    res_type: str | None = None
+    variant_id: UUID | None = None
+    cover_file_node_id: UUID | None = None
 
 
 class AssetBindingBrief(BaseModel):
