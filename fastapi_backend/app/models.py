@@ -379,6 +379,11 @@ class Asset(Base):
     lifecycle_status = Column(String(20), nullable=False, server_default=text("'draft'"))
     source = Column(String(50), nullable=False, server_default=text("'manual'"))
     script_id = Column(UUID(as_uuid=True), ForeignKey("scripts.id", ondelete="SET NULL"), nullable=True)
+    doc_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
@@ -1393,6 +1398,7 @@ class AIManufacturer(Base):
     category = Column(String(16), nullable=False)
     provider_class = Column(String(128), nullable=True)
     default_base_url = Column(Text, nullable=True)
+    doc_url = Column(Text, nullable=True)
     logo_url = Column(Text, nullable=True)
     description = Column(Text, nullable=True)
     enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
@@ -1431,6 +1437,7 @@ class AIModel(Base):
     code = Column(String(128), nullable=False)
     name = Column(String(128), nullable=False)
     response_format = Column(String(16), nullable=False, server_default=text("'schema'"))
+    param_schema = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     supports_image = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     supports_think = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     supports_tool = Column(Boolean, nullable=False, server_default=text("true"), default=True)

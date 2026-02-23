@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Literal
+from typing import Literal, Any
 
 from pydantic import BaseModel, Field
 
@@ -26,6 +26,13 @@ class AssetDocV1(BaseModel):
     meta: dict = Field(default_factory=dict)
 
 
+class AssetVariantDocV2(BaseModel):
+    variant_code: str | None = None
+    stage_tag: str | None = None
+    attributes: dict[str, Any] | None = None
+    prompt_en: str | None = None
+
+
 class AssetDocV2(BaseModel):
     version: Literal[2] = 2
     type: AssetType
@@ -34,6 +41,7 @@ class AssetDocV2(BaseModel):
     first_appearance_episode: int | None = Field(default=None, ge=1)
     details_md: str = ""
     provenance: dict = Field(default_factory=dict)
+    variants: list[AssetVariantDocV2] = Field(default_factory=list)
 
 
 class EpisodeAssetBindingV1(BaseModel):

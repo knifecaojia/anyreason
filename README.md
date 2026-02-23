@@ -87,3 +87,24 @@ uv run python -m commands.verify_default_admin
 cd .\nextjs-frontend
 pnpm generate-client
 ```
+
+## 媒体生成模型接入指南
+
+本项目已集成 Volcengine, Aliyun, Vidu, Gemini 等多家厂商的媒体生成模型。
+
+### 快速新增新厂商/模型
+
+1.  **数据库配置**: 在 `ai_manufacturers` 和 `ai_models` 表中添加记录。
+    - `ai_models.param_schema`: 必须符合 JSON Schema Draft-07 规范，用于前端动态表单渲染。
+2.  **后端实现**:
+    - 在 `app/ai_gateway/providers/media/` 下创建新的 Provider 类，继承 `MediaProvider`。
+    - 在 `app/ai_gateway/providers/media_factory.py` 中注册新厂商。
+3.  **前端**:
+    - 无需修改代码。前端会自动读取新的 `param_schema` 并渲染表单。
+
+### 已支持厂商
+
+- **Volcengine**: 支持 Doubao 系列模型。
+- **Aliyun**: 支持 Wanxiang 系列模型（含异步轮询）。
+- **Vidu**: 支持视频生成。
+- **Gemini**: 支持 Imagen 系列。

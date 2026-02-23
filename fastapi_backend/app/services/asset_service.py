@@ -6,12 +6,35 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
-from app.models import AssetVariant, FileNode, Script
+from app.models import AssetVariant, FileNode, Script, AssetResource
 from app.repositories import asset_repository
 from app.schemas import AssetRead
 
 
 class AssetService:
+    async def get_resource_for_download(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        asset_id: UUID,
+        resource_id: UUID,
+    ) -> AssetResource | None:
+        asset = await asset_repository.get_asset_for_user(db=db, user_id=user_id, asset_id=asset_id)
+        if not asset:
+            return None
+        
+        stmt = (
+            select(AssetResource)
+            .join(AssetVariant, AssetResource.variant_id == AssetVariant.id)
+            .where(
+                AssetResource.id == resource_id,
+                AssetVariant.asset_entity_id == asset.id
+            )
+        )
+        res = await db.execute(stmt)
+        return res.scalars().first()
+
     async def get_asset_full(
         self,
         *,
@@ -29,6 +52,7 @@ class AssetService:
             id=asset.id,
             project_id=asset.project_id,
             script_id=asset.script_id,
+            doc_node_id=asset.doc_node_id,
             asset_id=asset.asset_id,
             name=asset.name,
             type=str(asset.type),
@@ -91,6 +115,7 @@ class AssetService:
                 id=asset.id,
                 project_id=asset.project_id,
                 script_id=asset.script_id,
+                doc_node_id=asset.doc_node_id,
                 asset_id=asset.asset_id,
                 name=asset.name,
                 type=str(asset.type),
@@ -157,6 +182,50 @@ class AssetService:
                 tags=tags,
             )
 
+        await db.commit()
+        return await self.get_asset_full(db=db, user_id=user_id, asset_id=asset.id)
+
+    async def create_asset(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        name: str,
+        type: str,
+        project_id: UUID | None = None,
+        script_id: UUID | None = None,
+        category: str | None = None,
+        source: str = "manual",
+        doc_node_id: UUID | None = None,
+    ) -> AssetRead | None:
+        import uuid
+        # Generate a simple asset_id
+        asset_code = f"A-{uuid.uuid4().hex[:8].upper()}"
+        
+        asset = await asset_repository.create_asset(
+            db=db,
+            asset_id=asset_code,
+            name=name,
+            type=type,
+            project_id=project_id,
+            script_id=script_id,
+            category=category,
+            source=source,
+            doc_node_id=doc_node_id,
+        )
+        
+        # Create default variant
+        await asset_repository.create_variant(
+            db=db,
+            asset_entity_id=asset.id,
+            variant_code="V1",
+            stage_tag=None,
+            age_range=None,
+            attributes={},
+            prompt_template=None,
+            is_default=True,
+        )
+        
         await db.commit()
         return await self.get_asset_full(db=db, user_id=user_id, asset_id=asset.id)
 

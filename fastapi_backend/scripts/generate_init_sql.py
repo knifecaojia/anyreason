@@ -1,40 +1,10 @@
 import os
 import json
-import time
-import random
+import uuid
 
-# Simple Snowflake-like ID generator
-class SnowflakeGenerator:
-    def __init__(self, worker_id=1):
-        self.worker_id = worker_id
-        self.sequence = 0
-        self.last_timestamp = -1
-        self.worker_id_bits = 5
-        self.sequence_bits = 12
-        self.worker_id_shift = self.sequence_bits
-        self.timestamp_left_shift = self.sequence_bits + self.worker_id_bits
-        self.epoch = 1672531200000 # 2023-01-01 00:00:00 UTC
-
-    def next_id(self):
-        timestamp = int(time.time() * 1000)
-        if timestamp < self.last_timestamp:
-            raise Exception("Clock moved backwards")
-        
-        if self.last_timestamp == timestamp:
-            self.sequence = (self.sequence + 1) & 4095
-            if self.sequence == 0:
-                while timestamp <= self.last_timestamp:
-                    timestamp = int(time.time() * 1000)
-        else:
-            self.sequence = 0
-            
-        self.last_timestamp = timestamp
-        
-        return ((timestamp - self.epoch) << self.timestamp_left_shift) | \
-               (self.worker_id << self.worker_id_shift) | \
-               self.sequence
-
-id_gen = SnowflakeGenerator()
+# UUID generator
+def generate_uuid(name: str):
+    return str(uuid.uuid5(uuid.NAMESPACE_DNS, name))
 
 vendors = [
     {
@@ -173,20 +143,13 @@ vendors = [
 sql_statements = []
 
 for v in vendors:
-    # Check if vendor exists logic will be handled by ON CONFLICT in actual SQL, but here we generate INSERTs
-    # Assuming we insert into ai_manufacturers.
-    # Note: ai_manufacturers has columns: id, code, name, category, default_base_url, doc_url (new), etc.
-    # We need to handle 'category' in manufacturer. 
-    # If a vendor has both image and video, we need multiple rows or one row if category is generic?
-    # Spec said unique(code, category).
-    
     categories = set(m['category'] for m in v['models'])
     
     for cat in categories:
-        m_id = id_gen.next_id()
+        m_uuid = generate_uuid(f"{v['code']}-{cat}")
         sql = f"""
 INSERT INTO ai_manufacturers (id, code, name, category, default_base_url, doc_url, enabled, created_at, updated_at)
-VALUES ({m_id}, '{v['code']}', '{v['name']}', '{cat}', '{v['default_base_url']}', '{v['doc_url']}', true, NOW(), NOW())
+VALUES ('{m_uuid}', '{v['code']}', '{v['name']}', '{cat}', '{v['default_base_url']}', '{v['doc_url']}', true, NOW(), NOW())
 ON CONFLICT (code, category) DO UPDATE SET 
     default_base_url = EXCLUDED.default_base_url,
     doc_url = EXCLUDED.doc_url,
@@ -197,18 +160,13 @@ ON CONFLICT (code, category) DO UPDATE SET
         # Models
         for m in v['models']:
             if m['category'] == cat:
-                mod_id = id_gen.next_id()
+                mod_uuid = generate_uuid(f"{v['code']}-{cat}-{m['code']}")
                 param_json = json.dumps(m['param_schema'], ensure_ascii=False)
                 meta_json = json.dumps(m.get('metadata', {}), ensure_ascii=False)
                 
-                # We need to link to the manufacturer. 
-                # Since we don't know the ID if it already exists, we should probably look it up or use a CTE.
-                # But for initialization script, we can assume we just inserted/updated it.
-                # To be safe, we can use a subquery for manufacturer_id.
-                
                 model_sql = f"""
 INSERT INTO ai_models (id, manufacturer_id, code, name, model_metadata, param_schema, enabled, created_at, updated_at)
-SELECT {mod_id}, id, '{m['code']}', '{m['name']}', '{meta_json}'::jsonb, '{param_json}'::jsonb, true, NOW(), NOW()
+SELECT '{mod_uuid}', id, '{m['code']}', '{m['name']}', '{meta_json}'::jsonb, '{param_json}'::jsonb, true, NOW(), NOW()
 FROM ai_manufacturers WHERE code = '{v['code']}' AND category = '{cat}'
 ON CONFLICT (manufacturer_id, code) DO UPDATE SET
     param_schema = EXCLUDED.param_schema,

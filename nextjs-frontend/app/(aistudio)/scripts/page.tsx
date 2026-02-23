@@ -211,6 +211,240 @@ export function AssetDocumentViewer({
   );
 }
 
+import { AssetCard } from "@/components/chat/AssetCard";
+
+function AssetPreviewOverlay({ open, asset, onClose }: { open: boolean; asset: AssetEntity; onClose: () => void }) {
+  const [md, setMd] = useState<string>("");
+  const [loading, setLoading] = useState(false);
+  const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        if (asset.doc_node_id) {
+          const res = await fetch(`/api/vfs/nodes/${asset.doc_node_id}/download`, { cache: "no-store" });
+          if (res.ok) {
+            const text = await res.text();
+            if (!cancelled) setMd(stripMarkdownMetadata(text));
+          }
+        } else {
+          if (!cancelled) setMd("");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, asset.doc_node_id]);
+  if (!open) return null;
+  const thumbs = asset.resources || [];
+  return (
+    <div className="fixed inset-0 z-50 bg-black/85 p-4 flex items-center justify-center" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="w-full max-w-5xl h-[80vh] rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden grid grid-rows-[1fr,140px] gap-0" onClick={(e) => e.stopPropagation()}>
+        <div className="p-4 overflow-auto">
+          <div className="flex items-center justify-between mb-3">
+            <div className="font-bold text-sm text-textMain truncate">{asset.name}</div>
+            <button className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors" onClick={onClose} type="button">
+              关闭
+            </button>
+          </div>
+          {loading ? (
+            <div className="text-sm text-textMuted flex items-center gap-2">
+              <Loader2 size={16} className="animate-spin" /> 加载文档...
+            </div>
+          ) : md ? (
+            <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
+            </div>
+          ) : (
+            <div className="text-xs text-textMuted">无文档内容</div>
+          )}
+        </div>
+        <div className="border-t border-border bg-background/20 overflow-hidden">
+          {thumbs.length === 0 ? (
+            <div className="h-full flex items-center justify-center text-textMuted text-xs">无图片资源</div>
+          ) : (
+            <div className="h-full grid grid-cols-[1fr,280px]">
+              <div className="relative flex items-center justify-center bg-black/30">
+                {selectedUrl ? (
+                  <img src={selectedUrl} alt="预览" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
+                ) : (
+                  <div className="text-xs text-textMuted">点击右侧缩略图进行预览</div>
+                )}
+              </div>
+              <div className="p-2 overflow-auto bg-background/40">
+                <div className="grid grid-cols-3 gap-2">
+                  {thumbs.map((r) => (
+                    <div key={r.id} className="group relative rounded-lg overflow-hidden border border-border bg-black/20">
+                      <button className="w-full h-24" onClick={() => setSelectedUrl(r.url)} title={r.filename || ""}>
+                        <img src={r.url} alt={r.filename || ""} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
+                      </button>
+                      <a href={r.url} download className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
+                        下载
+                      </a>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+type AssetEntity = {
+  id: string;
+  name: string;
+  type: string;
+  thumbnail: string;
+  tags: string[];
+  doc_node_id?: string;
+  resources?: { id: string; url: string; filename?: string }[];
+};
+
+async function listScriptAssets(scriptId: string): Promise<AssetEntity[]> {
+  const res = await fetch(`/api/assets?script_id=${encodeURIComponent(scriptId)}`, { cache: "no-store" });
+  if (!res.ok) return [];
+  const json = await res.json();
+  const list = Array.isArray(json.data) ? json.data : [];
+  return list.map((a: any) => ({
+    id: a.id,
+    name: a.name,
+    type: a.type?.toLowerCase() || "character",
+    thumbnail: a.resources?.[0]?.minio_key ? `/api/assets/${a.id}/resources/${a.resources[0].id}/file` : "",
+    tags: Array.isArray(a.tags) ? a.tags : [],
+    doc_node_id: a.doc_node_id,
+    resources: Array.isArray(a.resources)
+      ? a.resources.map((r: any) => ({
+          id: r.id,
+          url: `/api/assets/${a.id}/resources/${r.id}/file`,
+          filename: r.filename || r.name || ""
+        }))
+      : []
+  }));
+}
+
+function AssetEntityCard({ asset, onClick, onOpenDoc }: { asset: AssetEntity; onClick: () => void; onOpenDoc: () => void }) {
+  const [showPreview, setShowPreview] = useState(false);
+  const [docPreview, setDocPreview] = useState<string | null>(null);
+  const [docLoading, setDocLoading] = useState(false);
+  useEffect(() => {
+    if (asset.thumbnail || !asset.doc_node_id) {
+      setDocPreview(null);
+      setDocLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setDocLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/vfs/nodes/${asset.doc_node_id}/download`, { cache: "no-store" });
+        if (!res.ok) {
+          if (!cancelled) setDocPreview(null);
+        } else {
+          const text = await res.text();
+          if (!cancelled) setDocPreview(stripMarkdownMetadata(text));
+        }
+      } catch {
+        if (!cancelled) setDocPreview(null);
+      } finally {
+        if (!cancelled) setDocLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [asset.thumbnail, asset.doc_node_id]);
+
+  return (
+    <>
+    <div className="group relative flex flex-col rounded-xl border border-border bg-gradient-to-br from-surface/80 to-surface/40 overflow-hidden hover:border-primary/50 transition-all hover:shadow-lg cursor-pointer h-56">
+      <div className="flex-1 relative bg-black/20" onClick={onClick}>
+        {asset.thumbnail ? (
+          <img 
+            src={asset.thumbnail} 
+            alt={asset.name} 
+            className="w-full h-full object-cover transition-transform group-hover:scale-105"
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowPreview(true);
+            }}
+          />
+        ) : docPreview ? (
+          <div className="absolute inset-0 p-2 overflow-hidden">
+            <div className="markdown-body prose prose-invert prose-xs max-w-none text-[10px] leading-relaxed opacity-80 pointer-events-none select-none">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{docPreview}</ReactMarkdown>
+            </div>
+            <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
+          </div>
+        ) : (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-textMuted opacity-50">
+            {docLoading ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={24} />}
+            <span className="text-[10px] mt-1">{docLoading ? "加载预览..." : "无预览图"}</span>
+          </div>
+        )}
+        <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+           <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/60 text-white uppercase backdrop-blur-sm">
+             {asset.type}
+           </span>
+        </div>
+      </div>
+      
+      <div className="p-3 border-t border-border/50 bg-surface/60 backdrop-blur-sm flex flex-col gap-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <div className="font-bold text-sm text-textMain truncate" title={asset.name}>
+            {asset.name}
+          </div>
+          {asset.doc_node_id && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenDoc();
+              }}
+              className="p-1 rounded hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors"
+              title="查看设定文档"
+            >
+              <FileText size={14} />
+            </button>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-1 h-5 overflow-hidden">
+          {asset.tags.slice(0, 3).map((tag, i) => (
+            <span key={i} className="text-[9px] px-1.5 py-0.5 rounded bg-surfaceHighlight text-textMuted truncate max-w-[60px]">
+              {tag}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+
+      {showPreview && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-200"
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowPreview(false);
+          }}
+        >
+          <button className="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors">
+            <X size={24} />
+          </button>
+          <img 
+            src={asset.thumbnail} 
+            alt={asset.name} 
+            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
+          />
+        </div>
+      )}
+    </>
+  );
+}
 function MarkdownCard({ node, onClick, onDelete }: { node: VfsNode; onClick: () => void; onDelete?: () => void }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -439,6 +673,9 @@ export default function Page() {
   const [scriptStats, setScriptStats] = useState<ScriptStats | null>(null);
   const [scriptStatsLoading, setScriptStatsLoading] = useState(false);
   const [scriptStatsError, setScriptStatsError] = useState<string | null>(null);
+  const [episodeMenuOpen, setEpisodeMenuOpen] = useState(false);
+  const [selectedEpisodeIds, setSelectedEpisodeIds] = useState<string[]>([]);
+  const UNASSIGNED_ID = "__UNASSIGNED__";
 
   const activeEpisode = useMemo(() => episodes.find((e) => e.id === activeEpisodeId) || null, [episodes, activeEpisodeId]);
   const activeScript = useMemo(() => scripts.find((s) => s.id === scriptId) || null, [scripts, scriptId]);
@@ -532,6 +769,7 @@ export default function Page() {
 
   const [assetRootNodes, setAssetRootNodes] = useState<VfsNode[]>([]);
   const [assetLoading, setAssetLoading] = useState(false);
+  const [assetEntities, setAssetEntities] = useState<AssetEntity[]>([]);
   const [assetExpanded, setAssetExpanded] = useState<Record<string, boolean>>({});
   const [assetChildren, setAssetChildren] = useState<Record<string, VfsNode[]>>({});
 
@@ -540,6 +778,8 @@ export default function Page() {
   const [viewerLoading, setViewerLoading] = useState(false);
   const [viewerContent, setViewerContent] = useState("");
   const [viewerNode, setViewerNode] = useState<VfsNode | null>(null);
+  const [assetPreviewOpen, setAssetPreviewOpen] = useState(false);
+  const [assetPreviewTarget, setAssetPreviewTarget] = useState<AssetEntity | null>(null);
 
   const refreshHierarchy = async (targetScriptId: string) => {
     setEpisodesLoading(true);
@@ -780,13 +1020,20 @@ export default function Page() {
     (async () => {
       if (!scriptId) {
         setAssetRootNodes([]);
+        setAssetEntities([]);
         setAssetExpanded({});
         setAssetChildren({});
         return;
       }
       setAssetLoading(true);
       try {
-        const allNodes = await vfsListNodes({ parent_id: null, project_id: scriptId });
+        const [allNodes, entities] = await Promise.all([
+          vfsListNodes({ parent_id: null, project_id: scriptId }),
+          listScriptAssets(scriptId)
+        ]);
+        
+        setAssetEntities(entities);
+
         const assetsRoot = allNodes.find((n) => n.name === "资产" && n.is_folder);
         if (assetsRoot) {
           const nodes = await vfsListNodes({ parent_id: assetsRoot.id, project_id: scriptId });
@@ -1054,7 +1301,13 @@ export default function Page() {
     if (!scriptId) return;
     setAssetLoading(true);
     try {
-      const allNodes = await vfsListNodes({ parent_id: null, project_id: scriptId });
+      const [allNodes, entities] = await Promise.all([
+        vfsListNodes({ parent_id: null, project_id: scriptId }),
+        listScriptAssets(scriptId)
+      ]);
+      
+      setAssetEntities(entities);
+
       const assetsRoot = allNodes.find((n) => n.name === "资产" && n.is_folder);
       if (assetsRoot) {
         const nodes = await vfsListNodes({ parent_id: assetsRoot.id, project_id: scriptId });
@@ -1915,24 +2168,71 @@ export default function Page() {
             <div className="space-y-6">
               <div className="rounded-2xl border border-border bg-surface overflow-hidden">
                 <div className="px-5 py-4 border-b border-border bg-surfaceHighlight/30 flex items-center justify-between gap-3">
-                  <div className="font-bold text-sm truncate">{activeEpisode ? `${activeEpisode.episode_code} ${activeEpisode.title || ""}` : "请选择一个剧集"}</div>
-                  <div className="flex items-center gap-2">
+                  <div className="font-bold text-sm truncate">剧集选择</div>
+                  <div className="relative">
                     <button
-                      onClick={() => setPickerMode("storyboard")}
-                      disabled={!activeEpisode || tasksRunning.length > 0}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors flex items-center gap-2 disabled:opacity-50"
+                      onClick={() => setEpisodeMenuOpen((v) => !v)}
+                      className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
                       type="button"
                     >
-                      <Sparkles size={14} /> 故事板拆解
+                      选择剧集
                     </button>
-                    <button
-                      onClick={() => setAssetDialogOpen(true)}
-                      disabled={!activeEpisode || tasksRunning.length > 0}
-                      className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors flex items-center gap-2 disabled:opacity-50"
-                      type="button"
-                    >
-                      <Sparkles size={14} /> 提取资产
-                    </button>
+                    {episodeMenuOpen && (
+                      <div className="absolute right-0 mt-2 w-64 rounded-xl border border-border bg-surface shadow-2xl p-2 z-10">
+                        <div className="flex items-center justify-between px-2 py-1">
+                          <div className="text-xs font-bold text-textMain">已选 {selectedEpisodeIds.length} 个</div>
+                          <button
+                            type="button"
+                            className="text-[11px] text-primary"
+                            onClick={() => {
+                              if (selectedEpisodeIds.length === episodes.length + 1) {
+                                setSelectedEpisodeIds([]);
+                              } else {
+                                setSelectedEpisodeIds([...episodes.map((e) => e.id), UNASSIGNED_ID]);
+                              }
+                            }}
+                          >
+                            全选/清空
+                          </button>
+                        </div>
+                        <div className="max-h-64 overflow-auto space-y-1">
+                          <label className="flex items-center gap-2 px-2 py-1 text-xs">
+                            <input
+                              type="checkbox"
+                              checked={selectedEpisodeIds.includes(UNASSIGNED_ID)}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setSelectedEpisodeIds((prev) => {
+                                  const set = new Set(prev);
+                                  if (checked) set.add(UNASSIGNED_ID);
+                                  else set.delete(UNASSIGNED_ID);
+                                  return Array.from(set);
+                                });
+                              }}
+                            />
+                            <span>未分集</span>
+                          </label>
+                          {episodes.map((ep) => (
+                            <label key={ep.id} className="flex items-center gap-2 px-2 py-1 text-xs">
+                              <input
+                                type="checkbox"
+                                checked={selectedEpisodeIds.includes(ep.id)}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setSelectedEpisodeIds((prev) => {
+                                    const set = new Set(prev);
+                                    if (checked) set.add(ep.id);
+                                    else set.delete(ep.id);
+                                    return Array.from(set);
+                                  });
+                                }}
+                              />
+                              <span className="truncate">EP{String(ep.episode_number).padStart(3, "0")} {ep.title || ""}</span>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div className="p-4">
@@ -2038,10 +2338,33 @@ export default function Page() {
                               ) : assetRootNodes.length === 0 ? (
                                 <div className="text-sm text-textMuted">暂无内容</div>
                               ) : (
-                                <div className="space-y-2">
-                                  {assetRootNodes.map((n) =>
-                                    n.is_folder ? (
-                                      <div key={n.id} className="rounded-lg border border-border bg-background/30">
+                                <div className="space-y-4">
+                                  {/* Asset Entities */}
+                                  {assetEntities.length > 0 && (
+                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                                      {assetEntities.map((entity) => (
+                                        <AssetEntityCard
+                                          key={entity.id}
+                                          asset={entity}
+                                          onClick={() => {
+                                            setAssetPreviewTarget(entity);
+                                            setAssetPreviewOpen(true);
+                                          }}
+                                          onOpenDoc={() => {
+                                            if (entity.doc_node_id) {
+                                              void openNode({ id: entity.doc_node_id, name: entity.name, is_folder: false, size_bytes: 0, created_at: "", updated_at: "" });
+                                            }
+                                          }}
+                                        />
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {/* Original VFS Folder View (Optional, kept for raw file access) */}
+                                  <div className="space-y-2">
+                                    {assetRootNodes.map((n) =>
+                                      n.is_folder ? (
+                                        <div key={n.id} className="rounded-lg border border-border bg-background/30">
                                         <div className="px-3 py-2 flex items-center justify-between gap-2">
                                           <button onClick={() => void toggleAssetFolder(n)} className="text-left text-sm text-textMain truncate hover:text-primary transition-colors" type="button">
                                             {assetExpanded[n.id] ? "▼" : "▶"} {n.name}
@@ -2090,6 +2413,7 @@ export default function Page() {
                                     )
                                   )}
                                 </div>
+                              </div>
                               )}
                             </div>
                           )}
@@ -2224,6 +2548,14 @@ export default function Page() {
         generateHref={viewerNode && scriptId ? buildAssetCreateHref(viewerNode.id, scriptId) : null}
         onClose={() => setViewerOpen(false)}
       />
+
+      {assetPreviewTarget && (
+        <AssetPreviewOverlay
+          open={assetPreviewOpen}
+          asset={assetPreviewTarget}
+          onClose={() => setAssetPreviewOpen(false)}
+        />
+      )}
 
       {assetDialogOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">

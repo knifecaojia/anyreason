@@ -223,7 +223,6 @@ export function resolveTargetAssetId({
 }): string | null {
   if (selectedDraftId) return selectedDraftId;
   if (targetAssetId) return targetAssetId;
-  if (assets.length === 1) return assets[0]?.id || null;
   return null;
 }
 
@@ -905,6 +904,16 @@ export default function Page() {
     })();
   }, [mode, publicAssetImageCache]);
 
+  // Auto-resolve asset from source node name
+  useEffect(() => {
+    if (sourceNodeName && !targetAssetId && assets.length > 0) {
+       const derived = deriveAssetIdFromNodeName(sourceNodeName, assets);
+       if (derived) {
+          setSelectedDraftId(derived);
+       }
+    }
+  }, [sourceNodeName, targetAssetId, assets]);
+
   // Load Source Content
   useEffect(() => {
     if (sourceNodeId && mode === "create") {
@@ -1324,12 +1333,9 @@ export default function Page() {
 
   const handleSaveAsset = async () => {
     if (selectedImages.size === 0) return;
-    if (!selectedScriptId) return;
-    const targetId = resolveTargetAssetId({ selectedDraftId, targetAssetId, assets });
-    if (!targetId) {
-      setStudioError("请先选择要绑定的资产卡片");
-      return;
-    }
+    
+    let targetId = resolveTargetAssetId({ selectedDraftId, targetAssetId, assets });
+    
     const chosen = generationHistory.filter((img) => selectedImages.has(img.id) && img.nodeId);
     if (chosen.length === 0) {
       setStudioError("请选择已生成的图片");
@@ -1337,6 +1343,67 @@ export default function Page() {
     }
     const cover = coverImageId ? chosen.find((img) => img.id === coverImageId) : chosen[0];
     setStudioError(null);
+
+    if (!targetId) {
+       try {
+           const defaultName = sourceNodeName ? sourceNodeName.replace(/\.md$/i, "") : (prompt || "New Asset");
+           const newName = defaultName.slice(0, 30);
+           
+           // Determine type from name or default to character
+           let assetType = "character";
+           const lowerName = defaultName.toLowerCase();
+           if (lowerName.includes("scene") || lowerName.includes("location") || lowerName.includes("background")) assetType = "scene";
+           else if (lowerName.includes("prop") || lowerName.includes("item")) assetType = "prop";
+           else if (lowerName.includes("vfx") || lowerName.includes("effect")) assetType = "vfx";
+
+           const createRes = await fetch("/api/assets", {
+               method: "POST",
+               headers: { "content-type": "application/json" },
+               body: JSON.stringify({
+                   project_id: null,
+                   script_id: selectedScriptId || null,
+                   name: newName,
+                   type: assetType,
+                   source: "manual"
+               })
+           });
+           
+           if (!createRes.ok) {
+                const txt = await createRes.text();
+                throw new Error(`创建新资产失败: ${txt}`);
+           }
+           
+           const json = await createRes.json();
+           const newAsset = json.data;
+           targetId = newAsset.id;
+           
+           if (selectedScriptId && newAsset.project_id) {
+                const typeMap: Record<string, AssetType> = {
+                    character: "CHARACTER",
+                    scene: "SCENE",
+                    prop: "PROP",
+                    vfx: "EFFECT",
+                    location: "SCENE",
+                    effect: "EFFECT"
+                 };
+               setAssets(prev => [{
+                    id: newAsset.id,
+                    assetId: newAsset.asset_id,
+                    name: newAsset.name,
+                    type: typeMap[newAsset.type?.toLowerCase()] || "CHARACTER",
+                    thumbnail: "",
+                    tags: newAsset.tags || [],
+                    createdAt: newAsset.created_at,
+                    source: newAsset.source,
+                    variants: [],
+                    resources: []
+               }, ...prev]);
+           }
+       } catch (e) {
+           setStudioError(e instanceof Error ? e.message : "创建资产失败");
+           return;
+       }
+    }
 
     try {
       const res = await fetch(`/api/assets/${encodeURIComponent(targetId)}/resources`, {
@@ -1357,7 +1424,7 @@ export default function Page() {
             ? {
                 ...asset,
                 thumbnail: coverThumb || asset.thumbnail,
-                resources: newResources,
+                resources: [...(asset.resources || []), ...newResources],
                 tags: asset.tags.filter((t) => t !== "待生成"),
               }
             : asset,
@@ -1844,31 +1911,6 @@ export default function Page() {
                       选择内容
                     </button>
                   </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-xs font-medium text-textMuted">绑定资产</label>
-                  <select
-                    value={selectedDraftId || ""}
-                    onChange={(e) => {
-                      const next = e.target.value || null;
-                      setSelectedDraftId(next);
-                      setQuery({ assetId: next });
-                    }}
-                    className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs"
-                    disabled={!selectedScriptId || assets.length === 0}
-                  >
-                    <option value="">请选择资产</option>
-                    {assets.map((asset) => (
-                      <option key={asset.id} value={asset.id}>
-                        [{assetTypeLabelMap[asset.type]}] {asset.assetId ? `${asset.assetId} · ` : ""}
-                        {asset.name}
-                      </option>
-                    ))}
-                  </select>
-                  {selectedScriptId && assets.length === 0 && (
-                    <div className="text-[10px] text-textMuted">当前剧本暂无资产</div>
-                  )}
                 </div>
 
                 {/* Markdown Preview */}

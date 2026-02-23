@@ -6,6 +6,7 @@ from app.api.v1.assets import router as assets_router
 from app.api.v1.ai_asset_extraction import router as ai_asset_extraction_router
 from app.api.v1.ai_catalog import router as ai_catalog_router
 from app.api.v1.ai_image import router as ai_image_router
+from app.api.v1.ai_media import router as ai_media_router
 from app.api.v1.ai_text import router as ai_text_router
 from app.api.v1.ai_video import router as ai_video_router
 from app.api.v1.ai_prompt_presets import router as ai_prompt_presets_router
@@ -44,6 +45,7 @@ v1_router.include_router(ai_scene_structure_router, tags=["ai"])
 v1_router.include_router(ai_storyboard_router, tags=["ai"])
 v1_router.include_router(ai_asset_extraction_router, tags=["ai"])
 v1_router.include_router(ai_image_router, tags=["ai"])
+v1_router.include_router(ai_media_router, tags=["ai"])
 v1_router.include_router(ai_text_router, tags=["ai"])
 v1_router.include_router(ai_video_router, tags=["ai"])
 v1_router.include_router(ai_prompt_presets_router, tags=["ai"])

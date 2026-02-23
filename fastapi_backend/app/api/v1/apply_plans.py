@@ -10,11 +10,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_tools.apply_plan import ApplyPlan
 from app.database import User, get_async_session
-from app.models import Episode, FileNode, ImagePrompt, Project, Storyboard, VideoPrompt
+from app.models import Episode, FileNode, ImagePrompt, Project, Storyboard, VideoPrompt, Asset
 from app.schemas import AIShotDraft
 from app.schemas_response import ResponseBase
 from app.services.apply_plan_normalize_service import normalize_apply_plan
 from app.services.storage.vfs_service import vfs_service
+from app.services.asset_service import asset_service
 from app.users import current_active_user
 from app.vfs_docs import AssetDocV1, AssetDocV2, EpisodeBindingsDocV1
 from app.vfs_layout import (
@@ -290,6 +291,97 @@ async def api_execute_apply_plan(
                     "json_filename": json_filename,
                 }
             )
+
+            # Ensure Asset Entity exists in DB
+            db_type = a.type
+            if db_type == "location":
+                db_type = "scene"
+            elif db_type == "effect":
+                db_type = "vfx"
+            
+            existing_asset = (await db.execute(
+                select(Asset).where(
+                    Asset.project_id == project_id,
+                    Asset.name == a.name,
+                    Asset.type == db_type
+                )
+            )).scalars().first()
+            
+            if not existing_asset:
+                 await asset_service.create_asset(
+                    db=db,
+                    user_id=user.id,
+                    name=a.name,
+                    type=db_type,
+                    project_id=project_id,
+                    source="ai_agent",
+                    category=None,
+                    doc_node_id=md_node.id
+                 )
+            elif existing_asset and not existing_asset.doc_node_id:
+                 # Link existing asset to doc if not linked
+                 existing_asset.doc_node_id = md_node.id
+                 db.add(existing_asset)
+
+            # 4. Handle Variants
+            if existing_asset and a.variants:
+                # Reload asset to get variants? Or just query variants
+                # Actually asset_service.create_variant handles duplicate check if we don't pass code
+                # But here we want to match by stage_tag if possible
+                
+                # Fetch existing variants
+                existing_variants = await asset_service.get_asset_full(db=db, user_id=user.id, asset_id=existing_asset.id)
+                current_vars = existing_variants.variants if existing_variants else []
+                
+                for v_draft in a.variants:
+                    # Try to match existing variant by stage_tag
+                    # If stage_tag is empty, maybe match by code? AI usually doesn't give code.
+                    target_tag = (v_draft.stage_tag or "").strip()
+                    if not target_tag and not v_draft.variant_code:
+                         # Skip if no tag or code
+                         continue
+                    
+                    matched_v = None
+                    # First try match by variant_code
+                    if v_draft.variant_code:
+                        for ev in current_vars:
+                            if ev.variant_code == v_draft.variant_code:
+                                matched_v = ev
+                                break
+
+                    # Then try match by stage_tag
+                    if not matched_v and target_tag:
+                        for ev in current_vars:
+                            if (ev.stage_tag or "").strip() == target_tag:
+                                matched_v = ev
+                                break
+                    
+                    if matched_v:
+                        # Update existing
+                        await asset_service.update_variant(
+                            db=db,
+                            user_id=user.id,
+                            variant_id=matched_v.id,
+                            stage_tag=target_tag or None,
+                            age_range=None,
+                            attributes=v_draft.attributes,
+                            prompt_template=v_draft.prompt_en,
+                            is_default=None
+                        )
+                    else:
+                        # Create new
+                        await asset_service.create_variant(
+                            db=db,
+                            user_id=user.id,
+                            asset_id=existing_asset.id,
+                            variant_code=v_draft.variant_code, # Usually None, service will generate
+                            stage_tag=target_tag or None,
+                            age_range=None,
+                            attributes=v_draft.attributes,
+                            prompt_template=v_draft.prompt_en,
+                            is_default=False
+                        )
+
         return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_nodes, "provenance": provenance})
 
     if plan.kind == "asset_bind" and plan.tool_id == "asset_bind":

@@ -19,6 +19,7 @@ dependencies = [
     "pillow>=10.4.0,<11",
     "openai>=2.11.0,<3",
     "pydantic-ai-slim[openai]>=1.58.0,<2",
+    "volcengine-python-sdk[ark]>=5.0.9",
 ]
 
 [dependency-groups]

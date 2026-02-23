@@ -28,7 +28,7 @@ def upgrade() -> None:
     # Execute init SQL
     # Path is relative to this file: ../../../sql/init/vendor_model_init.sql
     try:
-        file_path = os.path.join(os.path.dirname(__file__), '../../../sql/init/vendor_model_init.sql')
+        file_path = os.path.join(os.path.dirname(__file__), '../../sql/init/vendor_model_init.sql')
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as f:
                 sql = f.read()

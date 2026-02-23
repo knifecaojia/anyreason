@@ -10,6 +10,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_gateway.factory import provider_factory
+from app.ai_gateway.providers.media_factory import media_provider_factory
+from app.schemas_media import MediaRequest, MediaResponse
 from app.ai_gateway.types import ResolvedModelConfig
 from app.config import settings
 from app.core.exceptions import AppError
@@ -249,6 +251,131 @@ class AIGatewayService:
                         "has_attachments": bool(attachments),
                         "refunded": bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None),
                         "result_keys": list(raw.keys()) if isinstance(raw, dict) else [],
+                    },
+                )
+            )
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
+
+
+    async def generate_media(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        binding_key: str | None,
+        model_config_id: UUID | None,
+        prompt: str,
+        negative_prompt: str | None = None,
+        param_json: dict[str, Any] | None = None,
+        callback_url: str | None = None,
+        category: str = "image",
+    ) -> MediaResponse:
+        cfg, cfg_id, resolved_binding_key = await self._resolve_model_config(
+            db=db,
+            category=category,
+            binding_key=binding_key,
+            model_config_id=model_config_id,
+            default_binding_key=category,
+        )
+
+        param_json = param_json or {}
+        
+        # Calculate cost (TODO: Dynamic pricing based on model metadata)
+        credits_cost = 10 if category == "video" else 5
+        
+        consumed_credits = 0
+        if credits_cost > 0:
+            await credit_service.adjust_balance(
+                db=db,
+                user_id=user_id,
+                delta=-credits_cost,
+                reason="ai.consume",
+                actor_user_id=None,
+                meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                allow_negative=False,
+            )
+            await db.commit()
+            consumed_credits = credits_cost
+
+        started = time.perf_counter()
+        error_code: str | None = None
+        response: MediaResponse | None = None
+        
+        try:
+            provider = media_provider_factory.get_provider(
+                manufacturer=cfg.manufacturer,
+                api_key=cfg.api_key,
+                base_url=cfg.base_url
+            )
+            
+            request = MediaRequest(
+                model_key=cfg.model,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                param_json=param_json,
+                callback_url=callback_url
+            )
+            
+            response = await provider.generate(request)
+            return response
+            
+        except AppError:
+            error_code = "app_error"
+            if consumed_credits > 0:
+                await credit_service.adjust_balance(
+                    db=db,
+                    user_id=user_id,
+                    delta=consumed_credits,
+                    reason="ai.refund",
+                    actor_user_id=None,
+                    meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    allow_negative=False,
+                )
+                await db.commit()
+                consumed_credits = 0
+            raise
+        except Exception as e:
+            error_code = "upstream_error"
+            friendly_msg = _extract_api_error(e)
+            if consumed_credits > 0:
+                await credit_service.adjust_balance(
+                    db=db,
+                    user_id=user_id,
+                    delta=consumed_credits,
+                    reason="ai.refund",
+                    actor_user_id=None,
+                    meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    allow_negative=False,
+                )
+                await db.commit()
+                consumed_credits = 0
+            
+            # Re-raise AppError directly to preserve original message
+            if isinstance(e, AppError):
+                raise e
+                
+            raise AppError(msg=f"AI {category} generation failed: {friendly_msg}", code=502, status_code=502, data={"raw": str(e), "friendly": friendly_msg})
+        finally:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            db.add(
+                AIUsageEvent(
+                    user_id=user_id,
+                    category=category,
+                    binding_key=resolved_binding_key,
+                    ai_model_config_id=cfg_id,
+                    cost_credits=consumed_credits,
+                    latency_ms=latency_ms,
+                    error_code=error_code,
+                    raw_payload={
+                        "manufacturer": cfg.manufacturer,
+                        "model": cfg.model,
+                        "param_json": param_json,
+                        "refunded": bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None),
+                        "url": response.url if response else None,
+                        "usage_id": response.usage_id if response else None
                     },
                 )
             )
@@ -544,11 +671,16 @@ class AIGatewayService:
                     delta=consumed_credits,
                     reason="ai.refund",
                     actor_user_id=None,
-                    meta={"category": "video", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
                     allow_negative=False,
                 )
                 await db.commit()
                 consumed_credits = 0
+            
+            # Re-raise AppError directly to preserve original message
+            if isinstance(e, AppError):
+                raise e
+                
             raise AppError(msg=f"AI 视频生成失败: {friendly_msg}", code=502, status_code=502, data={"raw": str(e), "friendly": friendly_msg})
         finally:
             latency_ms = int((time.perf_counter() - started) * 1000)

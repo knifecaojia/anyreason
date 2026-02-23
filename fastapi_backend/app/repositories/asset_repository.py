@@ -9,17 +9,44 @@ from app.models import Asset, AssetResource, AssetTag, AssetTagRelation, AssetVa
 
 
 async def get_asset_for_user(*, db: AsyncSession, user_id: UUID, asset_id: UUID) -> Asset | None:
-    res = await db.execute(
+    stmt = (
         select(Asset)
-        .join(Project, Asset.project_id == Project.id)
-        .join(Script, Script.id == Project.id)
+        .outerjoin(Project, Asset.project_id == Project.id)
+        .outerjoin(Script, Asset.script_id == Script.id)
         .where(
             Asset.id == asset_id,
-            Script.owner_id == user_id,
-            Script.is_deleted.is_(False),
+            (Project.owner_id == user_id) | (Script.owner_id == user_id),
         )
     )
+    res = await db.execute(stmt)
     return res.scalars().first()
+
+
+async def create_asset(
+    *,
+    db: AsyncSession,
+    asset_id: str,
+    name: str,
+    type: str,
+    project_id: UUID | None = None,
+    script_id: UUID | None = None,
+    category: str | None = None,
+    source: str = "manual",
+    doc_node_id: UUID | None = None,
+) -> Asset:
+    row = Asset(
+        project_id=project_id,
+        script_id=script_id,
+        asset_id=asset_id,
+        name=name,
+        type=type,
+        category=category,
+        source=source,
+        doc_node_id=doc_node_id,
+    )
+    db.add(row)
+    await db.flush()
+    return row
 
 
 async def list_assets(
@@ -30,7 +57,14 @@ async def list_assets(
     script_id: UUID | None = None,
     source: str | None = None,
 ) -> list[Asset]:
-    stmt = select(Asset).join(Project, Asset.project_id == Project.id)
+    stmt = (
+        select(Asset)
+        .outerjoin(Project, Asset.project_id == Project.id)
+        .outerjoin(Script, Asset.script_id == Script.id)
+        .where(
+            (Project.owner_id == user_id) | (Script.owner_id == user_id)
+        )
+    )
 
     if project_id:
         stmt = stmt.where(Asset.project_id == project_id)
@@ -38,10 +72,6 @@ async def list_assets(
         stmt = stmt.where(Asset.script_id == script_id)
     if source:
         stmt = stmt.where(Asset.source == source)
-
-    # Permission check: user must own the project
-    # Note: This simplifies the permission model (ignoring workspace members for now)
-    stmt = stmt.where(Project.owner_id == user_id)
 
     stmt = stmt.order_by(Asset.created_at.desc())
 

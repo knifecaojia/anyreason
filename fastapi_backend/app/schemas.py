@@ -119,6 +119,7 @@ class AssetResourceRead(BaseModel):
 class AssetBrief(BaseModel):
     id: UUID
     asset_id: str
+    doc_node_id: UUID | None = None
     name: str
     type: str
     category: str | None = None
@@ -144,6 +145,7 @@ class AssetRead(BaseModel):
     id: UUID
     project_id: UUID | None = None
     script_id: UUID | None = None
+    doc_node_id: UUID | None = None
     asset_id: str
     name: str
     type: str
@@ -162,6 +164,15 @@ class AssetUpdate(BaseModel):
     category: str | None = None
     lifecycle_status: Literal["draft", "published", "archived"] | None = None
     tags: list[str] | None = None
+
+
+class AssetCreate(BaseModel):
+    project_id: UUID | None = None
+    script_id: UUID | None = None
+    name: str
+    type: Literal["character", "scene", "prop", "vfx"]
+    category: str | None = None
+    source: str = "manual"
 
 
 class AssetVariantCreate(BaseModel):

@@ -31,6 +31,7 @@ class ProviderFactory:
             "gemini": GeminiImageProvider(),
             "openai": openai_image,
             "doubao": DoubaoSeedreamImageProvider(),
+            "volcengine": DoubaoSeedreamImageProvider(),  # Alias for volcengine
         }
         self._video = {"kling": KlingVideoProvider()}
 
