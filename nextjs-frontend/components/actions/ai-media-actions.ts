@@ -11,7 +11,7 @@ function getApiBaseUrl() {
 
 async function authedFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
   const cookieStore = await cookies();
-  consttoken = cookieStore.get("accessToken")?.value;
+  const token = cookieStore.get("accessToken")?.value;
   if (!token) throw new Error("未登录");
 
   const url = new URL(path, getApiBaseUrl());

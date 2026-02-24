@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
 from app.database import User, get_async_session
-from app.schemas import AssetRead, AssetResourceCreateRequest, AssetUpdate, AssetVariantCreate, AssetVariantUpdate, AssetCreate
+from app.schemas import AssetRead, AssetResourceCreateRequest, AssetUpdate, AssetVariantCreate, AssetVariantUpdate, AssetCreate, AssetResourceCheckRequest, AssetResourceCheckResponse
 from app.schemas_response import ResponseBase
 from app.services.asset_service import asset_service
 from app.storage.minio_client import get_minio_client
@@ -208,6 +208,22 @@ async def delete_asset_variant(
     return ResponseBase(code=200, msg="OK", data=data)
 
 
+@router.post("/assets/{asset_id}/resources/check", response_model=ResponseBase[AssetResourceCheckResponse])
+async def check_asset_resources(
+    asset_id: UUID,
+    body: AssetResourceCheckRequest,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    result = await asset_service.check_resources(
+        db=db,
+        user_id=user.id,
+        asset_id=asset_id,
+        resource_ids=body.resource_ids,
+    )
+    return ResponseBase(code=200, msg="OK", data=result)
+
+
 @router.post("/assets/{asset_id}/resources", response_model=ResponseBase[AssetRead])
 async def create_asset_resources(
     asset_id: UUID,
@@ -226,4 +242,21 @@ async def create_asset_resources(
     )
     if not data:
         raise AppError(msg="Asset not found or not authorized", code=404, status_code=404)
+    return ResponseBase(code=200, msg="OK", data=data)
+
+
+@router.patch("/assets/{asset_id}/resources/{resource_id}/cover", response_model=ResponseBase[AssetRead])
+async def set_asset_resource_cover(
+    asset_id: UUID,
+    resource_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    data = await asset_service.set_cover(
+        db=db,
+        user_id=user.id,
+        resource_id=resource_id,
+    )
+    if not data:
+        raise AppError(msg="Asset or resource not found or not authorized", code=404, status_code=404)
     return ResponseBase(code=200, msg="OK", data=data)

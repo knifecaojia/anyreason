@@ -6,15 +6,17 @@ from dataclasses import dataclass
 from typing import Iterable
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.core.exceptions import AppError
-from app.models import Episode, Project, Storyboard, Script
+from app.models import Episode, Project, Storyboard, Script, AssetBinding
 from app.storage import get_minio_client
 
 BODY_MARKER = "剧本正文"
+
+UNASSIGNED_EPISODE_CODE = "UNASSIGNED"
 
 _EPISODE_EN_RE = re.compile(
     r"^\s*\*{0,2}\s*(?:EPISODE|Episode)\s*(?P<ep_num>\d+)\s*[:：\-]\s*(?P<ep_title>.*?)\s*\*{0,2}\s*$",
@@ -327,6 +329,129 @@ class ScriptStructureService:
                         description=f"[{sb.title}] {sb.content}" if sb.title else sb.content,
                     )
                 )
+
+            structured.append(ep)
+
+        await db.commit()
+        for ep in structured:
+            await db.refresh(ep)
+        return structured
+
+    async def structure_script_non_destructive(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        script_id: UUID,
+        binding_policy: str = "preserve",
+    ) -> list[Episode]:
+        result = await db.execute(
+            select(Script).where(
+                Script.id == script_id,
+                Script.owner_id == user_id,
+                Script.is_deleted.is_(False),
+            )
+        )
+        script = result.scalars().first()
+        if not script:
+            raise AppError(msg="Script not found or not authorized", code=404, status_code=404)
+
+        text = await _read_script_text_from_minio(script)
+        parsed = parse_script_to_episodes(text)
+
+        project = await db.get(Project, script_id)
+        if not project:
+            project = Project(id=script_id, owner_id=user_id, name=script.title)
+            db.add(project)
+            await db.flush()
+
+        existing_result = await db.execute(
+            select(Episode).where(Episode.project_id == project.id, Episode.episode_code != UNASSIGNED_EPISODE_CODE)
+        )
+        existing = list(existing_result.scalars().all())
+        by_code = {e.episode_code: e for e in existing}
+        keep_codes = {p.episode_code for p in parsed}
+
+        unassigned_res = await db.execute(
+            select(Episode).where(Episode.project_id == project.id, Episode.episode_code == UNASSIGNED_EPISODE_CODE)
+        )
+        unassigned_episode = unassigned_res.scalars().first()
+        if not unassigned_episode:
+            unassigned_episode = Episode(
+                project_id=project.id,
+                episode_number=0,
+                episode_code=UNASSIGNED_EPISODE_CODE,
+                title="未分集",
+            )
+            db.add(unassigned_episode)
+            await db.flush()
+
+        for ep in existing:
+            if ep.episode_code not in keep_codes:
+                bindings_res = await db.execute(
+                    select(AssetBinding).where(AssetBinding.episode_id == ep.id)
+                )
+                orphan_bindings = bindings_res.scalars().all()
+                for binding in orphan_bindings:
+                    binding.episode_id = unassigned_episode.id
+                
+                # Mark as orphaned instead of deleting
+                ep.status = "orphaned"
+                ep.stage_tag = "archived"
+                db.add(ep)
+
+        # Handle binding policy for non-orphaned episodes
+        if binding_policy in ["clear_episode_bindings", "clear_all_bindings"]:
+            kept_episode_ids = [ep.id for ep in existing if ep.episode_code in keep_codes]
+            if kept_episode_ids:
+                await db.execute(
+                    delete(AssetBinding).where(AssetBinding.episode_id.in_(kept_episode_ids))
+                )
+
+        structured: list[Episode] = []
+        for p in parsed:
+            ep = by_code.get(p.episode_code)
+            if not ep:
+                ep = Episode(
+                    project_id=project.id,
+                    episode_code=p.episode_code,
+                    episode_number=p.episode_number,
+                    status="pending",
+                )
+                db.add(ep)
+                await db.flush()
+            else:
+                # Reactivate if it was orphaned
+                if ep.status == "orphaned":
+                    ep.status = "pending"
+                    ep.stage_tag = None
+
+            ep.episode_number = p.episode_number
+            ep.title = p.title
+            ep.word_count = p.word_count
+            ep.start_line = p.start_line
+            ep.end_line = p.end_line
+            ep.script_full_text = p.script_full_text
+
+            # Check if storyboards exist
+            sb_count_res = await db.execute(
+                select(func.count()).select_from(Storyboard).where(Storyboard.episode_id == ep.id)
+            )
+            sb_count = sb_count_res.scalar() or 0
+
+            # Only reseed if empty (default non-destructive policy)
+            if sb_count == 0:
+                for sb in p.storyboards:
+                    db.add(
+                        Storyboard(
+                            episode_id=ep.id,
+                            shot_code=sb.shot_code,
+                            shot_number=sb.shot_number,
+                            scene_code=sb.scene_code,
+                            scene_number=sb.scene_number,
+                            description=f"[{sb.title}] {sb.content}" if sb.title else sb.content,
+                        )
+                    )
 
             structured.append(ep)
 

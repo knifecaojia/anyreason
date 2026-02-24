@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { RefreshCcw } from "lucide-react";
+import { RefreshCcw, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
 import { TASK_TYPES } from "@/lib/tasks/constants";
@@ -93,6 +93,9 @@ export function TaskList({
   const [events, setEvents] = useState<
     Array<{ id: string; event_type: string; payload: Record<string, unknown>; created_at: string }>
   >([]);
+
+  // 新增：详情弹窗的状态
+  const [detailTask, setDetailTask] = useState<Task | null>(null);
 
   useEffect(() => {
     if (!logOpen || !logTaskId) return;
@@ -208,6 +211,14 @@ export function TaskList({
                       取消
                     </button>
                   )}
+                  {/* 新增：详情按钮 */}
+                  <button
+                    type="button"
+                    className="px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-bold text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
+                    onClick={() => setDetailTask(t)}
+                  >
+                    详情
+                  </button>
                   <button
                     type="button"
                     className="px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-bold text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
@@ -248,6 +259,87 @@ export function TaskList({
               {t.error && <div className="mt-2 text-xs text-red-400 line-clamp-2">{t.error}</div>}
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 新增：详情弹窗 */}
+      {detailTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-in fade-in duration-200" role="dialog" aria-modal="true">
+          <div className="w-full max-w-2xl rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden max-h-[90vh] flex flex-col animate-in zoom-in-95 duration-200">
+            <div className="h-14 px-5 border-b border-border flex items-center justify-between flex-shrink-0 bg-surfaceHighlight/30">
+              <div className="font-bold text-sm truncate flex items-center gap-2">
+                <span>任务详情</span>
+                <span className="text-xs font-mono text-textMuted bg-surfaceHighlight px-1.5 py-0.5 rounded border border-border/50">{detailTask.id.slice(0, 8)}</span>
+              </div>
+              <button
+                onClick={() => setDetailTask(null)}
+                className="p-2 rounded-lg text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
+                type="button"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="p-0 overflow-y-auto">
+                <div className="p-5 space-y-6">
+                  {/* 基本信息 */}
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                     <div className="space-y-1">
+                        <div className="text-xs text-textMuted font-medium">任务类型</div>
+                        <div className="font-semibold text-textMain">{detailTask.type}</div>
+                     </div>
+                     <div className="space-y-1">
+                        <div className="text-xs text-textMuted font-medium">状态</div>
+                        <div className={`font-semibold ${statusColor(detailTask.status)}`}>{statusLabel(detailTask.status)}</div>
+                     </div>
+                     <div className="space-y-1">
+                        <div className="text-xs text-textMuted font-medium">创建时间</div>
+                        <div className="font-mono text-xs text-textMain">{new Date(detailTask.created_at).toLocaleString()}</div>
+                     </div>
+                     <div className="space-y-1">
+                        <div className="text-xs text-textMuted font-medium">进度</div>
+                        <div className="font-mono text-xs text-textMain">{detailTask.progress}%</div>
+                     </div>
+                  </div>
+
+                  {/* 错误信息 */}
+                  {detailTask.error && (
+                    <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+                        <div className="text-xs font-bold text-red-400 mb-2 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                            错误信息
+                        </div>
+                        <pre className="text-xs text-red-400/90 whitespace-pre-wrap font-mono break-all">{detailTask.error}</pre>
+                    </div>
+                  )}
+
+                  {/* 输入参数 */}
+                  {detailTask.input_json && Object.keys(detailTask.input_json).length > 0 && (
+                     <div>
+                        <div className="text-xs font-bold text-textMuted mb-2 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                            输入参数 (Input)
+                        </div>
+                        <pre className="text-xs bg-surfaceHighlight/30 border border-border rounded-xl p-4 overflow-auto max-h-[300px] font-mono text-textMuted/90">
+                            {JSON.stringify(detailTask.input_json, null, 2)}
+                        </pre>
+                     </div>
+                  )}
+
+                  {/* 输出结果 */}
+                  {detailTask.result_json && Object.keys(detailTask.result_json).length > 0 && (
+                     <div>
+                        <div className="text-xs font-bold text-textMuted mb-2 flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                            输出结果 (Result)
+                        </div>
+                        <pre className="text-xs bg-surfaceHighlight/30 border border-border rounded-xl p-4 overflow-auto max-h-[300px] font-mono text-textMuted/90">
+                            {JSON.stringify(detailTask.result_json, null, 2)}
+                        </pre>
+                     </div>
+                  )}
+                </div>
+            </div>
+          </div>
         </div>
       )}
 

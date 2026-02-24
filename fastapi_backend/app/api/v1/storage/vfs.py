@@ -13,7 +13,7 @@ from app.database import User, get_async_session
 from app.schemas_response import ResponseBase
 from app.users import current_active_user
 from app.schemas import FileNodeRead
-from app.services.storage.vfs_service import vfs_service
+from app.services.storage.vfs_service import vfs_service, get_or_create_user_ai_folder, AI_GENERATED_FOLDER_NAME
 
 router = APIRouter()
 
@@ -164,3 +164,22 @@ async def delete_node(
     except AppError:
         raise
     return ResponseBase(code=200, msg="OK", data={"deleted": True})
+
+
+@router.get("/ai-generated", response_model=ResponseBase[list[FileNodeRead]])
+async def list_ai_generated_images(
+    user: User = Depends(current_active_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    """List all AI generated images for the current user."""
+    folder = await get_or_create_user_ai_folder(db=db, user_id=user.id)
+    rows = await vfs_service.list_nodes(
+        db=db,
+        user_id=user.id,
+        parent_id=folder.id,
+    )
+    image_nodes = [
+        r for r in rows
+        if not r.is_folder and r.content_type and r.content_type.startswith("image/")
+    ]
+    return ResponseBase(code=200, msg="OK", data=[FileNodeRead.model_validate(r) for r in image_nodes])

@@ -91,6 +91,15 @@ class StoryboardRead(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class StoryboardUpdate(BaseModel):
+    episode_id: UUID | None = None
+    shot_code: str | None = None
+    shot_number: int | None = None
+    scene_code: str | None = None
+    scene_number: int | None = None
+    description: str | None = None
+
+
 class SceneCreate(BaseModel):
     title: str | None = None
     content: str | None = None
@@ -197,6 +206,15 @@ class AssetResourceCreateRequest(BaseModel):
     res_type: str | None = None
     variant_id: UUID | None = None
     cover_file_node_id: UUID | None = None
+
+
+class AssetResourceCheckRequest(BaseModel):
+    resource_ids: list[UUID]
+
+
+class AssetResourceCheckResponse(BaseModel):
+    eligible: list[UUID]
+    ineligible: dict[UUID, str]
 
 
 class AssetBindingBrief(BaseModel):

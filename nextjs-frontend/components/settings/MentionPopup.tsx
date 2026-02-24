@@ -118,7 +118,7 @@ export const MentionPopup = ({
       {/* 悬浮框主体 */}
       <div
         ref={popupRef}
-        className="fixed z-50 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+        className="fixed z-50 bg-white dark:bg-zinc-900 rounded-xl shadow-2xl border border-gray-200 dark:border-zinc-700 overflow-hidden"
         style={{
           top: position.top + 8,
           left: position.left,
@@ -127,12 +127,12 @@ export const MentionPopup = ({
         }}
       >
         {/* 头部 */}
-        <div className="px-4 py-3 border-b border-gray-100 dark:border-gray-700">
+        <div className="px-4 py-3 border-b border-gray-100 dark:border-zinc-800 bg-gray-50/50 dark:bg-zinc-900">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-semibold text-gray-700 dark:text-gray-200">选择参考图</span>
+            <span className="text-sm font-semibold text-gray-700 dark:text-gray-100">选择参考图</span>
           <button
             onClick={onClose}
-            className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
+            className="p-1 rounded-lg hover:bg-gray-100 dark:hover:bg-zinc-800 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
           >
             <X size={16} />
           </button>
@@ -146,8 +146,8 @@ export const MentionPopup = ({
                   onClick={() => setActiveTabId(tab.id)}
                   className={`px-2.5 py-1 rounded-lg text-xs border transition-colors ${
                     tab.id === activeTabId
-                      ? 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-blue-900/30'
-                      : 'border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400 hover:border-blue-300'
+                      ? 'border-blue-500 text-blue-600 bg-blue-50 dark:bg-blue-900/30 dark:text-blue-400'
+                      : 'border-gray-200 dark:border-zinc-700 text-gray-500 dark:text-gray-400 hover:border-blue-300 dark:hover:border-blue-700'
                   }`}
                 >
                   {tab.label}
@@ -160,13 +160,13 @@ export const MentionPopup = ({
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="搜索"
-              className="w-full rounded-lg border border-gray-200 dark:border-gray-700 bg-transparent px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 outline-none focus:border-blue-400"
+              className="w-full rounded-lg border border-gray-200 dark:border-zinc-700 bg-white dark:bg-zinc-950 px-3 py-1.5 text-xs text-gray-600 dark:text-gray-300 outline-none focus:border-blue-400 dark:focus:border-blue-600"
             />
           </div>
         </div>
 
         {/* 图片网格 */}
-        <div className="p-4">
+        <div className="p-4 bg-white dark:bg-zinc-900">
           <div className="grid grid-cols-4 gap-3 max-h-80 overflow-y-auto">
             {activeTab.loading && (
               <div className="col-span-4 text-center text-xs text-gray-400 py-6">加载中...</div>
@@ -183,7 +183,7 @@ export const MentionPopup = ({
                 className={`relative group aspect-square rounded-lg overflow-hidden border-2 transition-all duration-200 ${
                   img.isSelected
                     ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-blue-300'
+                    : 'border-gray-200 dark:border-zinc-700 hover:border-blue-300 dark:hover:border-blue-600'
                 }`}
               >
                 {/* 图片 */}

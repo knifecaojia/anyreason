@@ -430,10 +430,16 @@ class AssetVariant(Base):
     attributes = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     prompt_template = Column(Text, nullable=True)
     is_default = Column(Boolean, nullable=False, server_default=text("false"))
+    doc_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
     asset = relationship("Asset", back_populates="variants")
+    doc_node = relationship("FileNode")
     resources = relationship(
         "AssetResource",
         back_populates="variant",
@@ -450,6 +456,7 @@ class AssetVariant(Base):
         ),
         Index("idx_asset_variants_asset", "asset_entity_id"),
         Index("idx_asset_variants_stage", "asset_entity_id", "stage_tag"),
+        Index("idx_asset_variants_doc_node", "doc_node_id"),
     )
 
 
@@ -467,6 +474,7 @@ class AssetResource(Base):
     minio_bucket = Column(String(255), nullable=False)
     minio_key = Column(Text, nullable=False)
     meta_data = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    is_cover = Column(Boolean, nullable=False, server_default=text("false"), default=False)
 
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 
@@ -475,6 +483,7 @@ class AssetResource(Base):
     __table_args__ = (
         Index("idx_asset_resources_variant", "variant_id"),
         Index("idx_asset_resources_type", "variant_id", "res_type"),
+        Index("uq_asset_variant_cover", "variant_id", postgresql_where=text("is_cover = TRUE"), unique=True),
     )
 
 

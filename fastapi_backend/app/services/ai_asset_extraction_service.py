@@ -377,6 +377,8 @@ def _parse_assets_from_output(text: str) -> tuple[AIWorldUnityDraft | None, list
     return world_unity, out
 
 
+from app.log.log import logger
+
 class AIAssetExtractionService:
     async def build_prompt_preview(
         self,
@@ -467,17 +469,32 @@ class AIAssetExtractionService:
         world_unity: AIWorldUnityDraft | None,
         assets: list[AIAssetDraft],
     ) -> dict[str, int]:
+        logger.info(f"AIAssetExtractionService.apply start: episode_id={episode_id} mode={mode} assets={len(assets)}")
         episode = await _get_episode_for_user(db=db, user_id=user_id, episode_id=episode_id)
         if not episode:
+            logger.error(f"Episode not found: {episode_id}")
             raise AppError(msg="Episode not found or not authorized", code=404, status_code=404)
         if not episode.project_id:
+            logger.error(f"Episode not bound to project: {episode_id}")
             raise AppError(msg="Episode project not found", code=400, status_code=400)
         project_id = episode.project_id
+        
+        # Try to infer script_id if possible (assuming project_id might be a script_id)
+        script_id: UUID | None = None
+        # Check if project_id exists in scripts table
+        script_check = await db.execute(select(Script).where(Script.id == project_id))
+        if script_check.scalars().first():
+             script_id = project_id
+             logger.info(f"Inferred script_id from project_id: {script_id}")
+        else:
+             logger.info(f"Could not infer script_id from project_id: {project_id}")
 
         if mode == "replace":
+            logger.info(f"Clearing existing bindings for episode {episode_id}")
             await db.execute(delete(AssetBinding).where(AssetBinding.episode_id == episode_id))
 
         flattened = _flatten_assets(assets)
+        logger.info(f"Processing {len(flattened)} flattened assets")
 
         assets_created = 0
         assets_reused = 0
@@ -552,9 +569,11 @@ class AIAssetExtractionService:
             if existing_asset:
                 asset = existing_asset
                 assets_reused += 1
+                logger.info(f"Reusing existing asset: {asset.id} (name={name})")
             else:
                 asset = Asset(
                     project_id=project_id,
+                    script_id=script_id, # Set script_id if inferred
                     asset_id=await _alloc_asset_id(asset_type),
                     name=name[:100],
                     type=asset_type,
@@ -563,6 +582,7 @@ class AIAssetExtractionService:
                 db.add(asset)
                 await db.flush()
                 assets_created += 1
+                logger.info(f"Created new asset: {asset.id} (name={name}, script_id={script_id})")
 
             tags = set([t for t in (draft.tags or []) if (t or "").strip()])
             tags.update([p for p in (draft.category_path or []) if (p or "").strip()])

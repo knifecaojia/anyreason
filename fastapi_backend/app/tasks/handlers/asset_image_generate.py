@@ -12,7 +12,7 @@ from app.ai_gateway import ai_gateway_service
 from app.ai_gateway.providers.kling_common import httpx_client
 from app.core.exceptions import AppError
 from app.models import FileNode, Project, Task
-from app.services.storage.vfs_service import vfs_service
+from app.services.storage.vfs_service import vfs_service, get_or_create_user_ai_folder, get_or_create_project_ai_folder
 from app.tasks.handlers.base import BaseTaskHandler
 from app.tasks.reporter import TaskReporter
 from app.services.ai_model_test_service import ai_model_test_service
@@ -73,15 +73,8 @@ class AssetImageGenerateHandler(BaseTaskHandler):
         session_id = payload.get("session_id")
         attachment_file_node_ids = payload.get("attachment_file_node_ids") or []
 
-        if not parent_node_id:
-            raise ValueError("parent_node_id is required")
         if not prompt:
             raise ValueError("prompt is required")
-
-        try:
-            parent_uuid = UUID(str(parent_node_id))
-        except Exception:
-            raise ValueError("parent_node_id must be UUID")
 
         project = None
         if project_id:
@@ -93,16 +86,31 @@ class AssetImageGenerateHandler(BaseTaskHandler):
             if not project or project.owner_id != task.user_id:
                 raise AppError(msg="Not found", code=404, status_code=404)
 
-        parent = await db.get(FileNode, parent_uuid)
-        if not parent or not parent.is_folder:
-            raise AppError(msg="Node not found", code=404, status_code=404)
-        if project:
-            if parent.project_id != project.id:
-                raise AppError(msg="scope_mismatch", code=400, status_code=400)
+        parent: FileNode | None = None
+        if parent_node_id:
+            try:
+                parent_uuid = UUID(str(parent_node_id))
+            except Exception:
+                raise ValueError("parent_node_id must be UUID")
+            parent = await db.get(FileNode, parent_uuid)
+            if not parent or not parent.is_folder:
+                raise AppError(msg="Node not found", code=404, status_code=404)
+            
+            if project:
+                if parent.project_id and parent.project_id != project.id:
+                    raise AppError(msg="scope_mismatch", code=400, status_code=400)
+            else:
+                if parent.project_id:
+                    pass
+                elif parent.workspace_id:
+                    pass
+                else:
+                    await vfs_service.list_nodes(db=db, user_id=task.user_id, parent_id=parent.id)
         else:
-            if parent.project_id or parent.workspace_id:
-                raise AppError(msg="scope_mismatch", code=400, status_code=400)
-            await vfs_service.list_nodes(db=db, user_id=task.user_id, parent_id=parent.id)
+            if project:
+                parent = await get_or_create_project_ai_folder(db=db, user_id=task.user_id, project_id=project.id)
+            else:
+                parent = await get_or_create_user_ai_folder(db=db, user_id=task.user_id)
 
         await reporter.progress(progress=5)
 

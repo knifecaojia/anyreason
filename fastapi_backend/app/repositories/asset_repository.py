@@ -73,6 +73,8 @@ async def list_assets(
     if source:
         stmt = stmt.where(Asset.source == source)
 
+    stmt = stmt.where(Asset.lifecycle_status != "archived")
+
     stmt = stmt.order_by(Asset.created_at.desc())
 
     res = await db.execute(stmt)
@@ -174,6 +176,7 @@ async def update_variant(
     attributes: dict | None,
     prompt_template: str | None,
     is_default: bool | None,
+    doc_node_id: UUID | None = None,
 ) -> AssetVariant:
     if stage_tag is not None:
         variant.stage_tag = stage_tag
@@ -189,6 +192,8 @@ async def update_variant(
             for v in res.scalars().all():
                 v.is_default = False
         variant.is_default = bool(is_default)
+    if doc_node_id is not None:
+        variant.doc_node_id = doc_node_id
     await db.flush()
     return variant
 
@@ -216,6 +221,7 @@ async def create_resource(
     minio_bucket: str,
     minio_key: str,
     meta_data: dict,
+    is_cover: bool = False,
 ) -> AssetResource:
     row = AssetResource(
         variant_id=variant_id,
@@ -223,6 +229,7 @@ async def create_resource(
         minio_bucket=minio_bucket,
         minio_key=minio_key,
         meta_data=meta_data,
+        is_cover=is_cover,
     )
     db.add(row)
     await db.flush()

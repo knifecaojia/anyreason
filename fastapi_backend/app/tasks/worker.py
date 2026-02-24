@@ -41,6 +41,7 @@ async def _worker_loop() -> None:
 
     while True:
         try:
+            # print("[task-worker] waiting for task...", flush=True)
             item = await r.brpop(settings.TASK_QUEUE_KEY, timeout=5)
         except Exception as e:
             # 只有在非常严重的错误时才打印，避免刷屏
@@ -48,13 +49,21 @@ async def _worker_loop() -> None:
             await asyncio.sleep(0.5)
             continue
         if not item:
+            # print("[task-worker] timeout, no task", flush=True)
             continue
+        
+        print(f"[task-worker] got item: {item}", flush=True)
         _queue, raw_id = item
         try:
             task_id = UUID(str(raw_id))
         except Exception:
             continue
-        await process_task(task_id=task_id)
+        try:
+            await process_task(task_id=task_id)
+        except Exception as e:
+            print(f"[task-worker] process_task failed: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
 
 
 def _run_worker() -> None:

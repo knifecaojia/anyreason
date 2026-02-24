@@ -1,7 +1,40 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { HelpCircle, Loader2, Send, Square } from "lucide-react";
+import { HelpCircle, Loader2, Send, Square, Image as ImageIcon, FileText, Maximize2, X } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import { useTasks } from "@/components/tasks/TaskProvider";
+import type { TaskEventPayload } from "@/lib/tasks/types";
+
+function stripMarkdownMetadata(raw: string): string {
+  const text = String(raw || "");
+  if (!text.trim()) return "";
+  let lines = text.replace(/\r\n/g, "\n").split("\n");
+  if (lines[0] && lines[0].charCodeAt(0) === 0xfeff) {
+    lines[0] = lines[0].slice(1);
+  }
+  const firstNonEmpty = lines.findIndex((line) => line.trim() !== "");
+  if (firstNonEmpty !== -1 && lines[firstNonEmpty].trim() === "---") {
+    const endIndex = lines.slice(firstNonEmpty + 1).findIndex((line) => line.trim() === "---");
+    lines = endIndex === -1 ? lines.slice(firstNonEmpty + 1) : lines.slice(firstNonEmpty + endIndex + 2);
+  }
+  const isMarkdownLine = (line: string) => {
+    const trimmed = line.trim();
+    if (!trimmed) return false;
+    return /^(#{1,6}\s|[-*+]\s+|\d+\.\s+|>\s+|```|`{3}|!\[|\[.+\]\(.+\))/.test(trimmed);
+  };
+  const isMetadataLine = (line: string) => /^[a-z_][a-z0-9_]*\s*:\s*/.test(line.trim());
+  let start = 0;
+  for (; start < lines.length; start += 1) {
+    const line = lines[start];
+    if (isMarkdownLine(line)) break;
+    if (!line.trim()) continue;
+    if (isMetadataLine(line)) continue;
+    break;
+  }
+  return lines.slice(start).join("\n").trim();
+}
 
 type SceneCatalogItem = {
   scene_code: string;
@@ -121,6 +154,7 @@ export function ScriptAIAssistantChatboxPane(props: {
   onEpisodeChange?: (episodeId: string | null) => void;
 }) {
   const { projectId, scriptText, episodeHint, episodes = [], activeEpisodeId, onEpisodeChange } = props;
+  const { subscribeTask } = useTasks();
 
   const [scenes, setScenes] = useState<SceneCatalogItem[]>([]);
   const [selectedScene, setSelectedScene] = useState<string>("");
@@ -136,7 +170,10 @@ export function ScriptAIAssistantChatboxPane(props: {
   const [assetSelections, setAssetSelections] = useState<Record<string, Record<string, boolean>>>({});
   const [rightTab, setRightTab] = useState<"plans" | "trace">("plans");
 
+  const [previewAsset, setPreviewAsset] = useState<{ name: string; detailsMd: string } | null>(null);
+
   const abortRef = useRef<AbortController | null>(null);
+  const taskUnsubRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const draftRef = useRef<HTMLTextAreaElement | null>(null);
   const lastPayloadRef = useRef<{ scene: string; payload: any } | null>(null);
@@ -180,6 +217,11 @@ export function ScriptAIAssistantChatboxPane(props: {
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
+    if (taskUnsubRef.current) {
+      taskUnsubRef.current();
+      taskUnsubRef.current = null;
+    }
+    setRunning(false);
   }, []);
 
   const applyPlan = useCallback(
@@ -308,6 +350,11 @@ export function ScriptAIAssistantChatboxPane(props: {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    if (taskUnsubRef.current) {
+      taskUnsubRef.current();
+      taskUnsubRef.current = null;
+    }
+
     try {
       const resp = await fetch(`/api/ai/scenes/${encodeURIComponent(selectedScene)}/chat/stream`, {
         method: "POST",
@@ -316,8 +363,67 @@ export function ScriptAIAssistantChatboxPane(props: {
         signal: controller.signal,
         cache: "no-store",
       });
-      if (!resp.ok || !resp.body) {
+      if (!resp.ok) {
         setErrorText(`http_${resp.status}`);
+        setRunning(false);
+        return;
+      }
+
+      const contentType = resp.headers.get("content-type") || "";
+      if (contentType.includes("application/json")) {
+        // Handle Async Task
+        const json = await resp.json();
+        const taskData = json?.data;
+        if (!taskData?.id) {
+          setErrorText("Task creation failed");
+          setRunning(false);
+          return;
+        }
+        
+        // Subscribe to task events
+        taskUnsubRef.current = subscribeTask(taskData.id, (ev: TaskEventPayload) => {
+          if (ev.event_type === "log" && ev.payload?.payload) {
+             const p = ev.payload.payload as { type?: string; delta?: string };
+             if (p.type === "delta" && typeof p.delta === "string") {
+                setMessages((prev) => prev.map((m) => (m.id === assistantMsgId ? { ...m, content: m.content + p.delta } : m)));
+             } else if (p.type && p.type !== "start" && p.type !== "archive") {
+                setTrace((t) => [...t, p]);
+             }
+          } else if (ev.event_type === "succeeded") {
+             const res = ev.result_json;
+             if (res) {
+                if (typeof res.output_text === "string") {
+                   const outputText = res.output_text as string;
+                   setMessages((prev) => prev.map((m) => (m.id === assistantMsgId ? { ...m, content: outputText } : m)));
+                }
+                if (Array.isArray(res.plans)) {
+                   setPlans(res.plans);
+                   setRightTab("plans");
+                }
+                if (Array.isArray(res.trace_events)) {
+                   // Merge or replace trace? Replace is safer for final state
+                   setTrace(res.trace_events);
+                }
+             }
+             setRunning(false);
+             if (taskUnsubRef.current) {
+               taskUnsubRef.current();
+               taskUnsubRef.current = null;
+             }
+          } else if (ev.event_type === "failed") {
+             setErrorText(ev.error || "Task failed");
+             setRunning(false);
+             if (taskUnsubRef.current) {
+               taskUnsubRef.current();
+               taskUnsubRef.current = null;
+             }
+          }
+        });
+        return;
+      }
+
+      if (!resp.body) {
+        setErrorText("No response body");
         setRunning(false);
         return;
       }
@@ -498,31 +604,65 @@ export function ScriptAIAssistantChatboxPane(props: {
                       </div>
                     </div>
 
-                    <div className="space-y-2">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {assets.map((a) => {
                         const key = String(a._client_key);
                         const checked = selectedMap[key] !== false;
                         const name = String(a?.name || "");
                         const keywords = Array.isArray(a?.keywords) ? a.keywords.map(String).filter(Boolean) : [];
-                        const detailsMd = String(a?.details_md || "");
+                        const detailsMd = stripMarkdownMetadata(String(a?.details_md || ""));
                         return (
-                          <div key={key} className="rounded-lg border border-border bg-background/30 p-3">
-                            <div className="flex items-start justify-between gap-3">
-                              <label className="flex items-start gap-3 min-w-0 cursor-pointer">
-                                <input type="checkbox" checked={checked} onChange={(e) => toggleAsset(key, e.target.checked)} className="mt-0.5" />
-                                <div className="min-w-0">
-                                  <div className="text-sm font-bold text-textMain truncate">{name || "(未命名)"}</div>
-                                  {keywords.length ? <div className="mt-1 text-[11px] text-textMuted truncate">关键词：{keywords.join(" · ")}</div> : null}
-                                </div>
-                              </label>
-                              <div className="text-[11px] text-textMuted">{String(a?.type || assetType || "")}</div>
+                          <div key={key} className="group relative flex flex-col rounded-xl border border-border bg-gradient-to-br from-surface/80 to-surface/40 overflow-hidden hover:border-primary/50 transition-all hover:shadow-lg h-64">
+                            {/* Checkbox Overlay */}
+                            <div className="absolute top-2 left-2 z-20">
+                              <input 
+                                type="checkbox" 
+                                checked={checked} 
+                                onChange={(e) => toggleAsset(key, e.target.checked)} 
+                                className="w-4 h-4 rounded border-gray-400 bg-white/80 checked:bg-primary"
+                              />
                             </div>
-                            {detailsMd ? (
-                              <details className="mt-2">
-                                <summary className="text-[11px] text-textMuted cursor-pointer">查看详情</summary>
-                                <pre className="mt-2 text-[11px] text-textMain whitespace-pre-wrap break-words">{detailsMd}</pre>
-                              </details>
-                            ) : null}
+                            
+                            {/* Top Preview Area (Click to open full preview) */}
+                            <div 
+                              className="h-28 relative bg-black/10 flex-shrink-0 cursor-pointer"
+                              onClick={() => setPreviewAsset({ name, detailsMd })}
+                            >
+                              <div className="absolute inset-0 flex flex-col items-center justify-center text-textMuted opacity-40 bg-surface/50">
+                                <ImageIcon size={20} />
+                                <span className="text-[9px] mt-1">无预览图</span>
+                              </div>
+                              <button className="absolute top-2 right-2 p-1 text-textMuted hover:text-primary bg-surface/80 rounded opacity-0 group-hover:opacity-100 transition-opacity">
+                                <Maximize2 size={12} />
+                              </button>
+                            </div>
+
+                            {/* Content Area */}
+                            <div className="flex-1 p-3 border-t border-border/50 bg-surface/30 overflow-hidden relative flex flex-col cursor-pointer" onClick={() => setPreviewAsset({ name, detailsMd })}>
+                               <div className="font-bold text-sm text-textMain truncate mb-1" title={name}>
+                                 {name || "(未命名)"}
+                               </div>
+                               <div className="flex-1 overflow-hidden relative">
+                                 {detailsMd ? (
+                                   <div className="markdown-body prose prose-invert prose-xs max-w-none text-[10px] leading-relaxed opacity-80 pointer-events-none select-none line-clamp-4">
+                                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{detailsMd}</ReactMarkdown>
+                                   </div>
+                                 ) : (
+                                   <div className="text-[10px] text-textMuted opacity-50">无文档内容</div>
+                                 )}
+                                 <div className="absolute inset-x-0 bottom-0 h-6 bg-gradient-to-t from-surface/30 to-transparent pointer-events-none" />
+                               </div>
+                            </div>
+                            
+                            {/* Footer Area */}
+                            <div className="px-3 py-2 border-t border-border/50 bg-surface/60 backdrop-blur-sm flex items-center justify-between gap-2 flex-shrink-0 text-[10px] text-textMuted">
+                               <div className="truncate flex-1" title={keywords.join(", ")}>
+                                 {keywords.length ? keywords.slice(0, 2).join(" · ") : "无关键词"}
+                               </div>
+                               <div className="bg-surfaceHighlight px-1.5 py-0.5 rounded text-[9px] truncate max-w-[60px]">
+                                 {String(a?.type || assetType || "未知")}
+                               </div>
+                            </div>
                           </div>
                         );
                       })}
@@ -744,6 +884,34 @@ export function ScriptAIAssistantChatboxPane(props: {
           )}
         </div>
       </div>
+      
+      {previewAsset && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4" onClick={() => setPreviewAsset(null)}>
+          <div className="w-full max-w-2xl max-h-[80vh] rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+            <div className="h-12 px-4 border-b border-border flex items-center justify-between flex-shrink-0 bg-surface/95 backdrop-blur">
+              <div className="font-bold text-sm text-textMain truncate pr-4">{previewAsset.name}</div>
+              <button
+                onClick={() => setPreviewAsset(null)}
+                className="p-1.5 rounded-lg hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              {previewAsset.detailsMd ? (
+                <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{previewAsset.detailsMd}</ReactMarkdown>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center h-full text-textMuted gap-2 py-10">
+                  <FileText size={32} className="opacity-20" />
+                  <div className="text-sm">暂无详细内容</div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

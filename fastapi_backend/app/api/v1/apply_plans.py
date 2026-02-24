@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 import json
 from uuid import UUID
 
@@ -10,14 +11,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_tools.apply_plan import ApplyPlan
 from app.database import User, get_async_session
-from app.models import Episode, FileNode, ImagePrompt, Project, Storyboard, VideoPrompt, Asset
+from app.models import Episode, FileNode, ImagePrompt, Project, Storyboard, VideoPrompt, Asset, AssetBinding, AssetVariant
+from app.repositories import asset_repository
 from app.schemas import AIShotDraft
 from app.schemas_response import ResponseBase
 from app.services.apply_plan_normalize_service import normalize_apply_plan
 from app.services.storage.vfs_service import vfs_service
 from app.services.asset_service import asset_service
 from app.users import current_active_user
-from app.vfs_docs import AssetDocV1, AssetDocV2, EpisodeBindingsDocV1
+from app.vfs_docs import AssetDocV1, AssetDocV2, AssetVariantDocV2, EpisodeBindingsDocV1
 from app.vfs_layout import (
     ASSETS_FOLDER_NAME,
     ASSET_TYPE_FOLDER_NAMES,
@@ -29,8 +31,11 @@ from app.vfs_layout import (
     bindings_filename,
     episode_filename,
     safe_filename,
+    variant_doc_filename,
+    variant_folder_name,
 )
 from app.vfs_renderers.asset_doc_renderer import render_asset_doc_md
+from app.vfs_renderers.asset_variant_doc_renderer import render_asset_variant_doc_md
 
 
 router = APIRouter(prefix="/apply-plans")
@@ -118,6 +123,32 @@ async def _get_or_create_child_folder(
     return created.id
 
 
+def _parse_attributes_from_md(text: str) -> dict:
+    attrs = {}
+    # Match [D{number}-{Key}: {Value}] or [D{number}-{Key}：{Value}]
+    # e.g. [D1-核心身份：元印师]
+    matches = re.findall(r"\[D(\d+)-([^：:]+)[：:]([^\]]+)\]", text)
+    for m in matches:
+        key_num = m[0]
+        key_name = m[1].strip()
+        value = m[2].strip()
+        attrs[f"D{key_num}_{key_name}"] = value
+    
+    # Also parse "补全说明"
+    # [补全说明：...]
+    m_supp = re.search(r"\[补全说明[：:]([^\]]+)\]", text)
+    if m_supp:
+        attrs["supplement"] = m_supp.group(1).strip()
+        
+    # Also parse "指代与风格"
+    # [指代与风格：...]
+    m_style = re.search(r"\[指代与风格[：:]([^\]]+)\]", text)
+    if m_style:
+        attrs["style_ref"] = m_style.group(1).strip()
+        
+    return attrs
+
+
 def _asset_v1_to_v2(v1: AssetDocV1, *, provenance: dict) -> AssetDocV2:
     pieces: list[str] = []
     if v1.description:
@@ -127,6 +158,15 @@ def _asset_v1_to_v2(v1: AssetDocV1, *, provenance: dict) -> AssetDocV2:
         pieces.append(json.dumps(v1.meta, ensure_ascii=False, indent=2))
         pieces.append("```")
     details_md = "\n\n".join([p for p in pieces if p]).strip() + ("\n" if pieces else "")
+    
+    attributes = _parse_attributes_from_md(details_md)
+    default_variant = AssetVariantDocV2(
+        variant_code="V1",
+        stage_tag="default",
+        attributes=attributes,
+        prompt_en="" 
+    )
+    
     return AssetDocV2(
         type=v1.type,
         name=v1.name,
@@ -134,6 +174,7 @@ def _asset_v1_to_v2(v1: AssetDocV1, *, provenance: dict) -> AssetDocV2:
         first_appearance_episode=v1.first_appearance_episode,
         details_md=details_md,
         provenance=dict(provenance or {}),
+        variants=[default_variant],
     )
 
 
@@ -219,6 +260,14 @@ async def api_execute_apply_plan(
 
     if plan.kind == "asset_create" and plan.tool_id == "asset_create":
         assets_raw = (plan.inputs or {}).get("assets") or []
+        script_id_raw = (plan.inputs or {}).get("script_id")
+        script_id = None
+        if script_id_raw:
+            try:
+                script_id = UUID(str(script_id_raw))
+            except Exception:
+                pass
+
         if not isinstance(assets_raw, list):
             raise HTTPException(status_code=400, detail="invalid_assets")
         assets_v2: list[AssetDocV2] = []
@@ -314,50 +363,80 @@ async def api_execute_apply_plan(
                     name=a.name,
                     type=db_type,
                     project_id=project_id,
+                    script_id=script_id,
                     source="ai_agent",
                     category=None,
                     doc_node_id=md_node.id
                  )
-            elif existing_asset and not existing_asset.doc_node_id:
-                 # Link existing asset to doc if not linked
-                 existing_asset.doc_node_id = md_node.id
-                 db.add(existing_asset)
+                 existing_asset = (await db.execute(
+                    select(Asset).where(
+                        Asset.project_id == project_id,
+                        Asset.name == a.name,
+                        Asset.type == db_type
+                    )
+                 )).scalars().first()
 
-            # 4. Handle Variants
+            if existing_asset:
+                 if not existing_asset.doc_node_id:
+                     # Link existing asset to doc if not linked
+                     existing_asset.doc_node_id = md_node.id
+                     db.add(existing_asset)
+                 
+                 # Update tags
+                 if a.keywords:
+                    await asset_repository.replace_asset_tags(
+                        db=db,
+                        project_id=project_id,
+                        asset_entity_id=existing_asset.id,
+                        tags=a.keywords
+                    )
+
+            # 4. Handle Variants - create variant doc and bind doc_node_id
             if existing_asset and a.variants:
-                # Reload asset to get variants? Or just query variants
-                # Actually asset_service.create_variant handles duplicate check if we don't pass code
-                # But here we want to match by stage_tag if possible
-                
-                # Fetch existing variants
                 existing_variants = await asset_service.get_asset_full(db=db, user_id=user.id, asset_id=existing_asset.id)
                 current_vars = existing_variants.variants if existing_variants else []
                 
                 for v_draft in a.variants:
-                    # Try to match existing variant by stage_tag
-                    # If stage_tag is empty, maybe match by code? AI usually doesn't give code.
                     target_tag = (v_draft.stage_tag or "").strip()
                     if not target_tag and not v_draft.variant_code:
-                         # Skip if no tag or code
                          continue
                     
                     matched_v = None
-                    # First try match by variant_code
                     if v_draft.variant_code:
                         for ev in current_vars:
                             if ev.variant_code == v_draft.variant_code:
                                 matched_v = ev
                                 break
 
-                    # Then try match by stage_tag
                     if not matched_v and target_tag:
                         for ev in current_vars:
                             if (ev.stage_tag or "").strip() == target_tag:
                                 matched_v = ev
                                 break
                     
+                    variant_key = v_draft.variant_code or target_tag or "default"
+                    variant_md_filename = variant_doc_filename(asset_name=a.name, variant_key=variant_key)
+                    variant_md_content = render_asset_variant_doc_md(
+                        asset_type=a.type,
+                        asset_name=a.name,
+                        variant_code=v_draft.variant_code or "",
+                        stage_tag=target_tag or None,
+                        age_range=None,
+                        attributes=v_draft.attributes or {},
+                        prompt_template=v_draft.prompt_en,
+                    )
+                    variant_md_node = await vfs_service.upsert_text_file(
+                        db=db,
+                        user_id=user.id,
+                        name=variant_md_filename,
+                        content=variant_md_content,
+                        parent_id=type_folder_id,
+                        workspace_id=None,
+                        project_id=project_id,
+                        content_type="text/markdown; charset=utf-8",
+                    )
+                    
                     if matched_v:
-                        # Update existing
                         await asset_service.update_variant(
                             db=db,
                             user_id=user.id,
@@ -366,22 +445,43 @@ async def api_execute_apply_plan(
                             age_range=None,
                             attributes=v_draft.attributes,
                             prompt_template=v_draft.prompt_en,
-                            is_default=None
+                            is_default=None,
+                            doc_node_id=variant_md_node.id,
                         )
                     else:
-                        # Create new
-                        await asset_service.create_variant(
+                        new_variant_result = await asset_service.create_variant(
                             db=db,
                             user_id=user.id,
                             asset_id=existing_asset.id,
-                            variant_code=v_draft.variant_code, # Usually None, service will generate
+                            variant_code=v_draft.variant_code,
                             stage_tag=target_tag or None,
                             age_range=None,
                             attributes=v_draft.attributes,
                             prompt_template=v_draft.prompt_en,
                             is_default=False
                         )
+                        if new_variant_result and new_variant_result.variants:
+                            new_v = new_variant_result.variants[-1]
+                            await asset_service.update_variant(
+                                db=db,
+                                user_id=user.id,
+                                variant_id=new_v.id,
+                                stage_tag=None,
+                                age_range=None,
+                                attributes=None,
+                                prompt_template=None,
+                                is_default=None,
+                                doc_node_id=variant_md_node.id,
+                            )
+                    created_nodes.append({
+                        "type": a.type,
+                        "name": a.name,
+                        "variant": variant_key,
+                        "variant_md_node_id": str(variant_md_node.id),
+                        "variant_md_filename": variant_md_filename,
+                    })
 
+        await db.commit()
         return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_nodes, "provenance": provenance})
 
     if plan.kind == "asset_bind" and plan.tool_id == "asset_bind":
@@ -409,7 +509,66 @@ async def api_execute_apply_plan(
             project_id=project_id,
             content_type="application/json; charset=utf-8",
         )
-        return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": [{"episode_number": episode_number, "node_id": str(node.id), "filename": filename}], "provenance": provenance})
+        
+        episode_res = await db.execute(
+            select(Episode).where(
+                Episode.project_id == project_id,
+                Episode.episode_number == episode_number,
+            )
+        )
+        episode = episode_res.scalars().first()
+        
+        db_bindings_created = []
+        if episode:
+            for binding_item in doc.bindings:
+                db_type = binding_item.asset_type
+                if db_type == "location":
+                    db_type = "scene"
+                elif db_type == "effect":
+                    db_type = "vfx"
+                
+                asset_res = await db.execute(
+                    select(Asset).where(
+                        Asset.project_id == project_id,
+                        Asset.name == binding_item.asset_name,
+                        Asset.type == db_type,
+                    )
+                )
+                asset = asset_res.scalars().first()
+                if asset:
+                    existing_binding_res = await db.execute(
+                        select(AssetBinding).where(
+                            AssetBinding.episode_id == episode.id,
+                            AssetBinding.asset_entity_id == asset.id,
+                        )
+                    )
+                    existing_binding = existing_binding_res.scalars().first()
+                    if existing_binding:
+                        db_bindings_created.append({
+                            "asset_name": asset.name,
+                            "binding_id": str(existing_binding.id),
+                            "status": "existing",
+                        })
+                    else:
+                        new_binding = AssetBinding(
+                            episode_id=episode.id,
+                            asset_entity_id=asset.id,
+                            asset_variant_id=None,
+                        )
+                        db.add(new_binding)
+                        await db.flush()
+                        db_bindings_created.append({
+                            "asset_name": asset.name,
+                            "binding_id": str(new_binding.id),
+                            "status": "created",
+                        })
+        
+        return ResponseBase(code=200, msg="OK", data={
+            "plan_id": str(plan.id),
+            "created": [{"episode_number": episode_number, "node_id": str(node.id), "filename": filename}],
+            "db_bindings": db_bindings_created,
+            "provenance": provenance,
+        })
 
     if plan.kind == "asset_doc_upsert" and plan.tool_id == "asset_doc_upsert":
         raw_type = str((plan.inputs or {}).get("asset_type") or "").strip()

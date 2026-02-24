@@ -57,6 +57,7 @@ export const PROJECTS: Project[] = [
 export const ASSETS: Asset[] = [
   {
     id: "a1",
+    assetId: "a1_code",
     name: "男主-萧炎",
     type: "CHARACTER",
     thumbnail: "https://picsum.photos/id/1005/200/200",
@@ -65,23 +66,24 @@ export const ASSETS: Asset[] = [
     variants: [
       {
         id: "v1",
-        name: "宗门常服",
+        variant_code: "宗门常服",
         thumbnail: "https://picsum.photos/id/1005/200/200",
       },
       {
         id: "v2",
-        name: "战损状态",
+        variant_code: "战损状态",
         thumbnail: "https://picsum.photos/id/1006/200/200",
       },
       {
         id: "v3",
-        name: "少年时期",
+        variant_code: "少年时期",
         thumbnail: "https://picsum.photos/id/1008/200/200",
       },
     ],
   },
   {
     id: "a2",
+    assetId: "a2_code",
     name: "女主-熏儿",
     type: "CHARACTER",
     thumbnail: "https://picsum.photos/id/1011/200/200",
@@ -90,18 +92,19 @@ export const ASSETS: Asset[] = [
     variants: [
       {
         id: "v1",
-        name: "日常",
+        variant_code: "日常",
         thumbnail: "https://picsum.photos/id/1011/200/200",
       },
       {
         id: "v2",
-        name: "大婚红衣",
+        variant_code: "大婚红衣",
         thumbnail: "https://picsum.photos/id/1012/200/200",
       },
     ],
   },
   {
     id: "a3",
+    assetId: "a3_code",
     name: "云岚宗广场",
     type: "SCENE",
     thumbnail: "https://picsum.photos/id/1015/200/200",
@@ -110,6 +113,7 @@ export const ASSETS: Asset[] = [
   },
   {
     id: "a4",
+    assetId: "a4_code",
     name: "玄重尺",
     type: "PROP",
     thumbnail: "https://picsum.photos/id/1016/200/200",
@@ -118,6 +122,7 @@ export const ASSETS: Asset[] = [
   },
   {
     id: "a5",
+    assetId: "a5_code",
     name: "异火特效",
     type: "EFFECT",
     thumbnail: "https://picsum.photos/id/1020/200/200",
@@ -126,6 +131,7 @@ export const ASSETS: Asset[] = [
   },
   {
     id: "d1",
+    assetId: "d1_code",
     name: "神秘黑袍人",
     type: "CHARACTER",
     thumbnail: "",
@@ -134,6 +140,7 @@ export const ASSETS: Asset[] = [
   },
   {
     id: "d2",
+    assetId: "d2_code",
     name: "魔兽山脉深处",
     type: "SCENE",
     thumbnail: "",

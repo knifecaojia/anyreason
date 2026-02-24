@@ -3,6 +3,7 @@ import { Noto_Sans_SC } from "next/font/google";
 import "@xyflow/react/dist/style.css";
 import "./globals.css";
 import { cookies } from "next/headers";
+import { Toaster } from "sonner";
 import { LocaleProvider } from "@/components/i18n/LocaleProvider";
 import { resolveLocale } from "@/lib/i18n";
 
@@ -34,6 +35,7 @@ export default async function RootLayout({
       <body className={notoSansSc.variable}>
         <LocaleProvider initialLocale={locale}>
           {children}
+          <Toaster richColors position="top-right" />
         </LocaleProvider>
       </body>
     </html>

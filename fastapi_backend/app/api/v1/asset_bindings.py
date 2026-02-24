@@ -44,6 +44,73 @@ async def list_episode_asset_bindings(
     return ResponseBase(code=200, msg="OK", data=[_to_brief(b, a, v) for (b, a, v) in rows])
 
 
+@router.post("/episodes/{episode_id}/asset-bindings", response_model=ResponseBase[AssetBindingBrief])
+async def upsert_episode_asset_binding(
+    episode_id: UUID,
+    body: AssetBindingCreateRequest,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    binding = await asset_binding_repository.upsert_episode_binding(
+        db=db,
+        user_id=user.id,
+        episode_id=episode_id,
+        asset_entity_id=body.asset_entity_id,
+        asset_variant_id=body.asset_variant_id,
+    )
+    if not binding:
+        raise AppError(msg="Episode not found or not authorized", code=404, status_code=404)
+
+    await db.commit()
+
+    res = await db.execute(
+        select(AssetBinding, Asset, AssetVariant)
+        .join(Asset, AssetBinding.asset_entity_id == Asset.id)
+        .outerjoin(AssetVariant, AssetBinding.asset_variant_id == AssetVariant.id)
+        .where(AssetBinding.id == binding.id)
+    )
+    row = res.first()
+    if not row:
+        raise AppError(msg="Asset binding not found", code=404, status_code=404)
+    b, a, v = row
+    return ResponseBase(code=200, msg="OK", data=_to_brief(b, a, v))
+
+
+@router.post("/episodes/{episode_id}/asset-bindings/batch", response_model=ResponseBase[list[AssetBindingBrief]])
+async def upsert_episode_asset_bindings_batch(
+    episode_id: UUID,
+    body: list[AssetBindingCreateRequest],
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    bindings_data = [{"asset_entity_id": str(b.asset_entity_id), "asset_variant_id": str(b.asset_variant_id) if b.asset_variant_id else None} for b in body]
+    bindings = await asset_binding_repository.upsert_episode_bindings_batch(
+        db=db,
+        user_id=user.id,
+        episode_id=episode_id,
+        bindings=bindings_data,
+    )
+    if bindings is None:
+        raise AppError(msg="Episode not found or not authorized", code=404, status_code=404)
+
+    await db.commit()
+
+    result = []
+    for binding in bindings:
+        res = await db.execute(
+            select(AssetBinding, Asset, AssetVariant)
+            .join(Asset, AssetBinding.asset_entity_id == Asset.id)
+            .outerjoin(AssetVariant, AssetBinding.asset_variant_id == AssetVariant.id)
+            .where(AssetBinding.id == binding.id)
+        )
+        row = res.first()
+        if row:
+            b, a, v = row
+            result.append(_to_brief(b, a, v))
+    
+    return ResponseBase(code=200, msg="OK", data=result)
+
+
 @router.get("/storyboards/{storyboard_id}/asset-bindings", response_model=ResponseBase[StoryboardAssetBindingsResponse])
 async def list_storyboard_asset_bindings(
     storyboard_id: UUID,

@@ -102,6 +102,75 @@ async def upsert_storyboard_binding(
     return row
 
 
+async def upsert_episode_binding(
+    *,
+    db: AsyncSession,
+    user_id: UUID,
+    episode_id: UUID,
+    asset_entity_id: UUID,
+    asset_variant_id: UUID | None,
+) -> AssetBinding | None:
+    ep = await _ensure_episode_for_user(db=db, user_id=user_id, episode_id=episode_id)
+    if not ep:
+        return None
+
+    existing_res = await db.execute(
+        select(AssetBinding).where(AssetBinding.episode_id == ep.id, AssetBinding.asset_entity_id == asset_entity_id)
+    )
+    existing = existing_res.scalars().first()
+    if existing:
+        existing.asset_variant_id = asset_variant_id
+        await db.flush()
+        return existing
+
+    row = AssetBinding(
+        asset_entity_id=asset_entity_id,
+        asset_variant_id=asset_variant_id,
+        episode_id=ep.id,
+    )
+    db.add(row)
+    await db.flush()
+    return row
+
+
+async def upsert_episode_bindings_batch(
+    *,
+    db: AsyncSession,
+    user_id: UUID,
+    episode_id: UUID,
+    bindings: list[dict],
+) -> list[AssetBinding]:
+    ep = await _ensure_episode_for_user(db=db, user_id=user_id, episode_id=episode_id)
+    if not ep:
+        return []
+    
+    result = []
+    for b in bindings:
+        asset_entity_id = b.get("asset_entity_id")
+        asset_variant_id = b.get("asset_variant_id")
+        if not asset_entity_id:
+            continue
+        
+        existing_res = await db.execute(
+            select(AssetBinding).where(AssetBinding.episode_id == ep.id, AssetBinding.asset_entity_id == asset_entity_id)
+        )
+        existing = existing_res.scalars().first()
+        if existing:
+            existing.asset_variant_id = asset_variant_id
+            result.append(existing)
+        else:
+            row = AssetBinding(
+                asset_entity_id=asset_entity_id,
+                asset_variant_id=asset_variant_id,
+                episode_id=ep.id,
+            )
+            db.add(row)
+            result.append(row)
+    
+    await db.flush()
+    return result
+
+
 async def delete_binding(*, db: AsyncSession, user_id: UUID, binding_id: UUID) -> bool:
     res = await db.execute(
         select(AssetBinding)

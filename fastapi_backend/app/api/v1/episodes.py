@@ -351,3 +351,38 @@ async def delete_episode(
 
     await db.commit()
     return ResponseBase(code=200, msg="OK", data={"deleted": True})
+
+
+UNASSIGNED_EPISODE_CODE = "UNASSIGNED"
+
+
+@router.get("/scripts/{script_id}/episodes/unassigned", response_model=ResponseBase[EpisodeMutateRead])
+async def get_or_create_unassigned_episode(
+    script_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    project = await _ensure_script_project(db=db, user_id=user.id, script_id=script_id)
+    
+    res = await db.execute(
+        select(Episode).where(
+            Episode.project_id == project.id,
+            Episode.episode_code == UNASSIGNED_EPISODE_CODE,
+        )
+    )
+    unassigned = res.scalars().first()
+    
+    if unassigned:
+        return ResponseBase(code=200, msg="OK", data=EpisodeMutateRead.model_validate(unassigned))
+    
+    unassigned = Episode(
+        project_id=project.id,
+        episode_number=0,
+        episode_code=UNASSIGNED_EPISODE_CODE,
+        title="未分集",
+        script_full_text=None,
+    )
+    db.add(unassigned)
+    await db.commit()
+    await db.refresh(unassigned)
+    return ResponseBase(code=200, msg="OK", data=EpisodeMutateRead.model_validate(unassigned))

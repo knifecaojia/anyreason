@@ -1,7 +1,8 @@
 "use client";
 
 import { useRef } from "react";
-import { ArrowUp, Check, Plus, X } from "lucide-react";
+import { ArrowUp, Check, Loader2, Plus, Sparkles, X } from "lucide-react";
+import { getCaretAbsoluteCoordinates } from "@/lib/utils/caret-coordinates";
 
 import { MentionPopup, type MentionPopupTab } from "@/components/settings/MentionPopup";
 
@@ -30,6 +31,9 @@ type ImagePromptComposerProps = {
   disabled?: boolean;
   submitDisabled?: boolean;
   onSubmit: () => void;
+  onOptimize?: () => void;
+  isOptimizing?: boolean;
+  onTriggerMention?: (position: { top: number; left: number }) => void;
   placeholder: string;
   generationLabel: string;
   modelLabel: string;
@@ -55,6 +59,9 @@ export function ImagePromptComposer({
   disabled,
   submitDisabled,
   onSubmit,
+  onOptimize,
+  isOptimizing,
+  onTriggerMention,
   placeholder,
   generationLabel,
   modelLabel,
@@ -63,8 +70,27 @@ export function ImagePromptComposer({
 }: ImagePromptComposerProps) {
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (onPromptKeyDown) onPromptKeyDown(e);
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      if (e.key === '@' && onTriggerMention) {
+          const textarea = e.currentTarget;
+          const { selectionStart } = textarea;
+          try {
+             const coords = getCaretAbsoluteCoordinates(textarea, selectionStart);
+             if (coords) {
+                 onTriggerMention({ top: coords.top + 20, left: coords.left });
+             }
+          } catch (err) {
+              console.error("Failed to get caret coords", err);
+          }
+      }
+  };
+
   return (
-    <div className="rounded-2xl border border-border bg-background/40 p-0 overflow-hidden relative">
+    <div className="rounded-2xl border border-border bg-background/40 p-0 overflow-hidden relative group/composer">
       <div className="flex flex-col">
         <div className="px-4 pt-4 pb-2">
           <div className="flex items-center gap-2 overflow-x-auto pb-2">
@@ -142,11 +168,26 @@ export function ImagePromptComposer({
             ref={promptRef}
             value={prompt}
             onChange={onPromptChange}
-            onKeyDown={onPromptKeyDown}
+            onKeyDown={handleKeyDown}
+            onKeyUp={handleKeyUp}
             className="w-full bg-transparent outline-none text-sm text-textMain placeholder:text-textMuted resize-none min-h-[80px]"
             placeholder={placeholder}
             disabled={disabled}
           />
+          
+          <div className="absolute top-2 right-2 flex items-center gap-1 opacity-0 group-hover/composer:opacity-100 transition-opacity">
+            {onOptimize && (
+              <button
+                type="button"
+                onClick={onOptimize}
+                className="p-1.5 rounded-lg bg-surface hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors border border-border"
+                disabled={isOptimizing || disabled}
+                title="AI 优化提示词"
+              >
+                {isOptimizing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+              </button>
+            )}
+          </div>
 
           <MentionPopup
             isOpen={mentionPopupOpen}

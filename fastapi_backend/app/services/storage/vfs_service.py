@@ -551,3 +551,63 @@ class VFSService:
 
 
 vfs_service = VFSService()
+
+
+AI_GENERATED_FOLDER_NAME = "AI_Generated"
+
+
+async def get_or_create_user_ai_folder(*, db: AsyncSession, user_id: UUID) -> FileNode:
+    res = await db.execute(
+        select(FileNode).where(
+            FileNode.created_by == user_id,
+            FileNode.parent_id.is_(None),
+            FileNode.name == AI_GENERATED_FOLDER_NAME,
+            FileNode.is_folder.is_(True),
+            FileNode.project_id.is_(None),
+            FileNode.workspace_id.is_(None),
+        )
+    )
+    folder = res.scalars().first()
+    if folder:
+        return folder
+    folder = FileNode(
+        id=uuid4(),
+        name=AI_GENERATED_FOLDER_NAME,
+        is_folder=True,
+        parent_id=None,
+        workspace_id=None,
+        project_id=None,
+        created_by=user_id,
+    )
+    db.add(folder)
+    await db.commit()
+    await db.refresh(folder)
+    return folder
+
+
+async def get_or_create_project_ai_folder(*, db: AsyncSession, user_id: UUID, project_id: UUID) -> FileNode:
+    await vfs_service._assert_project_access(db=db, user_id=user_id, project_id=project_id)
+    res = await db.execute(
+        select(FileNode).where(
+            FileNode.project_id == project_id,
+            FileNode.parent_id.is_(None),
+            FileNode.name == AI_GENERATED_FOLDER_NAME,
+            FileNode.is_folder.is_(True),
+        )
+    )
+    folder = res.scalars().first()
+    if folder:
+        return folder
+    folder = FileNode(
+        id=uuid4(),
+        name=AI_GENERATED_FOLDER_NAME,
+        is_folder=True,
+        parent_id=None,
+        workspace_id=None,
+        project_id=project_id,
+        created_by=user_id,
+    )
+    db.add(folder)
+    await db.commit()
+    await db.refresh(folder)
+    return folder

@@ -48,3 +48,13 @@ def asset_doc_filename(*, asset_type: str, name: str, asset_id: str | None = Non
 
 def bindings_filename(*, episode_number: int) -> str:
     return f"EP{int(episode_number):03d}_bindings.json"
+
+
+def variant_doc_filename(*, asset_name: str, variant_key: str) -> str:
+    base = safe_filename(asset_name)
+    key = safe_filename(variant_key)
+    return f"{base}_variants_{key}.md"
+
+
+def variant_folder_name(*, asset_name: str) -> str:
+    return safe_filename(asset_name)

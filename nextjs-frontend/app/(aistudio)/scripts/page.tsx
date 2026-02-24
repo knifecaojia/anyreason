@@ -5,10 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Clapperboard, Code, Edit3, Eye, FileText, Film, Image as ImageIcon, Loader2, Music, Package, Plus, Save, Settings, Sparkles, Trash2, Users, Video as VideoIcon, Wand2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { AssetCreateDialog } from "@/components/scripts/AssetCreateDialog";
 import { AgentPickerDialog } from "@/components/agents/AgentPickerDialog";
 import { StatCard } from "@/components/aistudio/StatCard";
 import { ScriptAIAssistantChatboxPane } from "@/components/scripts/ScriptAIAssistantChatboxPane";
 import { ScriptAIAssistantSessionPane } from "@/components/scripts/ScriptAIAssistantSessionPane";
+import { AssetDocumentViewer } from "@/components/scripts/AssetDocumentViewer";
 
 type ScriptItem = {
   id: string;
@@ -123,7 +125,7 @@ async function vfsDownloadText(nodeId: string): Promise<string> {
   return await res.text();
 }
 
-export function stripMarkdownMetadata(raw: string): string {
+function stripMarkdownMetadata(raw: string): string {
   const text = String(raw || "");
   if (!text.trim()) return "";
   let lines = text.replace(/\r\n/g, "\n").split("\n");
@@ -152,63 +154,8 @@ export function stripMarkdownMetadata(raw: string): string {
   return lines.slice(start).join("\n").trim();
 }
 
-export function buildAssetCreateHref(sourceNodeId: string, seriesId: string): string {
+function buildAssetCreateHref(sourceNodeId: string, seriesId: string): string {
   return `/assets?mode=create&sourceNodeId=${encodeURIComponent(sourceNodeId)}&seriesId=${encodeURIComponent(seriesId)}`;
-}
-
-export function AssetDocumentViewer({
-  open,
-  title,
-  content,
-  loading,
-  generateHref,
-  onClose,
-}: {
-  open: boolean;
-  title: string;
-  content: string;
-  loading: boolean;
-  generateHref?: string | null;
-  onClose: () => void;
-}) {
-  if (!open) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-3xl rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden">
-        <div className="h-12 px-4 border-b border-border flex items-center justify-between">
-          <div className="font-bold text-sm truncate">{title}</div>
-          <div className="flex items-center gap-2">
-            {generateHref && (
-              <a
-                href={generateHref}
-                className="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-white hover:bg-primary/90 transition-colors"
-              >
-                生成图片
-              </a>
-            )}
-            <button
-              onClick={onClose}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
-              type="button"
-            >
-              关闭
-            </button>
-          </div>
-        </div>
-        <div className="p-4 max-h-[70vh] overflow-y-auto">
-          {loading ? (
-            <div className="text-sm text-textMuted flex items-center gap-2">
-              <Loader2 size={16} className="animate-spin" /> 加载中...
-            </div>
-          ) : (
-            <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{stripMarkdownMetadata(content)}</ReactMarkdown>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
 }
 
 import { AssetCard } from "@/components/chat/AssetCard";
@@ -317,25 +264,24 @@ async function listScriptAssets(scriptId: string): Promise<AssetEntity[]> {
     id: a.id,
     name: a.name,
     type: a.type?.toLowerCase() || "character",
-    thumbnail: a.resources?.[0]?.minio_key ? `/api/assets/${a.id}/resources/${a.resources[0].id}/file` : "",
+    thumbnail: a.resources?.[0]?.minio_key ? `/api/assets/${a.id}/resources/${a.resources[0].id}/download` : "",
     tags: Array.isArray(a.tags) ? a.tags : [],
     doc_node_id: a.doc_node_id,
     resources: Array.isArray(a.resources)
       ? a.resources.map((r: any) => ({
           id: r.id,
-          url: `/api/assets/${a.id}/resources/${r.id}/file`,
+          url: `/api/assets/${a.id}/resources/${r.id}/download`,
           filename: r.filename || r.name || ""
         }))
       : []
   }));
 }
 
-function AssetEntityCard({ asset, onClick, onOpenDoc }: { asset: AssetEntity; onClick: () => void; onOpenDoc: () => void }) {
-  const [showPreview, setShowPreview] = useState(false);
+function AssetEntityCard({ asset, onClick, onOpenDoc, onDelete, onGenerate }: { asset: AssetEntity; onClick: () => void; onOpenDoc: () => void; onDelete?: () => void; onGenerate?: () => void }) {
   const [docPreview, setDocPreview] = useState<string | null>(null);
   const [docLoading, setDocLoading] = useState(false);
   useEffect(() => {
-    if (asset.thumbnail || !asset.doc_node_id) {
+    if (!asset.doc_node_id) {
       setDocPreview(null);
       setDocLoading(false);
       return;
@@ -360,33 +306,21 @@ function AssetEntityCard({ asset, onClick, onOpenDoc }: { asset: AssetEntity; on
     return () => {
       cancelled = true;
     };
-  }, [asset.thumbnail, asset.doc_node_id]);
+  }, [asset.doc_node_id]);
 
   return (
-    <>
-    <div className="group relative flex flex-col rounded-xl border border-border bg-gradient-to-br from-surface/80 to-surface/40 overflow-hidden hover:border-primary/50 transition-all hover:shadow-lg cursor-pointer h-56">
-      <div className="flex-1 relative bg-black/20" onClick={onClick}>
+    <div className="group relative flex flex-col rounded-xl border border-border bg-gradient-to-br from-surface/80 to-surface/40 overflow-hidden hover:border-primary/50 transition-all hover:shadow-lg cursor-pointer h-80">
+      <div className="h-32 relative bg-black/20 flex-shrink-0" onClick={onClick}>
         {asset.thumbnail ? (
           <img 
             src={asset.thumbnail} 
             alt={asset.name} 
             className="w-full h-full object-cover transition-transform group-hover:scale-105"
-            onClick={(e) => {
-              e.stopPropagation();
-              setShowPreview(true);
-            }}
           />
-        ) : docPreview ? (
-          <div className="absolute inset-0 p-2 overflow-hidden">
-            <div className="markdown-body prose prose-invert prose-xs max-w-none text-[10px] leading-relaxed opacity-80 pointer-events-none select-none">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{docPreview}</ReactMarkdown>
-            </div>
-            <div className="absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-surface to-transparent pointer-events-none" />
-          </div>
         ) : (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-textMuted opacity-50">
-            {docLoading ? <Loader2 size={16} className="animate-spin" /> : <ImageIcon size={24} />}
-            <span className="text-[10px] mt-1">{docLoading ? "加载预览..." : "无预览图"}</span>
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-textMuted opacity-50 bg-surface/50">
+            <ImageIcon size={24} />
+            <span className="text-[10px] mt-1">无预览图</span>
           </div>
         )}
         <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -396,23 +330,62 @@ function AssetEntityCard({ asset, onClick, onOpenDoc }: { asset: AssetEntity; on
         </div>
       </div>
       
-      <div className="p-3 border-t border-border/50 bg-surface/60 backdrop-blur-sm flex flex-col gap-1.5">
+      <div className="flex-1 p-3 border-t border-border/50 bg-surface/30 overflow-hidden relative" onClick={onClick}>
+         {docLoading ? (
+            <div className="flex items-center gap-2 text-textMuted text-[10px]">
+              <Loader2 size={12} className="animate-spin" /> 加载文档...
+            </div>
+         ) : docPreview ? (
+            <div className="markdown-body prose prose-invert prose-xs max-w-none text-[10px] leading-relaxed opacity-80 pointer-events-none select-none line-clamp-6">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{docPreview}</ReactMarkdown>
+            </div>
+         ) : (
+            <div className="text-[10px] text-textMuted opacity-50">无文档内容</div>
+         )}
+         <div className="absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t from-surface/30 to-transparent pointer-events-none" />
+      </div>
+
+      <div className="p-3 border-t border-border/50 bg-surface/60 backdrop-blur-sm flex flex-col gap-1.5 flex-shrink-0">
         <div className="flex items-center justify-between gap-2">
           <div className="font-bold text-sm text-textMain truncate" title={asset.name}>
             {asset.name}
           </div>
-          {asset.doc_node_id && (
+          <div className="flex items-center gap-1">
+            {onGenerate && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onGenerate();
+                }}
+                className="p-1 rounded hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors"
+                title="生成图片"
+              >
+                <ImageIcon size={14} />
+              </button>
+            )}
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onOpenDoc();
               }}
               className="p-1 rounded hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors"
-              title="查看设定文档"
+              title="查看文档与资源"
             >
               <FileText size={14} />
             </button>
-          )}
+            {onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete();
+                }}
+                className="p-1 rounded hover:bg-surfaceHighlight text-textMuted hover:text-red-400 transition-colors"
+                title="删除资产"
+              >
+                <Trash2 size={14} />
+              </button>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap gap-1 h-5 overflow-hidden">
           {asset.tags.slice(0, 3).map((tag, i) => (
@@ -423,26 +396,6 @@ function AssetEntityCard({ asset, onClick, onOpenDoc }: { asset: AssetEntity; on
         </div>
       </div>
     </div>
-
-      {showPreview && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-4 animate-in fade-in duration-200"
-          onClick={(e) => {
-            e.stopPropagation();
-            setShowPreview(false);
-          }}
-        >
-          <button className="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors">
-            <X size={24} />
-          </button>
-          <img 
-            src={asset.thumbnail} 
-            alt={asset.name} 
-            className="max-w-full max-h-full object-contain rounded-lg shadow-2xl"
-          />
-        </div>
-      )}
-    </>
   );
 }
 function MarkdownCard({ node, onClick, onDelete }: { node: VfsNode; onClick: () => void; onDelete?: () => void }) {
@@ -780,6 +733,29 @@ export default function Page() {
   const [viewerNode, setViewerNode] = useState<VfsNode | null>(null);
   const [assetPreviewOpen, setAssetPreviewOpen] = useState(false);
   const [assetPreviewTarget, setAssetPreviewTarget] = useState<AssetEntity | null>(null);
+
+  const [manualAssetCreateOpen, setManualAssetCreateOpen] = useState(false);
+
+  const handleCreateAssetSubmit = async (data: { name: string; type: string; category?: string }) => {
+    if (!scriptId) return;
+    const res = await fetch("/api/assets", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...data, script_id: scriptId, project_id: scriptId, source: "manual" }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    await refreshAssetRoot();
+  };
+
+  const handleDeleteAssetEntity = async (asset: AssetEntity) => {
+    if (!window.confirm(`确认删除资产“${asset.name}”？`)) return;
+    await fetch(`/api/assets/${asset.id}`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ lifecycle_status: "archived" })
+    });
+    await refreshAssetRoot();
+  };
 
   const refreshHierarchy = async (targetScriptId: string) => {
     setEpisodesLoading(true);
@@ -2313,20 +2289,19 @@ export default function Page() {
                                 <div className="text-xs text-textMuted font-mono truncate">项目资产目录</div>
                                 <div className="flex items-center gap-2">
                                   <button
+                                    onClick={() => setManualAssetCreateOpen(true)}
+                                    className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors"
+                                    type="button"
+                                  >
+                                    新建资产
+                                  </button>
+                                  <button
                                     onClick={() => void refreshAssetRoot()}
                                     className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors"
                                     type="button"
                                     disabled={assetLoading}
                                   >
                                     刷新
-                                  </button>
-                                  <button
-                                    onClick={openNewFolderDialog}
-                                    className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors"
-                                    type="button"
-                                    disabled={assetLoading}
-                                  >
-                                    新建文件夹
                                   </button>
                                 </div>
                               </div>
@@ -2335,85 +2310,47 @@ export default function Page() {
                                 <div className="text-xs text-textMuted flex items-center gap-2">
                                   <Loader2 size={14} className="animate-spin" /> 加载中...
                                 </div>
-                              ) : assetRootNodes.length === 0 ? (
-                                <div className="text-sm text-textMuted">暂无内容</div>
+                              ) : assetEntities.length === 0 ? (
+                                <div className="text-sm text-textMuted py-8 text-center">暂无资产数据，请通过 AI 提取或手动新建。</div>
                               ) : (
-                                <div className="space-y-4">
-                                  {/* Asset Entities */}
-                                  {assetEntities.length > 0 && (
-                                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                      {assetEntities.map((entity) => (
-                                        <AssetEntityCard
-                                          key={entity.id}
-                                          asset={entity}
-                                          onClick={() => {
-                                            setAssetPreviewTarget(entity);
-                                            setAssetPreviewOpen(true);
-                                          }}
-                                          onOpenDoc={() => {
-                                            if (entity.doc_node_id) {
-                                              void openNode({ id: entity.doc_node_id, name: entity.name, is_folder: false, size_bytes: 0, created_at: "", updated_at: "" });
-                                            }
-                                          }}
-                                        />
-                                      ))}
+                                <div className="space-y-8">
+                                  {Object.entries(
+                                    assetEntities.reduce((acc, entity) => {
+                                      const type = entity.type || "其他";
+                                      if (!acc[type]) acc[type] = [];
+                                      acc[type].push(entity);
+                                      return acc;
+                                    }, {} as Record<string, AssetEntity[]>)
+                                  )
+                                  .sort((a, b) => a[0].localeCompare(b[0]))
+                                  .map(([type, entities]) => (
+                                    <div key={type} className="space-y-4">
+                                      <div className="flex items-center gap-3 px-1">
+                                        <div className="h-5 w-1.5 bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
+                                        <h3 className="font-bold text-base text-textMain capitalize tracking-wide">{type}</h3>
+                                        <span className="px-2 py-0.5 rounded-full bg-surfaceHighlight text-xs font-mono text-textMuted">{entities.length}</span>
+                                      </div>
+                                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                        {entities.map((entity) => (
+                                          <AssetEntityCard
+                                            key={entity.id}
+                                            asset={entity}
+                                            onClick={() => {
+                                              setAssetPreviewTarget(entity);
+                                              setAssetPreviewOpen(true);
+                                            }}
+                                            onOpenDoc={() => {
+                                              setAssetPreviewTarget(entity);
+                                              setAssetPreviewOpen(true);
+                                            }}
+                                            onDelete={() => void handleDeleteAssetEntity(entity)}
+                                            onGenerate={() => entity.doc_node_id && router.push(buildAssetCreateHref(entity.doc_node_id, scriptId))}
+                                          />
+                                        ))}
+                                      </div>
                                     </div>
-                                  )}
-
-                                  {/* Original VFS Folder View (Optional, kept for raw file access) */}
-                                  <div className="space-y-2">
-                                    {assetRootNodes.map((n) =>
-                                      n.is_folder ? (
-                                        <div key={n.id} className="rounded-lg border border-border bg-background/30">
-                                        <div className="px-3 py-2 flex items-center justify-between gap-2">
-                                          <button onClick={() => void toggleAssetFolder(n)} className="text-left text-sm text-textMain truncate hover:text-primary transition-colors" type="button">
-                                            {assetExpanded[n.id] ? "▼" : "▶"} {n.name}
-                                          </button>
-                                          <div className="flex items-center gap-2">
-                                            <button
-                                              onClick={() => void createAssetDocInFolder(n.id)}
-                                              className="px-2 py-1 rounded-lg text-[11px] font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-primary transition-colors"
-                                              type="button"
-                                            >
-                                              新建
-                                            </button>
-                                            <button onClick={() => void deleteAssetNode(n)} className="p-1.5 rounded-lg hover:bg-surfaceHighlight text-textMuted hover:text-red-400 transition-colors" type="button">
-                                              <Trash2 size={14} />
-                                            </button>
-                                          </div>
-                                        </div>
-                                        {assetExpanded[n.id] && (
-                                          <div className="px-3 pb-3">
-                                            {(assetChildren[n.id] || []).length === 0 ? (
-                                              <div className="text-xs text-textMuted">空</div>
-                                            ) : (
-                                              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-                                                {groupAssetsByName(assetChildren[n.id] || []).map((group) => (
-                                                  <AssetMarkdownCard
-                                                    key={group.name}
-                                                    group={group}
-                                                    onDelete={(node) => void deleteAssetNode(node)}
-                                                    onOpen={(node) => void openNode(node)}
-                                                  />
-                                                ))}
-                                              </div>
-                                            )}
-                                          </div>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <div key={n.id} className="flex items-center justify-between gap-2 rounded-lg border border-border bg-background/30 px-3 py-2">
-                                        <button onClick={() => void openNode(n)} className="text-left text-sm text-textMain truncate hover:text-primary transition-colors" type="button">
-                                          {n.name}
-                                        </button>
-                                        <button onClick={() => void deleteAssetNode(n)} className="p-1.5 rounded-lg hover:bg-surfaceHighlight text-textMuted hover:text-red-400 transition-colors" type="button">
-                                          <Trash2 size={14} />
-                                        </button>
-                                      </div>
-                                    )
-                                  )}
+                                  ))}
                                 </div>
-                              </div>
                               )}
                             </div>
                           )}
@@ -2748,6 +2685,12 @@ export default function Page() {
           </div>
         </div>
       )}
+
+      <AssetCreateDialog
+        open={manualAssetCreateOpen}
+        onClose={() => setManualAssetCreateOpen(false)}
+        onSubmit={handleCreateAssetSubmit}
+      />
     </div>
   );
 }

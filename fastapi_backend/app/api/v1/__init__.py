@@ -34,6 +34,7 @@ from app.api.v1.user_agents import router as user_agents_router
 from app.api.v1.user_apps import router as user_apps_router
 from app.api.v1.apply_plans import router as apply_plans_router
 from app.api.v1.ai_chat_sessions import router as ai_chat_sessions_router
+from app.api.v1.storyboards import router as storyboards_router
 
 
 v1_router = APIRouter()
@@ -64,6 +65,7 @@ v1_router.include_router(users_router, prefix="/users", tags=["users"])
 v1_router.include_router(credits_router, tags=["credits"])
 v1_router.include_router(agents_router, tags=["agents"])
 v1_router.include_router(episodes_router, tags=["episodes"])
+v1_router.include_router(storyboards_router, prefix="/storyboards", tags=["storyboards"])
 v1_router.include_router(vfs_router, prefix="/vfs", tags=["vfs"])
 v1_router.include_router(scenes_router, tags=["scenes"])
 v1_router.include_router(apply_plans_router, tags=["apply_plans"])

@@ -393,13 +393,16 @@ export function ScriptAIAssistantSessionPane({
         const assistantMsg: AIChatMessage = {
           id: assistantMsgId,
           role: "assistant",
-          content: result?.output_text || "",
-          plans: result?.plans || null,
+          content: String(result?.output_text || ""),
+          plans: (result?.plans as unknown as PlanData[]) || null,
           trace: streamingTrace, // Use collected trace
           created_at: new Date().toISOString(),
         };
         
-        setMessages((prev) => [...prev, assistantMsg]);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === assistantMsgId)) return prev;
+          return [...prev, assistantMsg];
+        });
         setStreamingContent("");
         setStreamingPlans([]);
         setStreamingTrace([]);

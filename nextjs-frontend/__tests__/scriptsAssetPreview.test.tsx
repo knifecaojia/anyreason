@@ -11,7 +11,8 @@ jest.mock("remark-gfm", () => ({
   default: () => undefined,
 }));
 
-import { AssetDocumentViewer, buildAssetCreateHref, stripMarkdownMetadata } from "@/app/(aistudio)/scripts/page";
+import { AssetDocumentViewer } from "@/components/scripts/AssetDocumentViewer";
+import { stripMarkdownMetadata, buildAssetCreateHref } from "@/lib/utils/markdown";
 
 describe("stripMarkdownMetadata", () => {
   it("removes leading kv metadata and keeps markdown body", () => {

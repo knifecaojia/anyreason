@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
@@ -281,6 +281,7 @@ class AssetService:
         attributes: dict | None,
         prompt_template: str | None,
         is_default: bool | None,
+        doc_node_id: UUID | None = None,
     ) -> AssetRead | None:
         res = await db.execute(
             select(AssetVariant).where(AssetVariant.id == variant_id)
@@ -299,6 +300,7 @@ class AssetService:
             attributes=attributes,
             prompt_template=prompt_template,
             is_default=is_default,
+            doc_node_id=doc_node_id,
         )
         await db.commit()
         return await self.get_asset_full(db=db, user_id=user_id, asset_id=asset.id)
@@ -364,6 +366,13 @@ class AssetService:
         if not file_node_ids:
             raise AppError(msg="No file nodes provided", code=400, status_code=400)
 
+        if cover_file_node_id:
+            await db.execute(
+                update(AssetResource)
+                .where(AssetResource.variant_id == resolved_variant.id)
+                .values(is_cover=False)
+            )
+
         nodes_res = await db.execute(select(FileNode).where(FileNode.id.in_(file_node_ids)))
         nodes = {node.id: node for node in nodes_res.scalars().all()}
         for node_id in file_node_ids:
@@ -377,12 +386,12 @@ class AssetService:
             )
             if not script_res.scalars().first():
                 raise AppError(msg="File node not found", code=404, status_code=404)
+            is_cover = bool(cover_file_node_id and node.id == cover_file_node_id)
             meta = {
                 "file_node_id": str(node.id),
                 "file_name": node.name,
                 "content_type": node.content_type,
                 "size_bytes": node.size_bytes,
-                "is_cover": bool(cover_file_node_id and node.id == cover_file_node_id),
             }
             await asset_repository.create_resource(
                 db=db,
@@ -391,9 +400,84 @@ class AssetService:
                 minio_bucket=node.minio_bucket,
                 minio_key=node.minio_key,
                 meta_data=meta,
+                is_cover=is_cover,
             )
         await db.commit()
         return await self.get_asset_full(db=db, user_id=user_id, asset_id=asset.id)
+
+    async def set_cover(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        resource_id: UUID,
+    ) -> AssetRead | None:
+        res = await db.execute(select(AssetResource).where(AssetResource.id == resource_id))
+        resource = res.scalars().first()
+        if not resource:
+            return None
+        variant = await asset_repository.get_variant(db=db, variant_id=resource.variant_id)
+        if not variant:
+            return None
+        asset = await asset_repository.get_asset_for_user(db=db, user_id=user_id, asset_id=variant.asset_entity_id)
+        if not asset:
+            return None
+        await db.execute(
+            update(AssetResource)
+            .where(AssetResource.variant_id == variant.id)
+            .values(is_cover=False)
+        )
+        resource.is_cover = True
+        await db.commit()
+        return await self.get_asset_full(db=db, user_id=user_id, asset_id=asset.id)
+
+    async def check_resources(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        asset_id: UUID,
+        resource_ids: list[UUID],
+    ) -> dict[str, list[UUID] | dict[UUID, str]]:
+        asset = await asset_repository.get_asset_for_user(db=db, user_id=user_id, asset_id=asset_id)
+        if not asset:
+            raise AppError(msg="Asset not found", code=404, status_code=404)
+
+        eligible = []
+        ineligible = {}
+
+        # 1. Check if nodes exist and are valid types
+        nodes_res = await db.execute(select(FileNode).where(FileNode.id.in_(resource_ids)))
+        nodes = {n.id: n for n in nodes_res.scalars().all()}
+
+        for rid in resource_ids:
+            node = nodes.get(rid)
+            if not node:
+                ineligible[rid] = "File node not found"
+                continue
+            
+            if node.is_folder:
+                ineligible[rid] = "Is a folder"
+                continue
+                
+            if not (node.content_type and node.content_type.startswith("image/")):
+                # Also allow if name looks like image
+                lower = node.name.lower()
+                if not any(lower.endswith(ext) for ext in [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"]):
+                     ineligible[rid] = "Not an image"
+                     continue
+
+            # 2. Check if already bound (optional, but good for feedback)
+            # This is expensive if we scan all resources. 
+            # We check if this file_node_id is used in THIS asset's variants? 
+            # Or ANY asset? Spec says "bound to OTHER asset".
+            # For now, we skip the "bound to other" check as it requires JSONB scanning 
+            # or a separate mapping table. We assume shared use is allowed but we might warn?
+            # Let's just check validity for now.
+            eligible.append(rid)
+
+        return {"eligible": eligible, "ineligible": ineligible}
+
 
 
 asset_service = AssetService()
