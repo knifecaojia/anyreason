@@ -30,7 +30,7 @@ function NodeTypeItem({ reg }: { reg: NodeTypeRegistration }) {
       onDragStart={handleDragStart}
       className="flex items-center gap-2.5 px-2.5 py-2 rounded-lg cursor-grab bg-surfaceHighlight hover:bg-surface border border-transparent hover:border-border transition-colors active:cursor-grabbing"
     >
-      <div className="w-7 h-7 rounded bg-primary/10 text-primary flex items-center justify-center flex-shrink-0">
+      <div className={`w-7 h-7 rounded ${reg.colorClass ?? 'bg-primary/10 text-primary'} flex items-center justify-center flex-shrink-0`}>
         <Icon size={14} />
       </div>
       <span className="text-xs font-medium text-textMain truncate">

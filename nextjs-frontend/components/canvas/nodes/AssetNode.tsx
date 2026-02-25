@@ -20,13 +20,16 @@ export default function AssetNode(props: NodeProps) {
   const data = props.data as unknown as AssetNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
-  const ports = getNodeType('assetNode')?.ports ?? [];
+  const reg = getNodeType('assetNode');
+  const ports = reg?.ports ?? [];
   const hasThumbnail = !!data.thumbnail;
 
   return (
     <NodeShell
       nodeId={props.id}
       title={data.name || '资产'}
+      icon={reg?.icon}
+      colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
       ports={ports}

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { NodeProps } from '@/lib/canvas/xyflow-compat';
+import { useReactFlow } from '@/lib/canvas/xyflow-compat';
 import type { GeneratorNodeData } from '@/lib/canvas/types';
 import { getNodeType } from '@/lib/canvas/node-registry';
 import NodeShell from './NodeShell';
@@ -10,18 +11,47 @@ export default function GeneratorNode(props: NodeProps) {
   const data = props.data as unknown as GeneratorNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
-  const ports = getNodeType('generatorNode')?.ports ?? [];
+  const reg = getNodeType('generatorNode');
+  const ports = reg?.ports ?? [];
+  const { updateNodeData } = useReactFlow();
+  const mode = data.generationMode ?? 'image';
 
   return (
     <NodeShell
       nodeId={props.id}
       title="生成节点"
+      icon={reg?.icon}
+      colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
       ports={ports}
       selected={selected}
     >
       <div className="space-y-3">
+        {/* Generation mode toggle */}
+        <div className="flex items-center gap-1 mb-2">
+          <button
+            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+              mode === 'image'
+                ? 'bg-purple-500/20 text-purple-400'
+                : 'text-textMuted hover:text-textMain'
+            }`}
+            onClick={() => updateNodeData(props.id, { ...data, generationMode: 'image' })}
+          >
+            图像
+          </button>
+          <button
+            className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors ${
+              mode === 'video'
+                ? 'bg-green-500/20 text-green-400'
+                : 'text-textMuted hover:text-textMain'
+            }`}
+            onClick={() => updateNodeData(props.id, { ...data, generationMode: 'video' })}
+          >
+            视频
+          </button>
+        </div>
+
         {/* Model name */}
         <div className="flex items-center justify-between text-[10px] text-textMuted">
           <span>模型配置</span>
@@ -55,11 +85,20 @@ export default function GeneratorNode(props: NodeProps) {
         {/* Result thumbnail or placeholder */}
         {data.lastImage ? (
           <div className="aspect-video bg-black rounded border border-border overflow-hidden">
-            <img
-              src={data.lastImage}
-              className="w-full h-full object-cover"
-              alt="Generated"
-            />
+            {mode === 'video' ? (
+              <video
+                src={data.lastImage}
+                className="w-full h-full object-cover"
+                controls
+                muted
+              />
+            ) : (
+              <img
+                src={data.lastImage}
+                className="w-full h-full object-cover"
+                alt="Generated"
+              />
+            )}
           </div>
         ) : (
           <div className="aspect-video bg-surfaceHighlight rounded border border-border border-dashed flex items-center justify-center text-textMuted text-xs">

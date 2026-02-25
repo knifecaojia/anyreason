@@ -10,12 +10,15 @@ export default function MediaNode(props: NodeProps) {
   const data = props.data as unknown as MediaNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
-  const ports = getNodeType('mediaNode')?.ports ?? [];
+  const reg = getNodeType('mediaNode');
+  const ports = reg?.ports ?? [];
 
   return (
     <NodeShell
       nodeId={props.id}
       title={data.title || '媒体'}
+      icon={reg?.icon}
+      colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
       ports={ports}

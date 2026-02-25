@@ -58,4 +58,5 @@ next-env.d.ts
 .trae/
 .vendor/
 .refs/
+.kiro/
 *.log

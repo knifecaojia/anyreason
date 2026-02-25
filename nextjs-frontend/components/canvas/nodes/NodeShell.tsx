@@ -32,12 +32,14 @@ function PortHandles({ ports }: { ports: PortDefinition[] }) {
           id={port.id}
           type="target"
           position={Position.Left}
+          title={`${port.label} (${port.dataType})`}
           style={{
             width: 10,
             height: 10,
             borderRadius: 9999,
             background: PORT_COLORS[port.dataType] ?? '#888',
             top: `${((idx + 1) / (inputPorts.length + 1)) * 100}%`,
+            transition: 'width 0.15s, height 0.15s, box-shadow 0.15s',
           }}
         />
       ))}
@@ -47,12 +49,14 @@ function PortHandles({ ports }: { ports: PortDefinition[] }) {
           id={port.id}
           type="source"
           position={Position.Right}
+          title={`${port.label} (${port.dataType})`}
           style={{
             width: 10,
             height: 10,
             borderRadius: 9999,
             background: PORT_COLORS[port.dataType] ?? '#888',
             top: `${((idx + 1) / (outputPorts.length + 1)) * 100}%`,
+            transition: 'width 0.15s, height 0.15s, box-shadow 0.15s',
           }}
         />
       ))}

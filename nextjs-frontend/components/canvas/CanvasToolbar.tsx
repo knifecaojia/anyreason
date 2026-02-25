@@ -67,7 +67,7 @@ const PERFORMANCE_OPTIONS: {
 
 /** Separator between toolbar groups */
 function Divider() {
-  return <div className="w-px h-5 bg-border/60 mx-0.5" />;
+  return <div className="w-px h-5 bg-border/60 mx-1.5" />;
 }
 
 /** Queue progress bar shown when batch is running */
@@ -112,11 +112,11 @@ function PerformanceModeDropdown({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
         title="性能模式"
       >
-        <SelectedIcon size={13} />
-        <span>{selected.label}</span>
+        <SelectedIcon size={15} />
+        <span className="hidden md:inline">{selected.label}</span>
         <ChevronDown size={10} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
@@ -178,22 +178,22 @@ export default function CanvasToolbar({
         type="button"
         onClick={onRunAll}
         disabled={isRunning}
-        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-textMuted hover:text-textMain hover:bg-surfaceHighlight disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-primary hover:text-primary/80 hover:bg-surfaceHighlight disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         title="全部执行"
       >
-        <Play size={13} />
-        全部执行
+        <Play size={15} />
+        <span className="hidden md:inline">全部执行</span>
       </button>
 
       <button
         type="button"
         onClick={onRunSelected}
         disabled={!hasSelection || isRunning}
-        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-textMuted hover:text-textMain hover:bg-surfaceHighlight disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-textMuted hover:text-textMain hover:bg-surfaceHighlight disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         title="执行选中"
       >
-        <CheckSquare size={13} />
-        执行选中
+        <CheckSquare size={15} />
+        <span className="hidden md:inline">执行选中</span>
       </button>
 
       {/* Batch generate buttons — visible when storyboard nodes are selected (Req 4.7) */}
@@ -203,21 +203,21 @@ export default function CanvasToolbar({
             type="button"
             onClick={onBatchGenerateImage}
             disabled={isRunning}
-            className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             title="批量生成图像"
           >
-            <Image size={13} />
-            批量生成图像
+            <Image size={15} />
+            <span className="hidden md:inline">批量生成图像</span>
           </button>
           <button
             type="button"
             onClick={onBatchGenerateVideo}
             disabled={isRunning}
-            className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-green-400 hover:text-green-300 hover:bg-green-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-green-400 hover:text-green-300 hover:bg-green-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
             title="批量生成视频"
           >
-            <Video size={13} />
-            批量生成视频
+            <Video size={15} />
+            <span className="hidden md:inline">批量生成视频</span>
           </button>
         </>
       )}
@@ -226,11 +226,11 @@ export default function CanvasToolbar({
         type="button"
         onClick={onStopAll}
         disabled={!isRunning}
-        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className={`flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs font-medium text-red-400 hover:text-red-300 hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors ${isRunning ? 'animate-pulse' : ''}`}
         title="停止全部"
       >
-        <Square size={13} />
-        停止全部
+        <Square size={15} />
+        <span className="hidden md:inline">停止全部</span>
       </button>
 
       {/* Queue progress (visible when running) */}
@@ -247,32 +247,32 @@ export default function CanvasToolbar({
       <button
         type="button"
         onClick={onExportWorkflow}
-        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
         title="导出工作流"
       >
-        <Download size={13} />
-        导出
+        <Download size={15} />
+        <span className="hidden md:inline">导出</span>
       </button>
 
       <button
         type="button"
         onClick={onImportWorkflow}
-        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
         title="导入工作流"
       >
-        <Upload size={13} />
-        导入
+        <Upload size={15} />
+        <span className="hidden md:inline">导入</span>
       </button>
 
       <button
         type="button"
         onClick={onExportSelected}
         disabled={!hasSelection}
-        className="flex items-center gap-1 px-2 py-1 rounded-md text-[11px] text-textMuted hover:text-textMain hover:bg-surfaceHighlight disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+        className="flex items-center gap-1 px-2.5 py-1.5 rounded-md text-xs text-textMuted hover:text-textMain hover:bg-surfaceHighlight disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         title="导出选中"
       >
-        <Download size={13} />
-        导出选中
+        <Download size={15} />
+        <span className="hidden md:inline">导出选中</span>
       </button>
 
       <Divider />
@@ -288,28 +288,28 @@ export default function CanvasToolbar({
         <button
           type="button"
           onClick={() => onLayoutModeChange('card')}
-          className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+          className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-xs transition-colors ${
             layoutMode === 'card'
               ? 'bg-surface text-textMain shadow-sm'
               : 'text-textMuted hover:text-textMain'
           }`}
           title="卡片视图"
         >
-          <LayoutGrid size={12} />
-          卡片
+          <LayoutGrid size={15} />
+          <span className="hidden md:inline">卡片</span>
         </button>
         <button
           type="button"
           onClick={() => onLayoutModeChange('timeline')}
-          className={`flex items-center gap-1 px-2 py-1 rounded text-[11px] transition-colors ${
+          className={`flex items-center gap-1 px-2.5 py-1.5 rounded text-xs transition-colors ${
             layoutMode === 'timeline'
               ? 'bg-surface text-textMain shadow-sm'
               : 'text-textMuted hover:text-textMain'
           }`}
           title="时间线视图"
         >
-          <Clock size={12} />
-          时间线
+          <Clock size={15} />
+          <span className="hidden md:inline">时间线</span>
         </button>
       </div>
     </div>

@@ -5,10 +5,25 @@
 import type { ComponentType } from 'react';
 import type { NodeProps } from './xyflow-compat';
 import type { PortDefinition } from './types';
+import {
+  StickyNote, FileText, Clapperboard,
+  Wand2, Scissors, Users,
+  Eye, ImagePlay,
+  Package, Link,
+} from 'lucide-react';
 
 // ===== Node Group =====
 
 export type NodeGroup = 'creation' | 'ai-generation' | 'display' | 'reference';
+
+// ===== Group Colors =====
+
+export const GROUP_COLORS: Record<NodeGroup, string> = {
+  'creation':      'bg-blue-500/20 text-blue-400',
+  'ai-generation': 'bg-purple-500/20 text-purple-400',
+  'display':       'bg-green-500/20 text-green-400',
+  'reference':     'bg-orange-500/20 text-orange-400',
+};
 
 // ===== Registration Interface =====
 
@@ -17,6 +32,7 @@ export interface NodeTypeRegistration {
   label: string;
   group: NodeGroup;
   icon: ComponentType<{ size?: number }>;
+  colorClass: string;
   component: ComponentType<NodeProps<any>>;
   defaultData: () => Record<string, unknown>;
   ports: PortDefinition[];
@@ -69,14 +85,6 @@ import StoryboardNode from '@/components/canvas/nodes/StoryboardNode';
 // ===== Placeholder Helpers =====
 // Used for node types whose real components are not yet implemented (task 7.3+)
 
-function makePlaceholderIcon(label: string): ComponentType<{ size?: number }> {
-  const PlaceholderIcon = ({ size = 16 }: { size?: number }) => {
-    return null as unknown as React.ReactElement;
-  };
-  PlaceholderIcon.displayName = `${label}Icon`;
-  return PlaceholderIcon;
-}
-
 function makePlaceholderComponent(nodeType: string): ComponentType<NodeProps<any>> {
   const PlaceholderNode = (_props: NodeProps<any>) => {
     return null as unknown as React.ReactElement;
@@ -91,9 +99,10 @@ function makePlaceholderComponent(nodeType: string): ComponentType<NodeProps<any
 
 registerNodeType({
   type: 'textNoteNode',
-  label: 'Text Note',
+  label: '文本笔记',
   group: 'creation',
-  icon: makePlaceholderIcon('TextNote'),
+  icon: StickyNote,
+  colorClass: GROUP_COLORS['creation'],
   component: TextNoteNode,
   defaultData: () => ({
     kind: 'text-note',
@@ -105,9 +114,10 @@ registerNodeType({
 
 registerNodeType({
   type: 'scriptNode',
-  label: 'Script',
+  label: '剧本节点',
   group: 'creation',
-  icon: makePlaceholderIcon('Script'),
+  icon: FileText,
+  colorClass: GROUP_COLORS['creation'],
   component: ScriptNode,
   defaultData: () => ({
     kind: 'script',
@@ -120,9 +130,10 @@ registerNodeType({
 
 registerNodeType({
   type: 'storyboardNode',
-  label: 'Storyboard',
+  label: '分镜节点',
   group: 'creation',
-  icon: makePlaceholderIcon('Storyboard'),
+  icon: Clapperboard,
+  colorClass: GROUP_COLORS['creation'],
   component: StoryboardNode,
   defaultData: () => ({
     kind: 'storyboard',
@@ -143,9 +154,10 @@ registerNodeType({
 
 registerNodeType({
   type: 'generatorNode',
-  label: 'Generator',
+  label: '生成节点',
   group: 'ai-generation',
-  icon: makePlaceholderIcon('Generator'),
+  icon: Wand2,
+  colorClass: GROUP_COLORS['ai-generation'],
   component: GeneratorNode,
   defaultData: () => ({
     kind: 'generator',
@@ -165,9 +177,10 @@ registerNodeType({
 
 registerNodeType({
   type: 'slicerNode',
-  label: 'Slicer',
+  label: '拆分节点',
   group: 'ai-generation',
-  icon: makePlaceholderIcon('Slicer'),
+  icon: Scissors,
+  colorClass: GROUP_COLORS['ai-generation'],
   component: SlicerNode,
   defaultData: () => ({
     kind: 'slicer',
@@ -182,9 +195,10 @@ registerNodeType({
 
 registerNodeType({
   type: 'candidateNode',
-  label: 'Candidate',
+  label: '提取节点',
   group: 'ai-generation',
-  icon: makePlaceholderIcon('Candidate'),
+  icon: Users,
+  colorClass: GROUP_COLORS['ai-generation'],
   component: CandidateNode,
   defaultData: () => ({
     kind: 'candidate',
@@ -200,9 +214,10 @@ registerNodeType({
 
 registerNodeType({
   type: 'previewNode',
-  label: 'Preview',
+  label: '预览节点',
   group: 'display',
-  icon: makePlaceholderIcon('Preview'),
+  icon: Eye,
+  colorClass: GROUP_COLORS['display'],
   component: PreviewNode,
   defaultData: () => ({
     kind: 'preview',
@@ -217,9 +232,10 @@ registerNodeType({
 
 registerNodeType({
   type: 'mediaNode',
-  label: 'Media',
+  label: '媒体节点',
   group: 'display',
-  icon: makePlaceholderIcon('Media'),
+  icon: ImagePlay,
+  colorClass: GROUP_COLORS['display'],
   component: MediaNode,
   defaultData: () => ({
     kind: 'media',
@@ -236,9 +252,10 @@ registerNodeType({
 
 registerNodeType({
   type: 'assetNode',
-  label: 'Asset',
+  label: '资产节点',
   group: 'reference',
-  icon: makePlaceholderIcon('Asset'),
+  icon: Package,
+  colorClass: GROUP_COLORS['reference'],
   component: AssetNode,
   defaultData: () => ({
     kind: 'asset',
@@ -255,9 +272,10 @@ registerNodeType({
 
 registerNodeType({
   type: 'referenceNode',
-  label: 'Reference',
+  label: '引用节点',
   group: 'reference',
-  icon: makePlaceholderIcon('Reference'),
+  icon: Link,
+  colorClass: GROUP_COLORS['reference'],
   component: ReferenceNode,
   defaultData: () => ({
     kind: 'reference',

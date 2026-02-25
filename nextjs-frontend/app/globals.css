@@ -159,6 +159,14 @@
   width: 10px;
   height: 10px;
   border: 2px solid rgb(var(--color-surface-highlight) / 1);
+  transition: width 0.15s ease, height 0.15s ease, box-shadow 0.15s ease;
+}
+
+.react-flow__handle:hover {
+  width: 14px !important;
+  height: 14px !important;
+  box-shadow: 0 0 8px currentColor;
+  z-index: 10;
 }
 
 .react-flow__edge-path {

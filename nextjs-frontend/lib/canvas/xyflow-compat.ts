@@ -20,6 +20,7 @@ export const BaseEdge: any = xyflow.BaseEdge;
 export const getBezierPath: any = xyflow.getBezierPath;
 export const Handle: any = xyflow.Handle;
 export const Position: any = xyflow.Position;
+export const useReactFlow: any = xyflow.useReactFlow;
 
 // ---- Type-only exports ----
 

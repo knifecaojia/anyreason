@@ -445,7 +445,9 @@ function StudioCanvasInner() {
     const node = nodes.find((n) => n.id === nodeId);
     if (!node) throw new Error("Node not found");
     const data = node.data as any;
-    const res = await fetch("/api/ai/image/generate", {
+    const mode = data.generationMode || 'image';
+    const endpoint = mode === 'video' ? '/api/ai/video/generate' : '/api/ai/image/generate';
+    const res = await fetch(endpoint, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({

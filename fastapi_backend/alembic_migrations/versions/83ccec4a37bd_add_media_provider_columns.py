@@ -32,10 +32,10 @@ def upgrade() -> None:
         if os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as f:
                 sql = f.read()
-                # Split by semicolon to execute statement by statement if needed, 
-                # but op.execute usually handles blocks if DB driver supports it.
-                # Postgres driver usually handles multiple statements if they are simple INSERTs.
-                op.execute(sql)
+                # Split by semicolon to execute statement by statement
+                statements = [s.strip() for s in sql.split(';') if s.strip()]
+                for statement in statements:
+                    op.execute(statement)
         else:
             print(f"Warning: Init SQL file not found at {file_path}")
     except Exception as e:

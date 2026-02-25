@@ -10,12 +10,15 @@ export default function ReferenceNode(props: NodeProps) {
   const data = props.data as unknown as ReferenceNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
-  const ports = getNodeType('referenceNode')?.ports ?? [];
+  const reg = getNodeType('referenceNode');
+  const ports = reg?.ports ?? [];
 
   return (
     <NodeShell
       nodeId={props.id}
       title={data.title || '参考'}
+      icon={reg?.icon}
+      colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
       ports={ports}

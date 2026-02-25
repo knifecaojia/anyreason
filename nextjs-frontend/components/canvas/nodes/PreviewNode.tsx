@@ -10,12 +10,15 @@ export default function PreviewNode(props: NodeProps) {
   const data = props.data as unknown as PreviewNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
-  const ports = getNodeType('previewNode')?.ports ?? [];
+  const reg = getNodeType('previewNode');
+  const ports = reg?.ports ?? [];
 
   return (
     <NodeShell
       nodeId={props.id}
       title="预览节点"
+      icon={reg?.icon}
+      colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
       ports={ports}

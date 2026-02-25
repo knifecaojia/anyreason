@@ -129,33 +129,40 @@ export function AssetPanel({ episodeId, episodeLabel, assets, storyboards, onAss
               </button>
 
               {isExpanded && categoryAssets.length > 0 && (
-                <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 pl-6">
-                  {categoryAssets.map((asset) => (
-                    <button
-                      key={asset.id}
-                      type="button"
-                      onClick={() => handleAssetClick(asset)}
-                      className="p-3 bg-slate-900/50 rounded-lg border border-slate-700/50 hover:border-slate-500 transition-colors text-left"
-                    >
-                      <div className="aspect-square bg-slate-800 rounded mb-2 flex items-center justify-center overflow-hidden">
-                        {asset.cover_url ? (
-                          <img
-                            src={asset.cover_url}
-                            alt={asset.name}
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <ImageIcon className="w-8 h-8 text-slate-600" />
+                <div className="mt-2 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 gap-2 pl-6">
+                  {categoryAssets.map((asset) => {
+                    const thumb = asset.thumbnail || asset.cover_url || (asset.resources?.[0]?.thumbnail) || "";
+                    return (
+                      <button
+                        key={asset.id}
+                        type="button"
+                        onClick={() => handleAssetClick(asset)}
+                        className="p-2 bg-slate-900/50 rounded-lg border border-slate-700/50 hover:border-slate-500 transition-colors text-left"
+                      >
+                        <div className="aspect-[4/3] bg-slate-800 rounded mb-1.5 flex items-center justify-center overflow-hidden">
+                          {thumb ? (
+                            <img
+                              src={thumb}
+                              alt={asset.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <ImageIcon className="w-6 h-6 text-slate-600" />
+                          )}
+                        </div>
+                        <div className="text-xs text-white font-medium truncate" title={asset.name}>
+                          {asset.name}
+                        </div>
+                        {asset.tags && asset.tags.length > 0 && (
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {asset.tags.slice(0, 2).map((tag, i) => (
+                              <span key={i} className="text-[9px] px-1 py-0.5 rounded bg-slate-700/60 text-slate-400 truncate max-w-[50px]">{tag}</span>
+                            ))}
+                          </div>
                         )}
-                      </div>
-                      <div className="text-sm text-white font-medium truncate">
-                        {asset.name}
-                      </div>
-                      <div className="text-xs text-slate-500 mt-1">
-                        {asset.variants?.length || 0} 变体
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
               )}
             </div>

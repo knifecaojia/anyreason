@@ -79,6 +79,7 @@ export interface GeneratorNodeData extends BaseNodeData {
   taskId?: string; // 后端任务 ID
   lastImage?: string; // 生成结果 URL
   error?: string;
+  generationMode?: 'image' | 'video'; // 生成模式，默认 'image'
 }
 
 /** 预览节点 - 来自 Storyboard PreviewNode */
@@ -105,15 +106,19 @@ export interface AssetCandidate {
 /** 拆分节点 - 来自 Storyboard SlicerNode */
 export interface SlicerNodeData extends BaseNodeData {
   kind: 'slicer';
+  inputText?: string;
   isProcessing?: boolean;
   storyboardItems?: StoryboardItem[];
+  error?: string;
 }
 
 /** 提取节点 - 来自 Storyboard CandidateNode */
 export interface CandidateNodeData extends BaseNodeData {
   kind: 'candidate';
+  inputText?: string;
   isProcessing?: boolean;
   candidates?: AssetCandidate[];
+  error?: string;
 }
 
 /** 分镜节点 - 新建 */

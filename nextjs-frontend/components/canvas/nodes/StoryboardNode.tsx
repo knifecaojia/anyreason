@@ -10,12 +10,15 @@ export default function StoryboardNode(props: NodeProps) {
   const data = props.data as unknown as StoryboardNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
-  const ports = getNodeType('storyboardNode')?.ports ?? [];
+  const reg = getNodeType('storyboardNode');
+  const ports = reg?.ports ?? [];
 
   return (
     <NodeShell
       nodeId={props.id}
       title={`镜头 #${data.shotNumber ?? 1}`}
+      icon={reg?.icon}
+      colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
       ports={ports}

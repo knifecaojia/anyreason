@@ -10,12 +10,15 @@ export default function TextNoteNode(props: NodeProps) {
   const data = props.data as unknown as TextNoteNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
-  const ports = getNodeType('textNoteNode')?.ports ?? [];
+  const reg = getNodeType('textNoteNode');
+  const ports = reg?.ports ?? [];
 
   return (
     <NodeShell
       nodeId={props.id}
       title={data.title || '笔记'}
+      icon={reg?.icon}
+      colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
       ports={ports}
