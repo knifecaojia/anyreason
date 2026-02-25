@@ -58,7 +58,7 @@ export interface ModelCapabilities {
   supports_negative_prompt?: boolean;
   supports_reference_image?: boolean;
   // 新增字段
-  resolution_tiers?: Record<string, string[]>;
+  resolution_tiers?: Record<string, string[]> | string[];
   duration_options?: number[];
   pixel_range?: { min: number; max: number };
   aspect_ratio_range?: { min: number; max: number };
@@ -66,6 +66,8 @@ export interface ModelCapabilities {
   supports_prompt_extend?: boolean;
   supports_watermark?: boolean;
   supports_seed?: boolean;
+  supports_guidance_scale?: boolean;
+  guidance_scale_range?: { min: number; max: number; default?: number };
   max_reference_images?: number;
   special_features?: string[];
   [key: string]: any;

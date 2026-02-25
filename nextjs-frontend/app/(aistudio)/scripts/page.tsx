@@ -154,8 +154,10 @@ function stripMarkdownMetadata(raw: string): string {
   return lines.slice(start).join("\n").trim();
 }
 
-function buildAssetCreateHref(sourceNodeId: string, seriesId: string): string {
-  return `/assets?mode=create&sourceNodeId=${encodeURIComponent(sourceNodeId)}&seriesId=${encodeURIComponent(seriesId)}`;
+function buildAssetCreateHref(sourceNodeId: string, seriesId: string, assetId?: string): string {
+  let href = `/assets?mode=create&sourceNodeId=${encodeURIComponent(sourceNodeId)}&seriesId=${encodeURIComponent(seriesId)}`;
+  if (assetId) href += `&assetId=${encodeURIComponent(assetId)}`;
+  return href;
 }
 
 import { AssetCard } from "@/components/chat/AssetCard";
@@ -163,7 +165,7 @@ import { AssetCard } from "@/components/chat/AssetCard";
 function AssetPreviewOverlay({ open, asset, onClose }: { open: boolean; asset: AssetEntity; onClose: () => void }) {
   const [md, setMd] = useState<string>("");
   const [loading, setLoading] = useState(false);
-  const [selectedUrl, setSelectedUrl] = useState<string | null>(null);
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
@@ -190,58 +192,83 @@ function AssetPreviewOverlay({ open, asset, onClose }: { open: boolean; asset: A
   if (!open) return null;
   const thumbs = asset.resources || [];
   return (
-    <div className="fixed inset-0 z-50 bg-black/85 p-4 flex items-center justify-center" role="dialog" aria-modal="true" onClick={onClose}>
-      <div className="w-full max-w-5xl h-[80vh] rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden grid grid-rows-[1fr,140px] gap-0" onClick={(e) => e.stopPropagation()}>
-        <div className="p-4 overflow-auto">
-          <div className="flex items-center justify-between mb-3">
+    <>
+      <div className="fixed inset-0 z-50 bg-black/85 p-4 flex items-center justify-center" role="dialog" aria-modal="true" onClick={onClose}>
+        <div className="w-full max-w-5xl max-h-[85vh] rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden flex flex-col" onClick={(e) => e.stopPropagation()}>
+          {/* Header */}
+          <div className="flex items-center justify-between px-4 py-3 border-b border-border flex-shrink-0">
             <div className="font-bold text-sm text-textMain truncate">{asset.name}</div>
             <button className="px-3 py-1.5 rounded-lg text-xs font-bold border border-border bg-surface/60 hover:bg-surfaceHighlight text-textMuted hover:text-textMain transition-colors" onClick={onClose} type="button">
               关闭
             </button>
           </div>
-          {loading ? (
-            <div className="text-sm text-textMuted flex items-center gap-2">
-              <Loader2 size={16} className="animate-spin" /> 加载文档...
-            </div>
-          ) : md ? (
-            <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
-            </div>
-          ) : (
-            <div className="text-xs text-textMuted">无文档内容</div>
-          )}
-        </div>
-        <div className="border-t border-border bg-background/20 overflow-hidden">
-          {thumbs.length === 0 ? (
-            <div className="h-full flex items-center justify-center text-textMuted text-xs">无图片资源</div>
-          ) : (
-            <div className="h-full grid grid-cols-[1fr,280px]">
-              <div className="relative flex items-center justify-center bg-black/30">
-                {selectedUrl ? (
-                  <img src={selectedUrl} alt="预览" className="max-w-full max-h-full object-contain rounded-lg shadow-2xl" />
-                ) : (
-                  <div className="text-xs text-textMuted">点击右侧缩略图进行预览</div>
-                )}
-              </div>
-              <div className="p-2 overflow-auto bg-background/40">
-                <div className="grid grid-cols-3 gap-2">
-                  {thumbs.map((r) => (
-                    <div key={r.id} className="group relative rounded-lg overflow-hidden border border-border bg-black/20">
-                      <button className="w-full h-24" onClick={() => setSelectedUrl(r.url)} title={r.filename || ""}>
-                        <img src={r.url} alt={r.filename || ""} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
-                      </button>
-                      <a href={r.url} download className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity">
-                        下载
-                      </a>
-                    </div>
-                  ))}
+
+          {/* Document area — capped at ~35vh */}
+          <div className="overflow-auto flex-shrink-0" style={{ maxHeight: "35vh" }}>
+            <div className="px-4 py-3">
+              {loading ? (
+                <div className="text-sm text-textMuted flex items-center gap-2">
+                  <Loader2 size={16} className="animate-spin" /> 加载文档...
                 </div>
-              </div>
+              ) : md ? (
+                <div className="markdown-body prose prose-invert max-w-none text-sm leading-relaxed">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{md}</ReactMarkdown>
+                </div>
+              ) : (
+                <div className="text-xs text-textMuted">无文档内容</div>
+              )}
             </div>
-          )}
+          </div>
+
+          {/* Image gallery */}
+          <div className="border-t border-border flex-1 min-h-0 overflow-auto bg-background/20">
+            {thumbs.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-textMuted text-xs py-8">无图片资源</div>
+            ) : (
+              <div className="p-3 grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-2">
+                {thumbs.map((r) => (
+                  <div
+                    key={r.id}
+                    className="group/img relative aspect-square rounded-lg overflow-hidden border border-border bg-black/20 cursor-pointer hover:border-primary/60 transition-all"
+                    onClick={() => setLightboxUrl(r.url)}
+                  >
+                    <img
+                      src={r.url}
+                      alt={r.filename || ""}
+                      className="w-full h-full object-cover transition-transform duration-200 group-hover/img:scale-110"
+                    />
+                    <a
+                      href={r.url}
+                      download
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute top-1 right-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-black/60 text-white opacity-0 group-hover/img:opacity-100 transition-opacity"
+                    >
+                      下载
+                    </a>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </div>
-    </div>
+
+      {/* Lightbox */}
+      {lightboxUrl && (
+        <div
+          className="fixed inset-0 z-[60] bg-black/90 flex items-center justify-center cursor-zoom-out"
+          onClick={() => setLightboxUrl(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <img
+            src={lightboxUrl}
+            alt="放大预览"
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+          />
+        </div>
+      )}
+    </>
   );
 }
 
@@ -736,7 +763,7 @@ export default function Page() {
 
   const [manualAssetCreateOpen, setManualAssetCreateOpen] = useState(false);
 
-  const handleCreateAssetSubmit = async (data: { name: string; type: string; category?: string }) => {
+  const handleCreateAssetSubmit = async (data: { name: string; type: string; category?: string; content_md?: string }) => {
     if (!scriptId) return;
     const res = await fetch("/api/assets", {
       method: "POST",
@@ -1750,7 +1777,7 @@ export default function Page() {
       <div
         className={`flex-1 ${writePane === "ai" ? "p-3 lg:p-4 overflow-hidden min-h-0 flex flex-col" : "p-4 lg:p-8 overflow-y-auto"}`}
       >
-        <div className={writePane === "ai" ? "flex-1 min-h-0 flex flex-col gap-3" : "max-w-6xl mx-auto space-y-6"}>
+        <div className={writePane === "ai" ? "flex-1 min-h-0 flex flex-col gap-3" : "w-full space-y-6"}>
           {writePane !== "ai" && (
             <div className="rounded-2xl border border-border bg-surface overflow-hidden">
             <div className="p-5 flex flex-col lg:flex-row gap-5">
@@ -2330,7 +2357,7 @@ export default function Page() {
                                         <h3 className="font-bold text-base text-textMain capitalize tracking-wide">{type}</h3>
                                         <span className="px-2 py-0.5 rounded-full bg-surfaceHighlight text-xs font-mono text-textMuted">{entities.length}</span>
                                       </div>
-                                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
                                         {entities.map((entity) => (
                                           <AssetEntityCard
                                             key={entity.id}
@@ -2344,7 +2371,7 @@ export default function Page() {
                                               setAssetPreviewOpen(true);
                                             }}
                                             onDelete={() => void handleDeleteAssetEntity(entity)}
-                                            onGenerate={() => entity.doc_node_id && router.push(buildAssetCreateHref(entity.doc_node_id, scriptId))}
+                                            onGenerate={() => entity.doc_node_id && router.push(buildAssetCreateHref(entity.doc_node_id, scriptId, entity.id))}
                                           />
                                         ))}
                                       </div>

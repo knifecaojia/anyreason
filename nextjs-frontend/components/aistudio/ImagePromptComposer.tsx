@@ -40,6 +40,8 @@ type ImagePromptComposerProps = {
   modelLabel: string;
   attachmentCountLabel: string;
   leftControls?: React.ReactNode;
+  /** 隐藏参考图上传区域（当模型不支持参考图时） */
+  hideUpload?: boolean;
 };
 
 export function ImagePromptComposer({
@@ -69,6 +71,7 @@ export function ImagePromptComposer({
   modelLabel,
   attachmentCountLabel,
   leftControls,
+  hideUpload,
 }: ImagePromptComposerProps) {
   const uploadInputRef = useRef<HTMLInputElement>(null);
 
@@ -94,6 +97,7 @@ export function ImagePromptComposer({
   return (
     <div className="rounded-2xl border border-border bg-background/40 p-0 overflow-hidden relative group/composer">
       <div className="flex flex-col">
+        {!hideUpload && (
         <div className="px-4 pt-4 pb-2">
           <div className="flex items-center gap-2 overflow-x-auto pb-2">
             {images.map((img) => (
@@ -164,6 +168,7 @@ export function ImagePromptComposer({
           </div>
           <div className="text-[11px] text-textMuted">参考图最多 14 张，点击缩略图可插入对应的 @ 序号；也可在输入框中键入 @ 选择。</div>
         </div>
+        )}
 
         <div className="p-4 relative">
           <textarea
@@ -209,6 +214,7 @@ export function ImagePromptComposer({
             </div>
           )}
           <div className="flex items-center gap-2 shrink-0">
+            {!hideUpload && (
             <button
               type="button"
               className="h-10 w-10 rounded-full bg-surfaceHighlight hover:bg-surface border border-border text-textMain flex items-center justify-center transition-colors disabled:opacity-60"
@@ -218,6 +224,7 @@ export function ImagePromptComposer({
             >
               <Plus size={18} />
             </button>
+            )}
             <button
               type="button"
               onClick={onSubmit}

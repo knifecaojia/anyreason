@@ -116,6 +116,14 @@ class AliyunMediaProvider(MediaProvider):
 
         params = {**request.param_json}
         resolution = params.pop("resolution", None)
+        # 参考图字段不属于阿里云 multimodal-generation API 的 text2image 模式
+        image_data_urls = params.pop("image_data_urls", None)
+        if image_data_urls:
+            raise AppError(
+                msg=f"模型 {request.model_key} 不支持参考图输入（文生图模型仅支持文本生成图片）。如需使用参考图，请选择支持图片编辑的模型（如 qwen-image-edit）。",
+                code=400,
+                status_code=400,
+            )
         if resolution and "size" not in params:
             params["size"] = str(resolution).replace("x", "*").replace("X", "*")
         if request.negative_prompt:
@@ -176,6 +184,14 @@ class AliyunMediaProvider(MediaProvider):
 
         params = {**request.param_json}
         resolution = params.pop("resolution", None)
+        # 参考图字段不属于阿里云 text2image API，从 parameters 中移除
+        image_data_urls = params.pop("image_data_urls", None)
+        if image_data_urls:
+            raise AppError(
+                msg=f"模型 {request.model_key} 不支持参考图输入（text2image 模型仅支持文本生成图片）。如需使用参考图，请选择支持图片编辑的模型（如 qwen-image-edit）。",
+                code=400,
+                status_code=400,
+            )
         if resolution and "size" not in params:
             params["size"] = str(resolution).replace("x", "*").replace("X", "*")
 

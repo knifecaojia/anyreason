@@ -10,11 +10,12 @@ export function AssetCreateDialog({
 }: {
   open: boolean;
   onClose: () => void;
-  onSubmit: (data: { name: string; type: string; category?: string }) => Promise<void>;
+  onSubmit: (data: { name: string; type: string; category?: string; content_md?: string }) => Promise<void>;
 }) {
   const [name, setName] = useState("");
   const [type, setType] = useState("character");
   const [category, setCategory] = useState("");
+  const [contentMd, setContentMd] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -28,11 +29,12 @@ export function AssetCreateDialog({
     setSubmitting(true);
     setError(null);
     try {
-      await onSubmit({ name: name.trim(), type, category: category.trim() || undefined });
+      await onSubmit({ name: name.trim(), type, category: category.trim() || undefined, content_md: contentMd.trim() || undefined });
       onClose();
       setName("");
       setType("character");
       setCategory("");
+      setContentMd("");
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -42,7 +44,7 @@ export function AssetCreateDialog({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" role="dialog" aria-modal="true">
-      <div className="w-full max-w-sm rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden">
+      <div className="w-full max-w-lg rounded-2xl border border-border bg-surface shadow-2xl overflow-hidden">
         <div className="h-12 px-4 border-b border-border flex items-center justify-between">
           <div className="font-bold text-sm">新建资产</div>
           <button
@@ -91,6 +93,17 @@ export function AssetCreateDialog({
               onChange={(e) => setCategory(e.target.value)}
               placeholder="例如：主要角色"
               className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs text-textMuted">内容描述（Markdown，可选）</label>
+            <textarea
+              value={contentMd}
+              onChange={(e) => setContentMd(e.target.value)}
+              placeholder={"支持 Markdown 格式，例如：\n## 外貌\n身高180cm，黑发……\n\n## 性格\n沉稳内敛……"}
+              rows={6}
+              className="w-full px-3 py-2 rounded-lg border border-border bg-background text-sm text-textMain placeholder:text-textMuted/50 focus:outline-none focus:border-primary resize-y font-mono"
             />
           </div>
 

@@ -182,6 +182,7 @@ class AssetCreate(BaseModel):
     type: Literal["character", "scene", "prop", "vfx"]
     category: str | None = None
     source: str = "manual"
+    content_md: str | None = None
 
 
 class AssetVariantCreate(BaseModel):

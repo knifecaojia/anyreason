@@ -136,7 +136,13 @@ class ModelTestImageGenerateHandler(BaseTaskHandler):
                 output_node_id = node.id
                 output_ct = mime
             elif url.startswith(("http://", "https://")):
-                data, ct = await _download_bytes(url, max_bytes=50 * 1024 * 1024)
+                # 优先用 MinIO 认证客户端下载（避免 bucket 未公开时 403）
+                from app.storage.minio_client import download_minio_bytes
+                minio_result = download_minio_bytes(url)
+                if minio_result is not None:
+                    data, ct = minio_result
+                else:
+                    data, ct = await _download_bytes(url, max_bytes=50 * 1024 * 1024)
                 mime = ct or "application/octet-stream"
                 ext = _ext_from_mime(mime)
                 filename = f"generated{ext}"

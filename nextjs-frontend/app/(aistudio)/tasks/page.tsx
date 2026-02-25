@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ListTodo } from "lucide-react";
 
 import { useTasks } from "@/components/tasks/TaskProvider";
@@ -8,6 +8,8 @@ import { TaskList, filterTasks } from "@/components/tasks/TaskList";
 import type { Task, TaskStatus } from "@/lib/tasks/types";
 
 type Filter = "all" | "active" | TaskStatus;
+
+const PAGE_SIZE = 20;
 
 function FilterButton({
   active,
@@ -39,36 +41,53 @@ export default function Page() {
   const [busy, setBusy] = useState(false);
   const [page, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
-  const pageSize = 50;
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
 
-  const visible = useMemo(() => {
-    return filterTasks(tasks, filter);
-  }, [filter, tasks]);
+  const visible = useMemo(() => filterTasks(tasks, filter), [filter, tasks]);
 
-  const refresh = async (opts?: { page?: number }) => {
-    setBusy(true);
-    try {
-      const nextPage = opts?.page && opts.page > 0 ? opts.page : 1;
-      let res: { items: Task[]; page: number; size: number };
-      if (filter === "active") res = await refreshTasks({ status: ["queued", "running"], page: nextPage, size: pageSize });
-      else if (filter === "all") res = await refreshTasks({ page: nextPage, size: pageSize });
-      else res = await refreshTasks({ status: [filter], page: nextPage, size: pageSize });
-      if (nextPage === 1) {
-        setPage(1);
-        setHasMore(res.items.length >= pageSize);
-      } else {
+  const loadPage = useCallback(
+    async (nextPage: number) => {
+      setBusy(true);
+      try {
+        let res: { items: Task[]; page: number; size: number };
+        if (filter === "active")
+          res = await refreshTasks({ status: ["queued", "running"], page: nextPage, size: PAGE_SIZE });
+        else if (filter === "all")
+          res = await refreshTasks({ page: nextPage, size: PAGE_SIZE });
+        else
+          res = await refreshTasks({ status: [filter], page: nextPage, size: PAGE_SIZE });
+
         setPage(nextPage);
-        if (res.items.length < pageSize) setHasMore(false);
+        setHasMore(res.items.length >= PAGE_SIZE);
+      } finally {
+        setBusy(false);
       }
-    } finally {
-      setBusy(false);
-    }
-  };
+    },
+    [filter, refreshTasks],
+  );
 
+  // 切换 filter 时重置并加载第一页
   useEffect(() => {
+    setPage(1);
     setHasMore(true);
-    void refresh({ page: 1 });
-  }, [filter]);
+    void loadPage(1);
+  }, [filter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // IntersectionObserver 实现滚动到底部自动加载
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !busy) {
+          void loadPage(page + 1);
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, busy, page, loadPage]);
 
   const cancelTask = async (taskId: string) => {
     setBusy(true);
@@ -78,10 +97,7 @@ export default function Page() {
       try {
         const body = (await res.json()) as { data?: Task };
         if (body?.data) upsertTask(body.data);
-      } catch {
-        return;
-      }
-      await refresh();
+      } catch { /* ignore */ }
     } finally {
       setBusy(false);
     }
@@ -95,10 +111,7 @@ export default function Page() {
       try {
         const body = (await res.json()) as { data?: Task };
         if (body?.data) upsertTask(body.data);
-      } catch {
-        return;
-      }
-      await refresh();
+      } catch { /* ignore */ }
     } finally {
       setBusy(false);
     }
@@ -121,7 +134,7 @@ export default function Page() {
           type="button"
           className="px-4 py-2 rounded-xl bg-surface border border-border text-xs font-bold text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors disabled:opacity-50"
           disabled={busy}
-          onClick={() => void refresh()}
+          onClick={() => void loadPage(1)}
         >
           {busy ? "处理中..." : "刷新"}
         </button>
@@ -140,20 +153,14 @@ export default function Page() {
       <TaskList
         title={filter === "all" ? "全部任务" : filter === "active" ? "进行中任务" : "筛选结果"}
         tasks={visible}
-        onRefresh={() => void refresh()}
+        onRefresh={() => void loadPage(1)}
         onCancel={(id) => void cancelTask(id)}
         onRetry={(id) => void retryTask(id)}
       />
 
-      <div className="flex items-center justify-center">
-        <button
-          type="button"
-          disabled={busy || !hasMore}
-          onClick={() => void refresh({ page: page + 1 })}
-          className="px-4 py-2 rounded-xl bg-surface border border-border text-xs font-bold text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors disabled:opacity-50"
-        >
-          {!hasMore ? "没有更多了" : busy ? "加载中..." : "加载更多"}
-        </button>
+      {/* 滚动哨兵 + 加载状态 */}
+      <div ref={sentinelRef} className="flex items-center justify-center py-4 text-xs text-textMuted">
+        {busy ? "加载中..." : hasMore ? "" : "没有更多了"}
       </div>
     </div>
   );

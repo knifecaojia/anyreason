@@ -96,7 +96,6 @@ IMAGE_MANUFACTURERS = [
     {"code": "gemini_proxy", "name": "Gemini 中转", "provider_class": "GeminiProxyProvider", "sort_order": 4},
     {"code": "kling", "name": "可灵", "provider_class": "KlingImageProvider", "sort_order": 5},
     {"code": "openai", "name": "OpenAI", "provider_class": "OpenAIImageProvider", "sort_order": 6},
-    {"code": "doubao", "name": "豆包/火山引擎", "provider_class": "OpenAIImageProvider", "sort_order": 7},
 ]
 
 IMAGE_MODELS = [
@@ -106,6 +105,7 @@ IMAGE_MODELS = [
         "aspect_ratios": ["16:9", "4:3", "1:1", "3:4", "9:16"],
         "supports_negative_prompt": True, "supports_prompt_extend": True,
         "supports_watermark": True, "supports_seed": True,
+        "supports_reference_image": False,
         "api_endpoint": "text2image/image-synthesis",
     }},
     {"manufacturer_code": "aliyun", "code": "qwen-image-plus", "name": "千问文生图 Plus", "category": "image", "model_capabilities": {
@@ -113,12 +113,14 @@ IMAGE_MODELS = [
         "aspect_ratios": ["16:9", "4:3", "1:1", "3:4", "9:16"],
         "supports_negative_prompt": True, "supports_prompt_extend": True,
         "supports_watermark": True, "supports_seed": True,
+        "supports_reference_image": False,
         "api_endpoint": "text2image/image-synthesis",
     }},
     # --- 阿里云：Z-Image ---
     {"manufacturer_code": "aliyun", "code": "z-image-turbo", "name": "Z-Image Turbo", "category": "image", "model_capabilities": {
         "pixel_range": {"min": 262144, "max": 4194304, "recommended_min": 1048576, "recommended_max": 2359296},
         "supports_prompt_extend": True, "supports_seed": True,
+        "supports_reference_image": False,
         "api_endpoint": "text2image/image-synthesis",
     }},
     # --- 阿里云：万向文生图 v2 ---
@@ -128,6 +130,7 @@ IMAGE_MODELS = [
         "max_output_images": 4,
         "supports_negative_prompt": True, "supports_prompt_extend": True,
         "supports_watermark": True, "supports_seed": True,
+        "supports_reference_image": False,
         "api_endpoint": "multimodal-generation/generation",
     }},
     {"manufacturer_code": "aliyun", "code": "wan2.5-t2i", "name": "万向文生图 V2 (2.5)", "category": "image", "model_capabilities": {
@@ -136,23 +139,55 @@ IMAGE_MODELS = [
         "max_output_images": 4,
         "supports_negative_prompt": True, "supports_prompt_extend": True,
         "supports_watermark": True, "supports_seed": True,
+        "supports_reference_image": False,
         "api_endpoint": "multimodal-generation/generation",
     }},
     # --- 火山引擎：SeedDream ---
     {"manufacturer_code": "volcengine", "code": "doubao-seedream-4-5", "name": "SeedDream 4.5", "category": "image", "model_capabilities": {
-        "resolution_tiers": ["2K", "4K"],
+        "resolution_tiers": ["1K", "2K", "4K"],
         "resolution_examples": ["2048x2048", "2560x1440", "1728x2304"],
         "pixel_range": {"min": 3686400, "max": 16777216},
         "aspect_ratio_range": {"min": 0.0625, "max": 16.0},
         "supports_reference_image": True, "max_reference_images": 14,
+        "max_output_images": 15,
+        "supports_watermark": True, "supports_seed": True,
+        "supports_prompt_extend": True,
+        "supports_guidance_scale": True, "guidance_scale_range": {"min": 0, "max": 20, "default": 2.5},
         "special_features": ["text_rendering", "multi_subject_consistency", "material_realism"],
     }},
     {"manufacturer_code": "volcengine", "code": "doubao-seedream-5-0", "name": "SeedDream 5.0", "category": "image", "model_capabilities": {
-        "resolution_tiers": ["2K", "4K"],
+        "resolution_tiers": ["1K", "2K", "4K"],
         "pixel_range": {"min": 3686400, "max": 16777216},
         "aspect_ratio_range": {"min": 0.0625, "max": 16.0},
         "supports_reference_image": True, "max_reference_images": 14,
+        "max_output_images": 15,
+        "supports_watermark": True, "supports_seed": True,
+        "supports_prompt_extend": True,
+        "supports_guidance_scale": True, "guidance_scale_range": {"min": 0, "max": 20, "default": 2.5},
         "special_features": ["text_rendering", "multi_subject_consistency", "web_search", "multi_turn_editing"],
+    }},
+    {"manufacturer_code": "volcengine", "code": "doubao-seedream-4-5-251128", "name": "SeedDream 4.5 (251128)", "category": "image", "model_capabilities": {
+        "resolution_tiers": ["1K", "2K", "4K"],
+        "resolution_examples": ["2048x2048", "2560x1440", "1728x2304"],
+        "pixel_range": {"min": 3686400, "max": 16777216},
+        "aspect_ratio_range": {"min": 0.0625, "max": 16.0},
+        "supports_reference_image": True, "max_reference_images": 10,
+        "max_output_images": 15,
+        "supports_watermark": True, "supports_seed": True,
+        "supports_prompt_extend": True,
+        "supports_guidance_scale": True, "guidance_scale_range": {"min": 0, "max": 20, "default": 2.5},
+        "special_features": ["text_rendering", "multi_subject_consistency", "material_realism"],
+    }},
+    {"manufacturer_code": "volcengine", "code": "doubao-seedream-4-0-250828", "name": "SeedDream 4.0 (250828)", "category": "image", "model_capabilities": {
+        "resolution_tiers": ["1K", "2K", "4K"],
+        "resolution_examples": ["2048x2048", "2560x1440", "1728x2304"],
+        "pixel_range": {"min": 3686400, "max": 16777216},
+        "aspect_ratio_range": {"min": 0.0625, "max": 16.0},
+        "supports_reference_image": True, "max_reference_images": 10,
+        "max_output_images": 15,
+        "supports_watermark": True, "supports_seed": True,
+        "supports_prompt_extend": True,
+        "supports_guidance_scale": True, "guidance_scale_range": {"min": 0, "max": 20, "default": 2.5},
     }},
     # --- Gemini 原生 ---
     {"manufacturer_code": "gemini", "code": "gemini-2.5-flash-image", "name": "Gemini 2.5 Flash Image", "category": "image", "model_capabilities": {
@@ -174,10 +209,9 @@ IMAGE_MODELS = [
         "supports_reference_image": True,
     }},
     # --- 可灵 (保留) ---
-    {"manufacturer_code": "kling", "code": "kling-image-o1", "name": "Kling Image O1", "category": "image"},
-    # --- 豆包旧版 (保留) ---
-    {"manufacturer_code": "doubao", "code": "doubao-seedream-4-5-251128", "name": "Doubao SeeDream 4.5", "category": "image"},
-    {"manufacturer_code": "doubao", "code": "doubao-seedream-4-0-250828", "name": "Doubao SeeDream 4.0", "category": "image"},
+    {"manufacturer_code": "kling", "code": "kling-image-o1", "name": "Kling Image O1", "category": "image", "model_capabilities": {
+        "supports_reference_image": True, "max_reference_images": 9,
+    }},
 ]
 
 # =====================================================================
@@ -321,7 +355,13 @@ async def init_catalog(db: AsyncSession) -> None:
 
             existing = await ai_model_service.get_by_code(db=db, manufacturer_id=manufacturer_id, code=mdl["code"])
             if existing:
-                print(f"    模型已存在: {mdl['code']}")
+                # 同步 model_capabilities（如果 seed 数据有更新）
+                seed_caps = mdl.get("model_capabilities", {})
+                if seed_caps and existing.model_capabilities != seed_caps:
+                    await ai_model_service.update(db=db, model_id=existing.id, patch={"model_capabilities": seed_caps})
+                    print(f"    更新模型 capabilities: {mdl['code']}")
+                else:
+                    print(f"    模型已存在: {mdl['code']}")
                 continue
 
             await ai_model_service.create(

@@ -39,8 +39,20 @@ const CATEGORY_LABELS: Record<Category, string> = {
 
 const CATEGORY_PROVIDER_HINTS: Record<Category, string[]> = {
   text: ["OpenAITextProvider"],
-  image: ["KlingImageProvider", "GeminiImageProvider", "OpenAIImageProvider"],
-  video: ["KlingVideoProvider"],
+  image: [
+    "AliyunMediaProvider",
+    "VolcengineMediaProvider",
+    "GeminiMediaProvider",
+    "GeminiProxyProvider",
+    "KlingImageProvider",
+    "OpenAIImageProvider",
+  ],
+  video: [
+    "AliyunMediaProvider",
+    "VolcengineVideoProvider",
+    "KlingVideoProvider",
+    "ViduMediaProvider",
+  ],
 };
 
 export default function AICatalogSettingsPage() {
@@ -617,21 +629,16 @@ export default function AICatalogSettingsPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium text-textMain mb-1.5">Provider 类</label>
-                <div className="relative">
-                  <input
-                    type="text"
-                    value={manufacturerForm.provider_class}
-                    onChange={(e) => setManufacturerForm((p) => ({ ...p, provider_class: e.target.value }))}
-                    placeholder="如 OpenAITextProvider"
-                    list={`provider-options-${activeCategory}`}
-                    className="w-full bg-surfaceHighlight border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary text-textMain"
-                  />
-                  <datalist id={`provider-options-${activeCategory}`}>
-                    {CATEGORY_PROVIDER_HINTS[activeCategory].map((p) => (
-                      <option key={p} value={p} />
-                    ))}
-                  </datalist>
-                </div>
+                <select
+                  value={manufacturerForm.provider_class}
+                  onChange={(e) => setManufacturerForm((p) => ({ ...p, provider_class: e.target.value }))}
+                  className="w-full bg-surfaceHighlight border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-primary text-textMain"
+                >
+                  <option value="">请选择…</option>
+                  {CATEGORY_PROVIDER_HINTS[activeCategory].map((p) => (
+                    <option key={p} value={p}>{p}</option>
+                  ))}
+                </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-textMain mb-1.5">默认 Base URL</label>

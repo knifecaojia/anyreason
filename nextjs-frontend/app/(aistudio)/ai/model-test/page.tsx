@@ -284,7 +284,7 @@ export default function ModelTestPage() {
         <Separator className="mt-3" />
 
         {/* Tab Content */}
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 min-h-0 overflow-hidden p-4">
           {activeCategory === "text" && (
             <TextPanel
               messages={textMessages}
@@ -564,7 +564,7 @@ function TextPanel({
 
       {/* Messages area */}
       <Card className="flex-1 min-h-0 overflow-hidden flex flex-col">
-        <ScrollArea className="flex-1 p-4" data-testid="text-messages">
+        <ScrollArea className="flex-1 min-h-0 overflow-y-auto p-4" data-testid="text-messages">
           {messages.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-muted-foreground py-20">
               <Bot className="h-10 w-10 mb-2 opacity-40" />

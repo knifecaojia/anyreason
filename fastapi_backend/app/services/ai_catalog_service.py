@@ -325,6 +325,8 @@ class AIModelService:
             row.context_window = patch["context_window"]
         if "model_metadata" in patch and patch["model_metadata"] is not None:
             row.model_metadata = patch["model_metadata"]
+        if "model_capabilities" in patch and patch["model_capabilities"] is not None:
+            row.model_capabilities = patch["model_capabilities"]
         if "enabled" in patch and patch["enabled"] is not None:
             row.enabled = bool(patch["enabled"])
         if "sort_order" in patch and patch["sort_order"] is not None:

@@ -1,0 +1,83 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["version", "canvasId", "reactflow", "updatedAt"],
+  "properties": {
+    "version": { "type": "integer", "minimum": 1 },
+    "canvasId": { "type": "string", "minLength": 1 },
+    "reactflow": {
+      "type": "object",
+      "required": ["nodes", "edges", "viewport"],
+      "properties": {
+        "nodes": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "type", "position", "data"],
+            "properties": {
+              "id": { "type": "string" },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "textNoteNode",
+                  "mediaNode",
+                  "assetNode",
+                  "referenceNode",
+                  "scriptNode",
+                  "generatorNode",
+                  "previewNode",
+                  "slicerNode",
+                  "candidateNode",
+                  "storyboardNode"
+                ]
+              },
+              "position": {
+                "type": "object",
+                "required": ["x", "y"],
+                "properties": {
+                  "x": { "type": "number" },
+                  "y": { "type": "number" }
+                }
+              },
+              "data": { "type": "object" },
+              "collapsed": { "type": "boolean" }
+            }
+          }
+        },
+        "edges": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["id", "source", "target"],
+            "properties": {
+              "id": { "type": "string" },
+              "source": { "type": "string" },
+              "target": { "type": "string" },
+              "sourceHandle": { "type": "string" },
+              "targetHandle": { "type": "string" },
+              "data": {
+                "type": "object",
+                "properties": {
+                  "portType": {
+                    "type": "string",
+                    "enum": ["text", "image", "video", "asset-ref", "storyboard-list"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "viewport": {
+          "type": "object",
+          "required": ["x", "y", "zoom"],
+          "properties": {
+            "x": { "type": "number" },
+            "y": { "type": "number" },
+            "zoom": { "type": "number", "exclusiveMinimum": 0 }
+          }
+        }
+      }
+    },
+    "updatedAt": { "type": "string" }
+  }
+}

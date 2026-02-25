@@ -305,10 +305,20 @@ class AIGatewayService:
         response: MediaResponse | None = None
         
         try:
+            # 查找厂商的 provider_class（用于动态新增的厂商）
+            from app.models import AIManufacturer
+            mfr_row = (await db.execute(
+                select(AIManufacturer.provider_class).where(
+                    AIManufacturer.code == cfg.manufacturer,
+                    AIManufacturer.category == category,
+                )
+            )).scalar_one_or_none()
+
             provider = media_provider_factory.get_provider(
                 manufacturer=cfg.manufacturer,
                 api_key=cfg.api_key,
-                base_url=cfg.base_url
+                base_url=cfg.base_url,
+                provider_class=mfr_row,
             )
             
             request = MediaRequest(

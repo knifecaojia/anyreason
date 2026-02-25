@@ -13813,6 +13813,17 @@
               }
             ],
             "title": "Session Id"
+          },
+          "param_json": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Param Json"
           }
         },
         "type": "object",
@@ -13876,6 +13887,17 @@
               }
             ],
             "title": "Session Id"
+          },
+          "param_json": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Param Json"
           }
         },
         "type": "object",
@@ -15320,6 +15342,17 @@
             "type": "string",
             "title": "Source",
             "default": "manual"
+          },
+          "content_md": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Content Md"
           }
         },
         "type": "object",

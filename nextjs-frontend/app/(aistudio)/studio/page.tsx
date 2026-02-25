@@ -2,8 +2,20 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { FileText, HelpCircle, Plus, Settings2, SlidersHorizontal } from "lucide-react";
-import { addEdge, Controls, Handle, Position, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useOnSelectionChange, useReactFlow } from "@xyflow/react";
+import { addEdge, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useOnSelectionChange, useReactFlow } from "@xyflow/react";
+import { buildReactFlowNodeTypes, getNodeType } from "@/lib/canvas/node-registry";
+import NodeLibrary from "@/components/canvas/NodeLibrary";
+import { useDataFlow } from "@/hooks/useDataFlow";
+import { useBatchQueue } from "@/hooks/useBatchQueue";
+import TypedEdge, { TYPED_EDGE_TYPE } from "@/components/canvas/TypedEdge";
+import CanvasToolbar from "@/components/canvas/CanvasToolbar";
+import { serializeCanvas, exportToFile, exportSelectedNodes, importFromFile } from "@/lib/canvas/serializer";
+import { useUndoRedo } from "@/hooks/useUndoRedo";
+import { usePerformanceMode } from "@/hooks/usePerformanceMode";
+import AlignmentGuides from "@/components/canvas/AlignmentGuides";
+import type { DraggingNodeBounds, NodeBounds } from "@/components/canvas/AlignmentGuides";
+import type { PerformanceMode, StoryboardNodeData, SlicerNodeData } from "@/lib/canvas/types";
+import { createStoryboardNodesFromSlicerOutput, generateFullWorkflow } from "@/lib/canvas/workflow-generator";
 
 type ScriptItem = {
   id: string;
@@ -134,74 +146,6 @@ type WorkshopEdge = {
   data?: { relation?: "reference" };
 };
 
-function LeftFloatingMenu({
-  onAddText,
-  onAddMedia,
-}: {
-  onAddText: () => void;
-  onAddMedia: () => void;
-}) {
-  const [open, setOpen] = useState<null | "add">(null);
-
-  return (
-    <div className="w-14 shrink-0 border-r border-border bg-background/70 backdrop-blur flex flex-col items-center py-3 gap-2">
-      <button className="group w-10 h-10 rounded-lg hover:bg-surface flex items-center justify-center text-textMuted hover:text-textMain transition-colors">
-        <FileText size={18} />
-        <span className="sr-only">文件</span>
-      </button>
-
-      <div className="relative">
-        <button
-          onClick={() => setOpen((v) => (v === "add" ? null : "add"))}
-          className="group w-10 h-10 rounded-lg hover:bg-surface flex items-center justify-center text-textMuted hover:text-textMain transition-colors"
-        >
-          <Plus size={18} />
-          <span className="sr-only">添加</span>
-        </button>
-        {open === "add" ? (
-          <div className="absolute left-12 top-0 z-50 w-44 rounded-xl border border-border bg-background shadow-xl p-2">
-            <button
-              onClick={() => {
-                setOpen(null);
-                onAddText();
-              }}
-              className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface text-sm text-textMain"
-            >
-              文本笔记
-            </button>
-            <button
-              onClick={() => {
-                setOpen(null);
-                onAddMedia();
-              }}
-              className="w-full text-left px-3 py-2 rounded-lg hover:bg-surface text-sm text-textMain"
-            >
-              媒体节点
-            </button>
-          </div>
-        ) : null}
-      </div>
-
-      <button className="group w-10 h-10 rounded-lg hover:bg-surface flex items-center justify-center text-textMuted hover:text-textMain transition-colors">
-        <SlidersHorizontal size={18} />
-        <span className="sr-only">生成设置</span>
-      </button>
-
-      <button className="group w-10 h-10 rounded-lg hover:bg-surface flex items-center justify-center text-textMuted hover:text-textMain transition-colors">
-        <Settings2 size={18} />
-        <span className="sr-only">设置</span>
-      </button>
-
-      <div className="flex-1" />
-
-      <button className="group w-10 h-10 rounded-lg hover:bg-surface flex items-center justify-center text-textMuted hover:text-textMain transition-colors">
-        <HelpCircle size={18} />
-        <span className="sr-only">帮助</span>
-      </button>
-    </div>
-  );
-}
-
 function RightPanel({
   collapsed,
   activeTab,
@@ -300,9 +244,29 @@ function StudioCanvasInner() {
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  // Track selected node IDs for batch execution and toolbar
+  const [selectedNodeIds, setSelectedNodeIds] = useState<string[]>([]);
+
+  // Placeholder state for toolbar features integrated in later tasks (10.3, 10.4)
+  const { mode: perfMode, setMode: setPerfMode, getNodeRenderLevel, suggestedMode } = usePerformanceMode(nodes.length);
+  const [layoutMode, setLayoutMode] = useState<"card" | "timeline">("card");
+
+  // Undo/redo integration
+  const { push: pushUndo, undo, redo, canUndo, canRedo } = useUndoRedo(setNodes as any, setEdges as any);
+
+  // Clipboard ref for copy/paste
+  const clipboardRef = useRef<{ nodes: any[]; edges: any[] } | null>(null);
+
+  // Alignment guides: track dragging node
+  const [draggingNodeBounds, setDraggingNodeBounds] = useState<DraggingNodeBounds | null>(null);
+
+  // Right-click context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; nodeId: string } | null>(null);
+
   useOnSelectionChange({
     onChange: ({ nodes: selected }) => {
       setSelectedNodeId(selected[0]?.id ?? null);
+      setSelectedNodeIds(selected.map((n) => n.id));
     },
   });
 
@@ -391,21 +355,8 @@ function StudioCanvasInner() {
     }
   }, [canvasId]);
 
-  const serializeCanvas = useCallback(() => {
-    return JSON.stringify(
-      {
-        version: 1,
-        canvasId,
-        reactflow: {
-          nodes,
-          edges,
-          viewport,
-        },
-        updatedAt: new Date().toISOString(),
-      },
-      null,
-      2,
-    );
+  const getSnapshot = useCallback(() => {
+    return serializeCanvas(canvasId, nodes as any, edges as any, viewport);
   }, [canvasId, edges, nodes, viewport]);
 
   const ensureCanvasFolder = useCallback(async () => {
@@ -426,15 +377,16 @@ function StudioCanvasInner() {
       const filename = `${canvasId}.json`;
       const old = existing.find((n) => !n.is_folder && n.name === filename);
       if (old) await vfsDeleteNode(old.id);
-      await vfsCreateFile({ name: filename, content: serializeCanvas(), parent_id: folderId });
+      const content = JSON.stringify(getSnapshot(), null, 2);
+      await vfsCreateFile({ name: filename, content, parent_id: folderId });
       localStorage.removeItem(`studio_canvas_draft_${canvasId}`);
       setSaveStatus("saved");
     } catch (e: any) {
-      localStorage.setItem(`studio_canvas_draft_${canvasId}`, serializeCanvas());
+      localStorage.setItem(`studio_canvas_draft_${canvasId}`, JSON.stringify(getSnapshot(), null, 2));
       setSaveStatus("error");
       setSaveError(String(e?.message || e));
     }
-  }, [canvasId, ensureCanvasFolder, serializeCanvas]);
+  }, [canvasId, ensureCanvasFolder, getSnapshot]);
 
   useEffect(() => {
     if (!canvasId) return;
@@ -486,19 +438,482 @@ function StudioCanvasInner() {
     return () => window.clearTimeout(t);
   }, [canvasId, edges, nodes, saveToVfs, viewport]);
 
+  const { onConnect: validateConnect, topologyOrder, hasCycle, propagate } = useDataFlow(nodes as any, edges as any, setNodes as any);
+
+  // --- Batch queue integration ---
+  const executeTask = useCallback(async (nodeId: string) => {
+    const node = nodes.find((n) => n.id === nodeId);
+    if (!node) throw new Error("Node not found");
+    const data = node.data as any;
+    const res = await fetch("/api/ai/image/generate", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        prompt: data.prompt || "",
+        neg_prompt: data.negPrompt || "",
+        resolution: data.aspectRatio || "1:1",
+      }),
+    });
+    if (!res.ok) throw new Error(await res.text());
+    const json = await res.json();
+    return json.data?.task_id || json.task_id || "";
+  }, [nodes]);
+
+  const { enqueue, start, stopAll, cancelTask, queueState } = useBatchQueue({
+    executeTask,
+    maxConcurrency: 3,
+  });
+
+  // When a queue item succeeds, propagate result to downstream nodes
+  useEffect(() => {
+    for (const item of queueState.items) {
+      if (item.status === "succeeded") {
+        const node = nodes.find((n) => n.id === item.nodeId);
+        if (node) {
+          const data = node.data as any;
+          if (data.lastImage) {
+            propagate(item.nodeId, "image", data.lastImage);
+          }
+        }
+      }
+    }
+  }, [queueState.items, nodes, propagate]);
+
+  // --- Storyboard node sync to backend (task 11.1) ---
+  // Debounce storyboard node edits and sync to backend via PATCH /api/storyboards/{id}
+  const storyboardSyncTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  useEffect(() => {
+    const storyboardNodes = nodes.filter(
+      (n: any) => n.type === "storyboardNode" && n.data?.kind === "storyboard" && n.data?.sourceStoryboardId,
+    );
+    for (const node of storyboardNodes) {
+      const data = node.data as unknown as StoryboardNodeData;
+      const storyboardId = data.sourceStoryboardId!;
+      const key = node.id;
+
+      // Clear any existing timer for this node
+      const existing = storyboardSyncTimers.current.get(key);
+      if (existing) clearTimeout(existing);
+
+      // Set a new debounced sync timer (1000ms)
+      const timer = setTimeout(() => {
+        storyboardSyncTimers.current.delete(key);
+        fetch(`/api/storyboards/${encodeURIComponent(storyboardId)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            description: data.sceneDescription || "",
+            dialogue: data.dialogue || "",
+          }),
+        }).catch((err) => {
+          console.error(`[StoryboardSync] Failed to sync storyboard ${storyboardId}:`, err);
+        });
+      }, 1000);
+      storyboardSyncTimers.current.set(key, timer);
+    }
+
+    return () => {
+      // Cleanup all timers on unmount
+      for (const timer of storyboardSyncTimers.current.values()) {
+        clearTimeout(timer);
+      }
+    };
+  }, [nodes]);
+
+  // --- Auto-create storyboard nodes from slicer output (task 11.2, Req 4.3) ---
+  // Track which slicer nodes have already had their output processed
+  const processedSlicerOutputs = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    const slicerNodes = nodes.filter(
+      (n: any) => n.type === 'slicerNode' && n.data?.kind === 'slicer',
+    );
+    for (const node of slicerNodes) {
+      const data = node.data as unknown as SlicerNodeData;
+      const items = data.storyboardItems;
+      if (!items || items.length === 0) continue;
+
+      // Check if we already processed this exact output (by item count)
+      const prevCount = processedSlicerOutputs.current.get(node.id);
+      if (prevCount === items.length) continue;
+
+      // Mark as processed
+      processedSlicerOutputs.current.set(node.id, items.length);
+
+      // Create storyboard nodes below the slicer node
+      const slicerPos = node.position ?? { x: 0, y: 0 };
+      const result = createStoryboardNodesFromSlicerOutput(
+        node.id,
+        items,
+        { x: slicerPos.x, y: slicerPos.y + 200 },
+      );
+
+      if (result.nodes.length > 0) {
+        setNodes((ns) => ns.concat(result.nodes as any));
+        if (result.edges.length > 0) {
+          setEdges((es) => es.concat(result.edges as any));
+        }
+      }
+    }
+  }, [nodes, setNodes, setEdges]);
+
+  const handleRunAll = useCallback(() => {
+    const allNodeIds = nodes.map((n) => n.id);
+    enqueue(allNodeIds, nodes, edges);
+    start();
+  }, [nodes, edges, enqueue, start]);
+
+  const handleRunSelected = useCallback(() => {
+    enqueue(selectedNodeIds, nodes, edges);
+    start();
+  }, [selectedNodeIds, nodes, edges, enqueue, start]);
+
+  const handleStopAll = useCallback(() => {
+    stopAll();
+  }, [stopAll]);
+
+  // --- Batch generate for storyboard nodes (Req 4.7) ---
+  const hasStoryboardSelection = useMemo(() => {
+    if (selectedNodeIds.length === 0) return false;
+    return selectedNodeIds.some((id) => {
+      const node = nodes.find((n) => n.id === id);
+      return node?.type === 'storyboardNode';
+    });
+  }, [selectedNodeIds, nodes]);
+
+  const handleBatchGenerateImage = useCallback(() => {
+    // For each selected storyboard node, find or create a connected generator node and enqueue it
+    const storyboardIds = selectedNodeIds.filter((id) => {
+      const node = nodes.find((n) => n.id === id);
+      return node?.type === 'storyboardNode';
+    });
+    // Find generator nodes connected downstream from selected storyboard nodes
+    const generatorNodeIds: string[] = [];
+    for (const sbId of storyboardIds) {
+      const downstreamEdges = edges.filter((e: any) => e.source === sbId);
+      for (const edge of downstreamEdges) {
+        const targetNode = nodes.find((n) => n.id === (edge as any).target);
+        if (targetNode?.type === 'generatorNode' && !generatorNodeIds.includes(targetNode.id)) {
+          generatorNodeIds.push(targetNode.id);
+        }
+      }
+    }
+    if (generatorNodeIds.length > 0) {
+      enqueue(generatorNodeIds, nodes, edges);
+      start();
+    }
+  }, [selectedNodeIds, nodes, edges, enqueue, start]);
+
+  const handleBatchGenerateVideo = useCallback(() => {
+    // Similar to image but for video — find downstream generator nodes from selected storyboard nodes
+    const storyboardIds = selectedNodeIds.filter((id) => {
+      const node = nodes.find((n) => n.id === id);
+      return node?.type === 'storyboardNode';
+    });
+    const generatorNodeIds: string[] = [];
+    for (const sbId of storyboardIds) {
+      const downstreamEdges = edges.filter((e: any) => e.source === sbId);
+      for (const edge of downstreamEdges) {
+        const targetNode = nodes.find((n) => n.id === (edge as any).target);
+        if (targetNode?.type === 'generatorNode' && !generatorNodeIds.includes(targetNode.id)) {
+          generatorNodeIds.push(targetNode.id);
+        }
+      }
+    }
+    if (generatorNodeIds.length > 0) {
+      enqueue(generatorNodeIds, nodes, edges);
+      start();
+    }
+  }, [selectedNodeIds, nodes, edges, enqueue, start]);
+
+  // --- Layout mode change handler (Req 4.8) ---
+  const handleLayoutModeChange = useCallback((mode: 'card' | 'timeline') => {
+    setLayoutMode(mode);
+    // Rearrange storyboard nodes based on the selected layout mode
+    const storyboardNodes = nodes.filter((n: any) => n.type === 'storyboardNode');
+    if (storyboardNodes.length === 0) return;
+
+    // Sort storyboard nodes by shotNumber
+    const sorted = [...storyboardNodes].sort((a: any, b: any) => {
+      const aNum = (a.data as any)?.shotNumber ?? 0;
+      const bNum = (b.data as any)?.shotNumber ?? 0;
+      return aNum - bNum;
+    });
+
+    // Use the first storyboard node's position as the anchor
+    const anchor = sorted[0]?.position ?? { x: 0, y: 0 };
+
+    pushUndo({ nodes: nodes as any, edges: edges as any });
+
+    if (mode === 'timeline') {
+      // Timeline: single horizontal row, sorted by shotNumber
+      const spacing = 300;
+      const idToPos = new Map<string, { x: number; y: number }>();
+      sorted.forEach((n, i) => {
+        idToPos.set(n.id, { x: anchor.x + i * spacing, y: anchor.y });
+      });
+      setNodes((ns) =>
+        ns.map((n: any) => {
+          const pos = idToPos.get(n.id);
+          return pos ? { ...n, position: pos } : n;
+        }) as any,
+      );
+    } else {
+      // Card: grid layout (4 columns, 250px spacing)
+      const cols = 4;
+      const hSpacing = 250;
+      const vSpacing = 200;
+      const idToPos = new Map<string, { x: number; y: number }>();
+      sorted.forEach((n, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        idToPos.set(n.id, { x: anchor.x + col * hSpacing, y: anchor.y + row * vSpacing });
+      });
+      setNodes((ns) =>
+        ns.map((n: any) => {
+          const pos = idToPos.get(n.id);
+          return pos ? { ...n, position: pos } : n;
+        }) as any,
+      );
+    }
+  }, [nodes, setNodes, pushUndo, edges]);
+
+  // --- Import / Export handlers (task 10.3) ---
+  const handleExportWorkflow = useCallback(() => {
+    const snapshot = serializeCanvas(canvasId, nodes as any, edges as any, viewport);
+    exportToFile(snapshot);
+  }, [canvasId, nodes, edges, viewport]);
+
+  const handleExportSelected = useCallback(() => {
+    const snapshot = exportSelectedNodes(selectedNodeIds, nodes as any, edges as any, canvasId);
+    exportToFile(snapshot);
+  }, [selectedNodeIds, nodes, edges, canvasId]);
+
+  const handleImportWorkflow = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json,application/json";
+    input.style.display = "none";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const result = await importFromFile(file);
+      if (result.success) {
+        const imported = result.snapshot;
+        // Add imported nodes/edges to the canvas (offset to avoid overlap)
+        const offsetX = viewport.x + 100;
+        const offsetY = viewport.y + 100;
+        const idMap = new Map<string, string>();
+        const newNodes = imported.reactflow.nodes.map((n) => {
+          const newId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          idMap.set(n.id, newId);
+          return {
+            id: newId,
+            type: n.type,
+            position: { x: n.position.x + offsetX, y: n.position.y + offsetY },
+            data: n.data,
+          };
+        });
+        const newEdges = imported.reactflow.edges
+          .filter((e) => idMap.has(e.source) && idMap.has(e.target))
+          .map((e) => ({
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            source: idMap.get(e.source)!,
+            target: idMap.get(e.target)!,
+            sourceHandle: e.sourceHandle,
+            targetHandle: e.targetHandle,
+            type: TYPED_EDGE_TYPE,
+            data: e.data,
+          }));
+        setNodes((ns) => ns.concat(newNodes as any));
+        setEdges((es) => es.concat(newEdges as any));
+      } else {
+        // Show error to user
+        alert(`导入失败：${result.errors.join(", ")}`);
+      }
+    };
+    document.body.appendChild(input);
+    input.click();
+    document.body.removeChild(input);
+  }, [viewport, setNodes, setEdges]);
+
+  // Right-click context menu for running generator nodes
+  const onNodeContextMenu = useCallback(
+    (event: React.MouseEvent, node: any) => {
+      event.preventDefault();
+      // Only show context menu for running generator nodes
+      if (node.type !== "generatorNode") return;
+      const queueItem = queueState.items.find((i) => i.nodeId === node.id);
+      if (!queueItem || queueItem.status !== "running") return;
+      setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
+    },
+    [queueState.items],
+  );
+
+  // Close context menu on click anywhere
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  // --- Keyboard shortcuts: Ctrl+A, Ctrl+C, Ctrl+V, Delete/Backspace ---
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Skip if user is typing in an input/textarea
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const isCtrlOrMeta = e.ctrlKey || e.metaKey;
+
+      // Ctrl+A: Select all nodes
+      if (isCtrlOrMeta && (e.key === "a" || e.key === "A") && !e.shiftKey) {
+        e.preventDefault();
+        setNodes((ns) => ns.map((n) => ({ ...n, selected: true })) as any);
+        return;
+      }
+
+      // Ctrl+C: Copy selected nodes
+      if (isCtrlOrMeta && (e.key === "c" || e.key === "C") && !e.shiftKey) {
+        e.preventDefault();
+        const selected = nodes.filter((n: any) => n.selected);
+        if (selected.length === 0) return;
+        const selectedIds = new Set(selected.map((n) => n.id));
+        const selectedEdges = edges.filter((ed: any) => selectedIds.has(ed.source) && selectedIds.has(ed.target));
+        clipboardRef.current = { nodes: selected as any, edges: selectedEdges as any };
+        return;
+      }
+
+      // Ctrl+V: Paste copied nodes (offset position)
+      if (isCtrlOrMeta && (e.key === "v" || e.key === "V") && !e.shiftKey) {
+        e.preventDefault();
+        if (!clipboardRef.current || clipboardRef.current.nodes.length === 0) return;
+        pushUndo({ nodes: nodes as any, edges: edges as any });
+        const idMap = new Map<string, string>();
+        const offset = 50;
+        const newNodes = clipboardRef.current.nodes.map((n: any) => {
+          const newId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          idMap.set(n.id, newId);
+          return { ...n, id: newId, position: { x: n.position.x + offset, y: n.position.y + offset }, selected: false };
+        });
+        const newEdges = clipboardRef.current.edges
+          .filter((ed: any) => idMap.has(ed.source) && idMap.has(ed.target))
+          .map((ed: any) => ({
+            ...ed,
+            id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+            source: idMap.get(ed.source)!,
+            target: idMap.get(ed.target)!,
+            selected: false,
+          }));
+        setNodes((ns) => ns.concat(newNodes as any));
+        setEdges((es) => es.concat(newEdges as any));
+        return;
+      }
+
+      // Delete / Backspace: Delete selected nodes and their edges
+      // Note: Ctrl+Z / Ctrl+Shift+Z are handled by useUndoRedo hook
+      if (e.key === "Delete" || e.key === "Backspace") {
+        if (isCtrlOrMeta) return; // Don't interfere with browser shortcuts
+        e.preventDefault();
+        const selectedIds = new Set(nodes.filter((n: any) => n.selected).map((n) => n.id));
+        if (selectedIds.size === 0) return;
+        pushUndo({ nodes: nodes as any, edges: edges as any });
+        setNodes((ns) => ns.filter((n) => !selectedIds.has(n.id)) as any);
+        setEdges((es) => es.filter((ed: any) => !selectedIds.has(ed.source) && !selectedIds.has(ed.target)) as any);
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [nodes, edges, setNodes, setEdges, pushUndo]);
+
+  // --- Batch collapse/expand for selected nodes ---
+  const toggleCollapseSelected = useCallback(() => {
+    const selected = nodes.filter((n: any) => n.selected);
+    if (selected.length === 0) return;
+    // If any selected node is expanded, collapse all; otherwise expand all
+    const anyExpanded = selected.some((n: any) => !n.data?.collapsed);
+    pushUndo({ nodes: nodes as any, edges: edges as any });
+    setNodes((ns) =>
+      ns.map((n: any) => {
+        if (!n.selected) return n;
+        return { ...n, data: { ...n.data, collapsed: anyExpanded } };
+      }) as any,
+    );
+  }, [nodes, edges, setNodes, pushUndo]);
+
+  // --- Alignment guides: onNodeDrag / onNodeDragStop ---
+  const onNodeDrag = useCallback(
+    (_event: React.MouseEvent, dragNode: any) => {
+      const width = dragNode.measured?.width ?? dragNode.width ?? 200;
+      const height = dragNode.measured?.height ?? dragNode.height ?? 100;
+      setDraggingNodeBounds({
+        x: dragNode.position.x,
+        y: dragNode.position.y,
+        width,
+        height,
+      });
+    },
+    [],
+  );
+
+  const onNodeDragStop = useCallback(() => {
+    setDraggingNodeBounds(null);
+  }, []);
+
+  // Compute other nodes' bounds for alignment guides
+  const otherNodeBounds = useMemo<NodeBounds[]>(() => {
+    if (!draggingNodeBounds) return [];
+    return nodes
+      .filter((n: any) => !n.dragging)
+      .map((n: any) => ({
+        id: n.id,
+        x: n.position.x,
+        y: n.position.y,
+        width: n.measured?.width ?? n.width ?? 200,
+        height: n.measured?.height ?? n.height ?? 100,
+      }));
+  }, [nodes, draggingNodeBounds]);
+
   const onConnect = useCallback(
     (connection: any) => {
+      if (!validateConnect(connection)) return;
+      pushUndo({ nodes: nodes as any, edges: edges as any });
       setEdges((eds) =>
         addEdge(
           {
             ...connection,
+            type: TYPED_EDGE_TYPE,
             data: { relation: "reference" },
           },
           eds as any,
         ) as any,
       );
+
+      // --- AssetBinding creation (task 11.1) ---
+      // When an asset node connects to a storyboard node's in-asset port, create an AssetBinding
+      const sourceNode = nodes.find((n) => n.id === connection.source);
+      const targetNode = nodes.find((n) => n.id === connection.target);
+      if (
+        sourceNode?.type === "assetNode" &&
+        targetNode?.type === "storyboardNode" &&
+        connection.targetHandle === "in-asset"
+      ) {
+        const assetData = sourceNode.data as unknown as AssetNodeData;
+        const storyboardData = targetNode.data as unknown as StoryboardNodeData;
+        if (assetData.assetId && storyboardData.sourceStoryboardId) {
+          // Fire-and-forget API call to create AssetBinding
+          fetch("/api/asset-bindings", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              asset_id: assetData.assetId,
+              storyboard_id: storyboardData.sourceStoryboardId,
+              episode_id: storyboardData.episodeId || undefined,
+            }),
+          }).catch((err) => {
+            console.error("[AssetBinding] Failed to create asset binding:", err);
+          });
+        }
+      }
     },
-    [setEdges],
+    [setEdges, validateConnect, pushUndo, nodes, edges],
   );
 
   const onDragOver = useCallback((event: React.DragEvent) => {
@@ -514,6 +929,27 @@ function StudioCanvasInner() {
   const onDrop = useCallback(
     (event: React.DragEvent) => {
       event.preventDefault();
+
+      // --- Handle NodeLibrary drag (application/reactflow-node-type) ---
+      const nodeTypeStr = event.dataTransfer.getData("application/reactflow-node-type");
+      if (nodeTypeStr) {
+        const reg = getNodeType(nodeTypeStr);
+        if (!reg) return;
+        const pos = screenToFlowPosition({ x: event.clientX, y: event.clientY });
+        const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        pushUndo({ nodes: nodes as any, edges: edges as any });
+        setNodes((ns) =>
+          ns.concat({
+            id,
+            type: reg.type,
+            position: pos,
+            data: reg.defaultData(),
+          } as any),
+        );
+        return;
+      }
+
+      // --- Handle legacy right-panel drag (application/reactflow) ---
       const raw = event.dataTransfer.getData("application/reactflow");
       if (!raw) return;
       let payload: any;
@@ -535,7 +971,28 @@ function StudioCanvasInner() {
           dialogue: payload.dialogue ? String(payload.dialogue) : undefined,
           sourceInfo: payload.sourceInfo,
         };
+        pushUndo({ nodes: nodes as any, edges: edges as any });
         setNodes((ns) => ns.concat({ id, type: "referenceNode", position: pos, data } as any));
+        return;
+      }
+
+      if (payload.kind === "storyboard") {
+        // Extract shot number from shot_code (e.g. "SC01-SH03" → 3, or fallback to 1)
+        const shotCodeStr = String(payload.shotCode || "");
+        const shotNumMatch = shotCodeStr.match(/(\d+)\s*$/);
+        const shotNumber = shotNumMatch ? parseInt(shotNumMatch[1], 10) : 1;
+
+        const data: StoryboardNodeData = {
+          kind: "storyboard",
+          shotNumber,
+          sceneDescription: payload.description ? String(payload.description) : "",
+          dialogue: payload.dialogue ? String(payload.dialogue) : undefined,
+          referenceImageUrl: undefined,
+          sourceStoryboardId: payload.storyboardId ? String(payload.storyboardId) : undefined,
+          episodeId: payload.episodeId ? String(payload.episodeId) : undefined,
+        };
+        pushUndo({ nodes: nodes as any, edges: edges as any });
+        setNodes((ns) => ns.concat({ id, type: "storyboardNode", position: pos, data } as any));
         return;
       }
 
@@ -546,45 +1003,19 @@ function StudioCanvasInner() {
           name: String(payload.name || "资产"),
           assetType: String(payload.assetType || ""),
         };
+        pushUndo({ nodes: nodes as any, edges: edges as any });
         setNodes((ns) => ns.concat({ id, type: "assetNode", position: pos, data } as any));
         return;
       }
     },
-    [screenToFlowPosition, setNodes],
+    [screenToFlowPosition, setNodes, pushUndo, nodes, edges],
   );
 
-  const addTextNote = useCallback(() => {
-    if (!wrapperRef.current) return;
-    const rect = wrapperRef.current.getBoundingClientRect();
-    const pos = screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const data: TextNoteNodeData = { kind: "text-note", title: "笔记", content: "" };
-    setNodes((ns) => ns.concat({ id, type: "textNoteNode", position: pos, data } as any));
-  }, [screenToFlowPosition, setNodes]);
-
-  const addMediaNode = useCallback(() => {
-    if (!wrapperRef.current) return;
-    const rect = wrapperRef.current.getBoundingClientRect();
-    const pos = screenToFlowPosition({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 });
-    const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    const data: MediaNodeData = { kind: "media", title: "媒体生成", mediaType: "video" };
-    setNodes((ns) => ns.concat({ id, type: "mediaNode", position: pos, data } as any));
-  }, [screenToFlowPosition, setNodes]);
-
-  const nodeTypes = useMemo(
-    () => ({
-      textNoteNode: TextNoteNode,
-      mediaNode: MediaNode,
-      assetNode: AssetNode,
-      referenceNode: ReferenceNode,
-    }),
-    [],
-  );
+  const nodeTypes = useMemo(() => buildReactFlowNodeTypes(), []);
+  const edgeTypes = useMemo(() => ({ [TYPED_EDGE_TYPE]: TypedEdge }), []);
 
   return (
     <div className="flex h-[calc(100vh-8rem)] rounded-2xl border border-border bg-background overflow-hidden shadow-2xl">
-      <LeftFloatingMenu onAddText={addTextNote} onAddMedia={addMediaNode} />
-
       <div className="flex-1 relative" ref={wrapperRef}>
         <div className="h-12 border-b border-border bg-background/70 backdrop-blur flex items-center justify-between px-4 relative z-10">
           <div className="text-sm font-medium text-textMain">创作工坊</div>
@@ -598,7 +1029,7 @@ function StudioCanvasInner() {
         <div
           className="absolute inset-x-0 bottom-0 top-12"
           style={{
-            backgroundImage: "radial-gradient(circle, rgba(160,160,160,0.35) 1px, transparent 1px)",
+            backgroundImage: "radial-gradient(circle, rgba(160,160,160,0.15) 1px, transparent 1px)",
             backgroundSize: "20px 20px",
           }}
         />
@@ -615,12 +1046,58 @@ function StudioCanvasInner() {
             onMove={(_evt: any, viewport: any) => {
               if (viewport && typeof viewport.zoom === "number") setViewport(viewport);
             }}
+            onNodeDrag={onNodeDrag}
+            onNodeDragStop={onNodeDragStop}
+            onNodeContextMenu={onNodeContextMenu}
+            onPaneClick={closeContextMenu}
             nodeTypes={nodeTypes as any}
+            edgeTypes={edgeTypes as any}
             fitView
           >
             <Controls />
+            <AlignmentGuides draggingNode={draggingNodeBounds} otherNodes={otherNodeBounds} />
           </ReactFlow>
+          <NodeLibrary />
+          <CanvasToolbar
+            onRunAll={handleRunAll}
+            onRunSelected={handleRunSelected}
+            onStopAll={handleStopAll}
+            queueState={queueState}
+            onExportWorkflow={handleExportWorkflow}
+            onImportWorkflow={handleImportWorkflow}
+            onExportSelected={handleExportSelected}
+            hasSelection={selectedNodeIds.length > 0}
+            hasStoryboardSelection={hasStoryboardSelection}
+            onBatchGenerateImage={handleBatchGenerateImage}
+            onBatchGenerateVideo={handleBatchGenerateVideo}
+            performanceMode={perfMode}
+            onPerformanceModeChange={setPerfMode}
+            layoutMode={layoutMode}
+            onLayoutModeChange={handleLayoutModeChange}
+          />
         </div>
+
+        {/* Right-click context menu for stopping running tasks */}
+        {contextMenu && (
+          <>
+            <div className="fixed inset-0 z-50" onClick={closeContextMenu} />
+            <div
+              className="fixed z-50 bg-surface border border-border rounded-lg shadow-xl py-1 min-w-[140px]"
+              style={{ top: contextMenu.y, left: contextMenu.x }}
+            >
+              <button
+                type="button"
+                onClick={() => {
+                  cancelTask(contextMenu.nodeId);
+                  setContextMenu(null);
+                }}
+                className="w-full px-3 py-1.5 text-left text-xs text-red-400 hover:bg-red-500/10 transition-colors"
+              >
+                停止此任务
+              </button>
+            </div>
+          </>
+        )}
 
         {focusedLlmNodeId ? <LlmPromptPanel nodeId={focusedLlmNodeId} viewport={viewport} /> : null}
       </div>
@@ -668,6 +1145,34 @@ function StudioCanvasInner() {
               {episodesError ? <div className="text-xs text-red-500">{episodesError}</div> : null}
             </div>
 
+            {/* "一键生成工作流" button — visible when an episode is selected */}
+            {activeEpisode && activeEpisode.storyboards && activeEpisode.storyboards.length > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  const episodeData = {
+                    episodeId: activeEpisodeId,
+                    scriptText: '',
+                    storyboards: (activeEpisode.storyboards ?? []).map((sb) => ({
+                      id: sb.id,
+                      shot_code: sb.shot_code,
+                      scene_code: sb.scene_code ?? undefined,
+                      description: sb.description ?? undefined,
+                      dialogue: sb.dialogue ?? undefined,
+                    })),
+                  };
+                  // Place workflow at a reasonable offset from origin
+                  const result = generateFullWorkflow(episodeData, { x: 100, y: 100 });
+                  pushUndo({ nodes: nodes as any, edges: edges as any });
+                  setNodes((ns) => ns.concat(result.nodes as any));
+                  setEdges((es) => es.concat(result.edges as any));
+                }}
+                className="w-full h-9 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors"
+              >
+                生成工作流
+              </button>
+            )}
+
             <div className="space-y-2">
               <div className="text-xs text-textMuted">镜头</div>
               <div className="space-y-2">
@@ -677,11 +1182,13 @@ function StudioCanvasInner() {
                     draggable
                     onDragStart={(e) =>
                       beginDrag(e, {
-                        kind: "reference",
-                        title: sb.shot_code,
+                        kind: "storyboard",
+                        shotCode: sb.shot_code,
+                        sceneCode: sb.scene_code || undefined,
                         description: sb.description || undefined,
                         dialogue: sb.dialogue || undefined,
-                        sourceInfo: { scriptId: activeScriptId, episodeId: activeEpisodeId, shotCode: sb.shot_code },
+                        storyboardId: sb.id,
+                        episodeId: activeEpisodeId,
                       })
                     }
                     onClick={() => {
@@ -778,78 +1285,6 @@ function StudioCanvasInner() {
         ) : null}
       </RightPanel>
     </div>
-  );
-}
-
-function NodeShell({
-  nodeId,
-  title,
-  children,
-}: {
-  nodeId: string;
-  title: string;
-  children: ReactNode;
-}) {
-  return (
-    <div className="rounded-2xl border border-border bg-background/90 backdrop-blur shadow-lg min-w-[220px] relative">
-      <Handle type="target" position={Position.Left} style={{ width: 10, height: 10, borderRadius: 9999 }} />
-      <Handle type="source" position={Position.Right} style={{ width: 10, height: 10, borderRadius: 9999 }} />
-      <div className="px-3 py-2 border-b border-border text-xs font-medium text-textMain flex items-center justify-between">
-        <span className="truncate">{title}</span>
-        <span className="text-[10px] text-textMuted">●</span>
-      </div>
-      <div className="p-3">{children}</div>
-    </div>
-  );
-}
-
-function TextNoteNode(props: any) {
-  const data = props.data as TextNoteNodeData;
-  const selected = Boolean(props.selected);
-  return (
-    <NodeShell nodeId={props.id} title={data.title || "笔记"}>
-      <div className={selected ? "text-sm text-textMain" : "text-xs text-textMuted line-clamp-3"}>
-        {data.content ? data.content : "双击编辑内容"}
-      </div>
-    </NodeShell>
-  );
-}
-
-function MediaNode(props: any) {
-  const data = props.data as MediaNodeData;
-  return (
-    <NodeShell nodeId={props.id} title={data.title || "媒体"}>
-      <div className="h-24 rounded-xl bg-surfaceHighlight border border-border flex items-center justify-center text-xs text-textMuted">
-        {data.mediaType === "video" ? "视频预览" : "图片预览"}
-      </div>
-      <div className="mt-2 text-xs text-textMuted">Focus 时显示提示词面板</div>
-    </NodeShell>
-  );
-}
-
-function AssetNode(props: any) {
-  const data = props.data as AssetNodeData;
-  return (
-    <NodeShell nodeId={props.id} title={data.name || "资产"}>
-      <div className="flex items-center gap-3">
-        <div className="w-10 h-10 rounded-xl bg-surfaceHighlight border border-border flex items-center justify-center text-sm text-textMain">
-          {(data.name || "A").slice(0, 1)}
-        </div>
-        <div className="min-w-0">
-          <div className="text-sm text-textMain truncate">{data.name}</div>
-          <div className="text-xs text-textMuted truncate">{data.assetType}</div>
-        </div>
-      </div>
-    </NodeShell>
-  );
-}
-
-function ReferenceNode(props: any) {
-  const data = props.data as ReferenceNodeData;
-  return (
-    <NodeShell nodeId={props.id} title={data.title || "参考"}>
-      <div className="text-xs text-textMuted line-clamp-4">{data.description || data.dialogue || "来自故事板"}</div>
-    </NodeShell>
   );
 }
 

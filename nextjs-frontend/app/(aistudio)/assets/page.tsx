@@ -24,6 +24,7 @@ import {
   Square,
   CheckSquare,
   HelpCircle,
+  Download,
 } from "lucide-react";
 import NextImage from "next/image";
 import type { LucideIcon } from "lucide-react";
@@ -32,13 +33,16 @@ import remarkGfm from "remark-gfm";
 
 import { toast } from "sonner";
 import { aiAdminListModelConfigs, aiAdminTestChat, type AIModelConfig } from "@/components/actions/ai-model-actions";
+import { listModelsWithCapabilities } from "@/components/actions/ai-media-actions";
+import type { ModelCapabilities, ManufacturerWithModels, Asset, AssetType, AssetResource } from "@/lib/aistudio/types";
 import { ModelConfigDrawer } from "@/components/aistudio/ModelConfigDrawer";
-import type { Asset, AssetType, AssetResource } from "@/lib/aistudio/types";
 import { ImagePromptComposer } from "@/components/aistudio/ImagePromptComposer";
 import { getCaretAbsoluteCoordinates } from "@/lib/utils/caret-coordinates";
 import { ContextSelector, type AssetTypeFilter } from "@/components/aistudio/ContextSelector";
 import { StudioContextSelector } from "@/components/aistudio/StudioContextSelector";
 import { AssetPanel, type StoryboardItem } from "@/components/assets/AssetPanel";
+import { MaterialsGrid } from "@/components/assets/MaterialsGrid";
+import { CapabilityParams } from "@/components/aistudio/CapabilityParams";
 import { mapAssetsFromApi } from "@/lib/utils/assets";
 import { stripMarkdownMetadata } from "@/lib/utils/markdown";
 
@@ -221,10 +225,67 @@ export default function Page() {
     aiAdminListModelConfigs("image").then(res => {
         if (res && res.data) {
             setAiModelConfigs(res.data);
-            if (res.data.length > 0) setSelectedModelConfigId(res.data[0].id);
+            // 尝试从 localStorage 恢复上次选择的模型
+            const saved = typeof window !== "undefined" ? localStorage.getItem("assets_selectedModelConfigId") : null;
+            if (saved && res.data.some((c) => c.id === saved)) {
+                setSelectedModelConfigId(saved);
+            } else if (res.data.length > 0) {
+                setSelectedModelConfigId(res.data[0].id);
+            }
         }
     }).catch(console.error);
   }, []);
+
+  // Catalog capabilities for selected model
+  const [catalogData, setCatalogData] = useState<ManufacturerWithModels[]>([]);
+  const [capParams, setCapParams] = useState<Record<string, any>>({});
+
+  useEffect(() => {
+    listModelsWithCapabilities("image")
+      .then((data) => setCatalogData(data || []))
+      .catch(() => setCatalogData([]));
+  }, []);
+
+  const selectedCaps: ModelCapabilities = useMemo(() => {
+    if (!selectedModelConfigId) return {};
+    const cfg = aiModelConfigs.find((c) => c.id === selectedModelConfigId);
+    if (!cfg) return {};
+    // 遍历所有厂商，优先选有 capabilities 的匹配（同一 model code 可能存在于多个厂商下）
+    let fallback: ModelCapabilities | null = null;
+    for (const mfr of catalogData) {
+      const model = mfr.models.find((m) => m.code === cfg.model);
+      if (model) {
+        const caps = model.model_capabilities || {};
+        if (Object.keys(caps).length > 0) return caps;
+        if (!fallback) fallback = caps;
+      }
+    }
+    return fallback || {};
+  }, [selectedModelConfigId, aiModelConfigs, catalogData]);
+
+  const hasCaps = Object.keys(selectedCaps).length > 0;
+
+  // Reset params when model capabilities change
+  useEffect(() => {
+    if (!hasCaps) { setCapParams({}); return; }
+    const defaults: Record<string, any> = {};
+    if (Array.isArray(selectedCaps.resolution_tiers) && selectedCaps.resolution_tiers.length > 0) {
+      const preferred = selectedCaps.resolution_tiers.includes("2K") ? "2K" : selectedCaps.resolution_tiers[0];
+      defaults.size = preferred;
+    } else if (selectedCaps.resolution_tiers && typeof selectedCaps.resolution_tiers === "object" && !Array.isArray(selectedCaps.resolution_tiers) && Object.keys(selectedCaps.resolution_tiers).length > 0) {
+      const tierKeys = Object.keys(selectedCaps.resolution_tiers);
+      defaults.resolution_tier = tierKeys[0];
+      const tierRes = selectedCaps.resolution_tiers[tierKeys[0]];
+      if (tierRes?.length) defaults.resolution = tierRes[0];
+    } else if (selectedCaps.resolutions?.length) {
+      defaults.resolution = selectedCaps.resolutions[0];
+    }
+    if (selectedCaps.aspect_ratios?.length) defaults.aspect_ratio = selectedCaps.aspect_ratios[0];
+    setCapParams(defaults);
+    if (defaults.resolution) setResolution(String(defaults.resolution));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCaps]);
+
   const [resolution, setResolution] = useState<string>("1920x1920");
   const [isPublic, setIsPublic] = useState(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
@@ -742,10 +803,22 @@ export default function Page() {
            <div className="flex-1 overflow-y-auto space-y-6 pr-2">
              {selectedScriptId ? (
                <div className="space-y-8 pb-10">
+                 {/* All project assets (flat list, not bound to episodes) */}
+                 {filteredAssets.length > 0 && (
+                   <AssetPanel
+                     episodeId="__all__"
+                     episodeLabel={`全部资产`}
+                     assets={filteredAssets}
+                     storyboards={[]}
+                     onAssetClick={() => {}}
+                   />
+                 )}
+
+                 {/* Per-episode breakdown */}
                  {displayEpisodes.map(ep => {
-                    // Enrich assets for this episode
                     const epAssetIds = new Set((ep.assets || []).map(a => a.id));
                     const epAssets = filteredAssets.filter(a => epAssetIds.has(a.id));
+                    if (epAssets.length === 0) return null;
                     
                     return (
                         <AssetPanel
@@ -754,16 +827,14 @@ export default function Page() {
                             episodeLabel={`Episode ${ep.episode_number}: ${ep.title || 'Untitled'}`}
                             assets={epAssets}
                             storyboards={ep.storyboards || []}
-                            onAssetClick={(asset) => {
-                                // AssetPanel handles preview internally
-                            }}
+                            onAssetClick={() => {}}
                         />
                     );
                  })}
                   
-                  {hierarchyEpisodes.length === 0 && !hierarchyLoading && (
+                  {filteredAssets.length === 0 && !hierarchyLoading && (
                       <div className="text-center py-10 text-textMuted">
-                          该剧本暂无分集数据
+                          该剧本暂无资产数据
                       </div>
                   )}
                   
@@ -784,98 +855,13 @@ export default function Page() {
       )}
 
       {mode === "materials" && (
-        <div className="flex-1 overflow-y-auto">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-lg font-bold text-textMain">素材库</h2>
-            <div className="text-sm text-textMuted">
-              共 {materials.length} 张图片
-            </div>
-          </div>
-          
-          {materialsLoading ? (
-            <div className="flex items-center justify-center py-20">
-              <Loader2 className="animate-spin text-primary" size={32} />
-            </div>
-          ) : materials.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-textMuted gap-4">
-              <ImageIcon size={48} className="opacity-50" />
-              <p>暂无素材</p>
-              <p className="text-sm">在 Studio 中创作的图片会自动保存在这里</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
-              {materials.map((mat) => (
-                <div
-                  key={mat.id}
-                  className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer bg-surface group ${
-                    selectedMaterialIds.has(mat.id)
-                      ? "border-primary ring-2 ring-primary/20"
-                      : "border-border hover:border-slate-500"
-                  }`}
-                  onClick={() => {
-                    setSelectedMaterialIds((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(mat.id)) {
-                        next.delete(mat.id);
-                      } else {
-                        next.add(mat.id);
-                      }
-                      return next;
-                    });
-                  }}
-                >
-                  <img
-                    src={`/api/vfs/nodes/${mat.id}/download`}
-                    alt={mat.name}
-                    className="w-full h-full object-cover"
-                    loading="lazy"
-                  />
-                  {selectedMaterialIds.has(mat.id) && (
-                    <div className="absolute top-2 right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
-                      <CheckCircle size={16} className="text-white" />
-                    </div>
-                  )}
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                    <button
-                      className="p-2 bg-white/20 rounded-full hover:bg-white/30 text-white backdrop-blur-sm"
-                      onClick={(e) => { e.stopPropagation(); setLightboxUrl(`/api/vfs/nodes/${mat.id}/download`); }}
-                    >
-                      <Search size={20} />
-                    </button>
-                  </div>
-                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
-                    <p className="text-xs text-white truncate">{mat.name}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {selectedMaterialIds.size > 0 && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-surface border border-border rounded-xl shadow-xl px-6 py-4 flex items-center gap-4 z-50">
-              <span className="text-sm text-textMuted">
-                已选择 {selectedMaterialIds.size} 张图片
-              </span>
-              <button
-                type="button"
-                className="px-4 py-2 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary/90 transition-colors"
-                onClick={() => {
-                  // TODO: Create asset from selected materials
-                  toast.success("功能开发中：创建资产");
-                }}
-              >
-                创建资产
-              </button>
-              <button
-                type="button"
-                className="px-4 py-2 bg-surfaceHighlight text-textMain rounded-lg text-sm font-medium hover:bg-surfaceHighlight/80 transition-colors"
-                onClick={() => setSelectedMaterialIds(new Set())}
-              >
-                取消选择
-              </button>
-            </div>
-          )}
-        </div>
+        <MaterialsGrid
+          materials={materials}
+          materialsLoading={materialsLoading}
+          selectedMaterialIds={selectedMaterialIds}
+          setSelectedMaterialIds={setSelectedMaterialIds}
+          setLightboxUrl={setLightboxUrl}
+        />
       )}
 
       {mode === "create" && (
@@ -900,20 +886,6 @@ export default function Page() {
                         </h3>
                     </div>
                     <div className="flex items-center gap-3">
-                        {/* Resolution Selector */}
-                        <select 
-                            className="bg-transparent text-xs font-bold text-textMuted hover:text-textMain outline-none cursor-pointer border-none"
-                            value={resolution}
-                            onChange={(e) => setResolution(e.target.value)}
-                            title="选择分辨率"
-                        >
-                            <option value="1024x1024">1:1 (1024x1024)</option>
-                            <option value="768x1024">3:4 (768x1024)</option>
-                            <option value="1024x768">4:3 (1024x768)</option>
-                            <option value="1280x720">16:9 (1280x720)</option>
-                            <option value="720x1280">9:16 (720x1280)</option>
-                        </select>
-                        <div className="w-px h-3 bg-border" />
                         <button
                             onClick={() => setConfigDrawerOpen(true)}
                             className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
@@ -955,17 +927,20 @@ export default function Page() {
 
                           setIsGenerating(true);
                           try {
-                              console.log("开始生成...");
-                              console.log("Prompt:", prompt);
-                              console.log("Attachments:", attachments);
-                              
-                              // Create task
-                              // 1. Upload attachments first if any (skipped for now as we use local URLs)
-                              // In real logic, we should upload them to VFS or MinIO and get IDs.
-                              
-                              // 2. Call Task API
-                              // If no script selected, save to user-level AI_Generated (public)
-                              // If script selected, save to project-level AI_Generated
+                              // 将附件 File 转为 base64 data URL
+                              const imageDataUrls: string[] = [];
+                              for (const att of attachments) {
+                                  const file = (att as any).file as File | undefined;
+                                  if (!file) continue;
+                                  const dataUrl = await new Promise<string>((resolve, reject) => {
+                                      const reader = new FileReader();
+                                      reader.onload = () => resolve(reader.result as string);
+                                      reader.onerror = reject;
+                                      reader.readAsDataURL(file);
+                                  });
+                                  imageDataUrls.push(dataUrl);
+                              }
+
                               const payload = {
                                   type: "asset_image_generate",
                                   entity_type: studioSelectedAssetId ? "asset" : null,
@@ -973,10 +948,12 @@ export default function Page() {
                                   input_json: {
                                       prompt: prompt,
                                       negative_prompt: "",
-                                      resolution: resolution,
+                                      resolution: capParams.resolution || resolution,
                                       parent_node_id: studioSelectedScriptId ? (aiGeneratedFolderId || null) : null,
                                       project_id: studioSelectedScriptId || null,
                                       model_config_id: selectedModelConfigId,
+                                      ...(imageDataUrls.length > 0 ? { images: imageDataUrls } : {}),
+                                      ...capParams,
                                   }
                               };
                               
@@ -1007,7 +984,30 @@ export default function Page() {
                       generationLabel="图片生成"
                       modelLabel={aiModelConfigs.find(c => c.id === selectedModelConfigId)?.model || "未选择模型"}
                       attachmentCountLabel={`参考 ${attachments.length}/14`}
+                      hideUpload={selectedCaps.supports_reference_image === false}
                     />
+
+                    {hasCaps && (
+                      <div className="border-t border-border pt-4">
+                        <h4 className="text-xs font-bold text-textMuted uppercase tracking-wider mb-3 flex items-center gap-2">
+                          <Settings size={14} /> 模型参数
+                        </h4>
+                        <CapabilityParams
+                          caps={selectedCaps}
+                          params={capParams}
+                          onChange={(key, value) => {
+                            const next = { ...capParams, [key]: value };
+                            setCapParams(next);
+                            if (key === "resolution") setResolution(String(value));
+                          }}
+                          onBatchChange={(updates) => {
+                            setCapParams((prev) => ({ ...prev, ...updates }));
+                            if (updates.resolution) setResolution(String(updates.resolution));
+                          }}
+                          category="image"
+                        />
+                      </div>
+                    )}
                     
                     {sourceMarkdown && (
                         <div className="border-t border-border pt-4">
@@ -1092,28 +1092,43 @@ export default function Page() {
         onClose={() => setConfigDrawerOpen(false)}
         configs={aiModelConfigs}
         selectedId={selectedModelConfigId}
-        onSelect={setSelectedModelConfigId}
+        onSelect={(id) => {
+          setSelectedModelConfigId(id);
+          try { localStorage.setItem("assets_selectedModelConfigId", id); } catch {}
+        }}
         category="image"
       />
 
       {/* Lightbox for image preview */}
       {lightboxUrl && (
         <div 
-          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center cursor-pointer"
+          className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center cursor-pointer"
           onClick={() => setLightboxUrl(null)}
         >
-          <button 
-            className="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors"
-            onClick={() => setLightboxUrl(null)}
-          >
-            <X size={32} />
-          </button>
           <img 
             src={lightboxUrl} 
             alt="Preview" 
-            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           />
+          <div className="mt-4 flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
+            <a
+              href={lightboxUrl}
+              download
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 text-white hover:bg-white/25 transition-colors"
+            >
+              <Download size={18} />
+              <span className="text-sm font-bold">下载</span>
+            </a>
+            <button 
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 text-white hover:bg-white/25 transition-colors"
+              onClick={() => setLightboxUrl(null)}
+              aria-label="关闭预览"
+            >
+              <X size={18} />
+              <span className="text-sm font-bold">关闭</span>
+            </button>
+          </div>
         </div>
       )}
     </div>

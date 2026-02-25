@@ -93,4 +93,16 @@ declare module "@xyflow/react" {
     fitView: () => void;
     screenToFlowPosition: (pos: XYPosition) => XYPosition;
   };
+
+  // Edge utilities
+  export const BaseEdge: React.ComponentType<Record<string, unknown>>;
+  export function getBezierPath(params: {
+    sourceX: number;
+    sourceY: number;
+    targetX: number;
+    targetY: number;
+    sourcePosition?: string;
+    targetPosition?: string;
+    curvature?: number;
+  }): [string, number, number, number, number];
 }

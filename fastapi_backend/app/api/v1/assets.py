@@ -7,17 +7,99 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 
 from app.core.exceptions import AppError
 from app.database import User, get_async_session
+from app.models import FileNode
 from app.schemas import AssetRead, AssetResourceCreateRequest, AssetUpdate, AssetVariantCreate, AssetVariantUpdate, AssetCreate, AssetResourceCheckRequest, AssetResourceCheckResponse
 from app.schemas_response import ResponseBase
 from app.services.asset_service import asset_service
+from app.services.storage.vfs_service import vfs_service
 from app.storage.minio_client import get_minio_client
 from app.users import current_active_user
+from app.vfs_layout import ASSETS_FOLDER_NAME, ASSET_TYPE_FOLDER_NAMES, asset_doc_filename
+from app.vfs_renderers.asset_doc_renderer import render_asset_doc_md
+from app.vfs_docs import AssetDocV2
 
 
 router = APIRouter()
+
+
+# ── VFS doc helper ──────────────────────────────────────────────
+
+# Map DB asset types to the folder-name keys used in ASSET_TYPE_FOLDER_NAMES
+_TYPE_TO_FOLDER_KEY: dict[str, str] = {
+    "character": "character",
+    "scene": "location",   # DB uses "scene", VFS folders use "location"
+    "prop": "prop",
+    "vfx": "vfx",
+}
+
+
+async def _get_or_create_folder(
+    *, db: AsyncSession, user_id: UUID, project_id: UUID,
+    parent_id: UUID | None, name: str,
+) -> UUID:
+    """Return existing folder id or create one."""
+    q = select(FileNode).where(
+        FileNode.project_id == project_id,
+        FileNode.is_folder.is_(True),
+        FileNode.name == name,
+    )
+    if parent_id is None:
+        q = q.where(FileNode.parent_id.is_(None))
+    else:
+        q = q.where(FileNode.parent_id == parent_id)
+    found = (await db.execute(q)).scalars().first()
+    if found:
+        return found.id
+    created = await vfs_service.create_folder(
+        db=db, user_id=user_id, name=name,
+        parent_id=parent_id, workspace_id=None, project_id=project_id,
+    )
+    return created.id
+
+
+async def _create_asset_vfs_doc(
+    *, db: AsyncSession, user_id: UUID, project_id: UUID,
+    asset_type: str, asset_name: str, content_md: str,
+) -> UUID | None:
+    """Create a VFS markdown document for a manually-created asset.
+
+    Returns the FileNode id (doc_node_id) or None on failure.
+    """
+    folder_key = _TYPE_TO_FOLDER_KEY.get(asset_type, asset_type)
+    folder_name = ASSET_TYPE_FOLDER_NAMES.get(folder_key)
+    if not folder_name:
+        return None
+
+    assets_root_id = await _get_or_create_folder(
+        db=db, user_id=user_id, project_id=project_id,
+        parent_id=None, name=ASSETS_FOLDER_NAME,
+    )
+    type_folder_id = await _get_or_create_folder(
+        db=db, user_id=user_id, project_id=project_id,
+        parent_id=assets_root_id, name=folder_name,
+    )
+
+    doc = AssetDocV2(
+        type=folder_key,  # type: ignore[arg-type]
+        name=asset_name,
+        details_md=content_md,
+        provenance={"source": "manual"},
+    )
+    md_filename = asset_doc_filename(asset_type=folder_key, name=asset_name)
+    md_content = render_asset_doc_md(doc=doc)
+
+    md_node = await vfs_service.upsert_text_file(
+        db=db, user_id=user_id,
+        name=md_filename, content=md_content,
+        parent_id=type_folder_id,
+        workspace_id=None, project_id=project_id,
+        content_type="text/markdown; charset=utf-8",
+    )
+    return md_node.id
 
 
 @router.post("/assets", response_model=ResponseBase[AssetRead])
@@ -30,7 +112,19 @@ async def create_asset(
     # If script_id is present but project_id is not, assume project_id = script_id
     if not pid and body.script_id:
         pid = body.script_id
-        
+
+    doc_node_id = None
+    # When markdown content is provided, persist it as a VFS document
+    if body.content_md and pid:
+        doc_node_id = await _create_asset_vfs_doc(
+            db=db,
+            user_id=user.id,
+            project_id=pid,
+            asset_type=body.type,
+            asset_name=body.name,
+            content_md=body.content_md,
+        )
+
     data = await asset_service.create_asset(
         db=db,
         user_id=user.id,
@@ -40,6 +134,7 @@ async def create_asset(
         script_id=body.script_id,
         category=body.category,
         source=body.source,
+        doc_node_id=doc_node_id,
     )
     if not data:
         # If created but not retrieved (e.g. project mismatch or permissions), we return error or partial success?

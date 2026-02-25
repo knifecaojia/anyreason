@@ -84,9 +84,8 @@ class GeminiMediaProvider(MediaProvider):
                  raise AppError(msg=f"Failed to upload Gemini image to MinIO: {str(e)}", code=500)
             
             # Construct URL
-            endpoint = settings.MINIO_ENDPOINT
-            scheme = "https" if settings.MINIO_SECURE else "http"
-            image_url = f"{scheme}://{endpoint}/{self.bucket_name}/{object_name}"
+            from app.storage.minio_client import build_minio_url
+            image_url = build_minio_url(self.bucket_name, object_name)
 
             return MediaResponse(
                 url=image_url,

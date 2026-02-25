@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import traceback
 from uuid import UUID
@@ -12,6 +13,15 @@ from app.tasks.handlers.registry import TASK_HANDLER_REGISTRY
 from app.tasks.reporter import TaskReporter
 
 logger = logging.getLogger(__name__)
+
+# 按任务类型区分超时（秒）。视频生成等长任务给更多时间。
+TASK_TIMEOUT_MAP: dict[str, int] = {
+    "model_test_image_generate": 300,   # 5 分钟
+    "asset_image_generate": 300,        # 5 分钟
+    "model_test_video_generate": 1800,  # 30 分钟
+    "asset_video_generate": 1800,       # 30 分钟
+}
+DEFAULT_TASK_TIMEOUT = 600  # 其他任务默认 10 分钟
 
 
 async def process_task(*, task_id: UUID) -> None:
@@ -49,8 +59,20 @@ async def process_task(*, task_id: UUID) -> None:
                 payload={"handler": handler.__class__.__name__, "task_type": task_type},
             )
             logger.info("[process-task] entering handler=%s task=%s", handler.__class__.__name__, task_id)
-            result = await handler.run(db=db, task=reporter.task, reporter=reporter)
+            timeout = TASK_TIMEOUT_MAP.get(task_type, DEFAULT_TASK_TIMEOUT)
+            result = await asyncio.wait_for(
+                handler.run(db=db, task=reporter.task, reporter=reporter),
+                timeout=timeout,
+            )
             logger.info("[process-task] handler completed task=%s result_keys=%s", task_id, list((result or {}).keys()))
+        except asyncio.TimeoutError:
+            timeout = TASK_TIMEOUT_MAP.get(task_type, DEFAULT_TASK_TIMEOUT)
+            logger.error("[process-task] handler timed out after %ds task=%s", timeout, task_id)
+            await reporter.fail(
+                error=f"任务执行超时（{timeout}秒）",
+                details={"timeout_seconds": timeout},
+            )
+            return
         except Exception as e:
             status_now = (await db.execute(select(Task.status).where(Task.id == task_id))).scalar_one_or_none()
             if status_now == "canceled":

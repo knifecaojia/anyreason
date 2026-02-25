@@ -169,6 +169,13 @@ class AssetImageGenerateHandler(BaseTaskHandler):
         if image_data_urls_to_send:
             param_json["image_data_urls"] = image_data_urls_to_send
 
+        # 透传前端 capParams 中的模型参数（size, seed, watermark, guidance_scale 等）
+        _passthrough_keys = ("size", "seed", "watermark", "guidance_scale", "prompt_extend", "batch_count", "resolution_tier", "aspect_ratio")
+        for k in _passthrough_keys:
+            v = payload.get(k)
+            if v is not None:
+                param_json[k] = v
+
         media_resp = await ai_gateway_service.generate_media(
             db=db,
             user_id=task.user_id,
@@ -225,7 +232,13 @@ class AssetImageGenerateHandler(BaseTaskHandler):
 
         if url.startswith("http://") or url.startswith("https://"):
             try:
-                data, ct = await _download_bytes(url, max_bytes=50 * 1024 * 1024)
+                # 优先用 MinIO 认证客户端下载（避免 bucket 未公开时 403）
+                from app.storage.minio_client import download_minio_bytes
+                minio_result = download_minio_bytes(url)
+                if minio_result is not None:
+                    data, ct = minio_result
+                else:
+                    data, ct = await _download_bytes(url, max_bytes=50 * 1024 * 1024)
                 mime = ct or "application/octet-stream"
                 ext = _ext_from_mime(mime)
                 filename = _normalize_filename_ext(filename, ext)

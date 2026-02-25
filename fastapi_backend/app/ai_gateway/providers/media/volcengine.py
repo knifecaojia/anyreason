@@ -28,6 +28,50 @@ class VolcengineMediaProvider(MediaProvider):
         }
         
         payload.update(request.param_json)
+
+        # 移除前端专用字段，不传给 SDK
+        payload.pop("resolution_tier", None)
+        payload.pop("aspect_ratio", None)  # Volcengine 不用 aspect_ratio，用 size 控制
+        payload.pop("negative_prompt", None)  # Volcengine SDK 不支持 negative_prompt
+        payload.pop("model_config_id", None)
+        payload.pop("parent_node_id", None)
+        payload.pop("project_id", None)
+        payload.pop("filename", None)
+
+        # 前端 resolution 字段映射为 SDK 的 size 参数（如果 size 未设置）
+        resolution = payload.pop("resolution", None)
+        if resolution and "size" not in payload:
+            payload["size"] = resolution
+
+        # 将清晰度档位名（"1K"/"2K"/"4K"）转换为 SDK 期望的像素尺寸
+        # Volcengine SDK 的 size 参数只接受 "宽x高" 格式或不传
+        _TIER_TO_SIZE = {
+            "1K": "1024x1024",
+            "2K": "2048x2048",
+            "4K": "4096x4096",
+        }
+        size_val = payload.get("size")
+        if isinstance(size_val, str) and size_val in _TIER_TO_SIZE:
+            payload["size"] = _TIER_TO_SIZE[size_val]
+
+        # 将 image_data_urls 转换为 Volcengine SDK 期望的 image 参数
+        image_data_urls = payload.pop("image_data_urls", None)
+        if image_data_urls:
+            imgs = [x for x in image_data_urls if isinstance(x, str) and x.strip()]
+            if len(imgs) == 1:
+                payload["image"] = imgs[0]
+            elif len(imgs) > 1:
+                payload["image"] = imgs
+
+        # 将前端 prompt_extend 布尔值转换为 SDK 的 prompt_optimize 对象
+        prompt_extend = payload.pop("prompt_extend", None)
+        if prompt_extend:
+            payload["prompt_optimize"] = {"mode": "standard"}
+
+        # 将前端 batch_count 转换为 SDK 的 n 参数
+        batch_count = payload.pop("batch_count", None)
+        if batch_count and int(batch_count) > 1:
+            payload["n"] = int(batch_count)
         
         try:
             # Call the images generation API

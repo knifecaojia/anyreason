@@ -27,6 +27,8 @@ export function stripMarkdownMetadata(raw: string): string {
   return lines.slice(start).join("\n").trim();
 }
 
-export function buildAssetCreateHref(sourceNodeId: string, seriesId: string): string {
-  return `/assets?mode=create&sourceNodeId=${encodeURIComponent(sourceNodeId)}&seriesId=${encodeURIComponent(seriesId)}`;
+export function buildAssetCreateHref(sourceNodeId: string, seriesId: string, assetId?: string): string {
+  let href = `/assets?mode=create&sourceNodeId=${encodeURIComponent(sourceNodeId)}&seriesId=${encodeURIComponent(seriesId)}`;
+  if (assetId) href += `&assetId=${encodeURIComponent(assetId)}`;
+  return href;
 }
