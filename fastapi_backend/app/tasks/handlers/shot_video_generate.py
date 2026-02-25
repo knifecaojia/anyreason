@@ -81,17 +81,24 @@ class ShotVideoGenerateHandler(BaseTaskHandler):
             raise AppError(msg="scope_mismatch", code=400, status_code=400)
 
         await reporter.progress(progress=5)
-        raw = await ai_gateway_service.generate_video(
+        param_json: dict[str, Any] = {
+            "duration": int(duration) if duration else 5,
+            "aspect_ratio": str(aspect_ratio) if aspect_ratio else "16:9",
+        }
+        if isinstance(images, list) and images:
+            param_json["image_data_urls"] = list(images)
+
+        media_resp = await ai_gateway_service.generate_media(
             db=db,
             user_id=task.user_id,
             binding_key=binding_key,
             model_config_id=UUID(str(model_config_id)) if model_config_id else None,
             prompt=prompt,
-            duration=int(duration) if duration else 5,
-            aspect_ratio=str(aspect_ratio) if aspect_ratio else "16:9",
-            image_data_urls=list(images) if isinstance(images, list) else None,
+            param_json=param_json,
+            category="video",
         )
-        url = str(raw.get("url") or "").strip()
+        raw = {"url": media_resp.url}
+        url = str(media_resp.url or "").strip()
         if not url:
             raise RuntimeError("video_url_missing")
 

@@ -85,6 +85,7 @@ import {
   type AICatalogItem,
 } from "@/components/actions/ai-catalog-actions";
 import { MentionPopup } from "@/components/settings/MentionPopup";
+import { useTasks } from "@/components/tasks/TaskProvider";
 import {
   getCaretAbsoluteCoordinates,
 } from "@/lib/utils/caret-coordinates";
@@ -235,10 +236,28 @@ const MENU_PERMISSION_LOOKUP = new Map<
 
 type Section = "models" | "users" | "roles" | "permissions" | "audit" | "credits" | "agents";
 
+/** 从后端 JSON 错误响应中提取友好的错误信息 */
+function extractApiErrorMessage(raw: string, fallback: string): string {
+  try {
+    const json = JSON.parse(raw);
+    if (typeof json === "object" && json !== null) {
+      // 后端 AppError 格式: { code, msg, data }
+      if (typeof json.msg === "string" && json.msg) return json.msg;
+      if (typeof json.detail === "string" && json.detail) return json.detail;
+      if (typeof json.message === "string" && json.message) return json.message;
+    }
+  } catch {
+    // 非 JSON，直接返回原始文本
+    if (raw && raw.length < 300) return raw;
+  }
+  return fallback;
+}
+
 export default function Page() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const { subscribeTask } = useTasks();
 
   const setQuery = (next: Record<string, string | null | undefined>) => {
     const sp = new URLSearchParams(searchParams.toString());
@@ -294,7 +313,8 @@ export default function Page() {
   ]);
   const [modelTestInput, setModelTestInput] = useState("");
   const [modelTestImagePrompt, setModelTestImagePrompt] = useState("");
-  const [modelTestImageResolution, setModelTestImageResolution] = useState("2048x2048");
+  const [modelTestImageResolution, setModelTestImageResolution] = useState("");
+  const [modelTestCapParams, setModelTestCapParams] = useState<Record<string, any>>({});
   const [modelTestSessionImageAttachmentNodeIds, setModelTestSessionImageAttachmentNodeIds] = useState<string[]>([]);
   const [modelTestImageResultUrl, setModelTestImageResultUrl] = useState<string | null>(null);
   const [modelTestSessionsLoading, setModelTestSessionsLoading] = useState(false);
@@ -1057,7 +1077,7 @@ export default function Page() {
     setModelTestMessages([{ role: "system", content: "你是用于测试模型连通性的助手。请用简短中文回答。" }]);
     setModelTestInput("");
     setModelTestImagePrompt("");
-    setModelTestImageResolution("2048x2048");
+    setModelTestImageResolution("");
     setModelTestSessionImageAttachmentNodeIds([]);
     setModelTestImageResultUrl(null);
     setModelTestSessionId("");
@@ -1105,7 +1125,7 @@ export default function Page() {
       });
       if (!resp.ok) {
         const t = await resp.text();
-        throw new Error(t || resp.statusText);
+        throw new Error(extractApiErrorMessage(t, resp.statusText));
       }
       if (!resp.body) {
         throw new Error("流式响应不可用");
@@ -1178,9 +1198,15 @@ export default function Page() {
   };
 
   const submitModelTestImage = async () => {
-    if (modelTestSubmitting) return;
+    if (modelTestSubmitting) {
+      console.warn("[submitModelTestImage] blocked: modelTestSubmitting is true");
+      return;
+    }
     const prompt = modelTestImagePrompt.trim();
-    if (!prompt) return;
+    if (!prompt) {
+      console.warn("[submitModelTestImage] blocked: prompt is empty");
+      return;
+    }
     if (!modelTestModelConfigId) {
       setModelTestError("请选择一个模型配置");
       return;
@@ -1213,28 +1239,6 @@ export default function Page() {
     setModelTestImageResultUrl(null);
     setModelTestImagePrompt("");
     try {
-      const ratioFromResolution = (resolution: string) => {
-        const m = String(resolution || "")
-          .trim()
-          .match(/^(\d+)\s*x\s*(\d+)$/i);
-        if (!m) return null;
-        const w = Number(m[1]);
-        const h = Number(m[2]);
-        if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
-        const gcd = (a: number, b: number): number => {
-          let x = Math.abs(a);
-          let y = Math.abs(b);
-          while (y) {
-            const t = x % y;
-            x = y;
-            y = t;
-          }
-          return x || 1;
-        };
-        const g = gcd(w, h);
-        return `${Math.round(w / g)}:${Math.round(h / g)}`;
-      };
-
       const endpoint =
         category === "video"
           ? `/api/ai/admin/model-configs/${modelTestModelConfigId}/test-video`
@@ -1243,16 +1247,18 @@ export default function Page() {
         category === "video"
           ? {
               prompt,
-              duration: null,
-              aspect_ratio: ratioFromResolution(modelTestImageResolution) || null,
+              duration: modelTestCapParams.duration ?? null,
+              aspect_ratio: modelTestCapParams.aspect_ratio ?? null,
               attachment_file_node_ids: attachmentIds.length ? attachmentIds : null,
               session_id: sid,
+              param_json: modelTestCapParams,
             }
           : {
               prompt,
-              resolution: modelTestImageResolution.trim() || null,
+              resolution: modelTestCapParams.resolution || modelTestImageResolution.trim() || null,
               attachment_file_node_ids: attachmentIds.length ? attachmentIds : null,
               session_id: sid,
+              param_json: modelTestCapParams,
             };
 
       const resp = await fetch(endpoint, {
@@ -1262,35 +1268,82 @@ export default function Page() {
       });
       if (!resp.ok) {
         const t = await resp.text();
-        throw new Error(t || resp.statusText);
+        throw new Error(extractApiErrorMessage(t, resp.statusText));
       }
       const json: unknown = await resp.json();
-      let url = "";
-      let sessionId = "";
-      let raw: Record<string, unknown> | null = null;
-      if (json && typeof json === "object") {
-        const obj = json as Record<string, unknown>;
-        raw = obj;
-        const data = obj.data;
-        if (data && typeof data === "object") {
-          const d = data as Record<string, unknown>;
-          const u = d.url;
-          if (typeof u === "string") url = u;
-          const sid = d.session_id;
-          if (typeof sid === "string") sessionId = sid;
-          const rr = d.raw;
-          if (rr && typeof rr === "object") raw = rr as Record<string, unknown>;
-        }
-      }
-      setModelTestImageResultUrl((url || "").trim() || "（空响应）");
-      setModelTestLastRaw(raw);
+      const data = (json && typeof json === "object" ? (json as Record<string, unknown>).data : null) as Record<string, unknown> | null;
+      const taskId = data?.task_id;
+      const sessionId = typeof data?.session_id === "string" ? data.session_id : "";
+
+      if (!taskId || typeof taskId !== "string") throw new Error("未获取到任务 ID");
+
       setModelTestSessionId(sessionId || sid);
-      void fetchModelTestSessions({ category, aiModelConfigId: modelTestModelConfigId });
-      void fetchModelTestSessionDetail(sessionId || sid);
+
+      // Subscribe to task events via WebSocket
+      let settled = false;
+      const unsub = subscribeTask(taskId, async (ev) => {
+        if (settled) return;
+        if (ev.event_type === "succeeded" || ev.status === "succeeded") {
+          settled = true;
+          unsub();
+          // Fetch task detail to get result_json
+          try {
+            const taskResp = await fetch(`/api/tasks/${taskId}`);
+            const taskJson = await taskResp.json();
+            const resultJson = taskJson?.data?.result_json;
+            if (resultJson) {
+              setModelTestImageResultUrl(resultJson.url || "（空响应）");
+              setModelTestLastRaw(resultJson);
+            }
+          } catch { /* ignore */ }
+          void fetchModelTestSessions({ category, aiModelConfigId: modelTestModelConfigId });
+          void fetchModelTestSessionDetail(sessionId || sid);
+          setModelTestSubmitting(false);
+        } else if (ev.event_type === "failed" || ev.status === "failed") {
+          settled = true;
+          unsub();
+          setModelTestError(ev.error || "任务执行失败");
+          void fetchModelTestSessionDetail(sessionId || sid);
+          setModelTestSubmitting(false);
+        }
+        // progress events: modelTestSubmitting stays true, the loading indicator shows
+      });
+
+      // 轮询兜底：防止 WebSocket 事件在订阅前已发出导致永远等待
+      const pollInterval = setInterval(async () => {
+        if (settled) { clearInterval(pollInterval); return; }
+        try {
+          const taskResp = await fetch(`/api/tasks/${taskId}`);
+          if (!taskResp.ok) return;
+          const taskJson = await taskResp.json();
+          const task = taskJson?.data;
+          if (!task) return;
+          if (task.status === "succeeded") {
+            if (settled) return;
+            settled = true;
+            unsub();
+            clearInterval(pollInterval);
+            if (task.result_json) {
+              setModelTestImageResultUrl(task.result_json.url || "（空响应）");
+              setModelTestLastRaw(task.result_json);
+            }
+            void fetchModelTestSessions({ category, aiModelConfigId: modelTestModelConfigId });
+            void fetchModelTestSessionDetail(sessionId || sid);
+            setModelTestSubmitting(false);
+          } else if (task.status === "failed" || task.status === "canceled") {
+            if (settled) return;
+            settled = true;
+            unsub();
+            clearInterval(pollInterval);
+            setModelTestError(task.error || "任务执行失败");
+            void fetchModelTestSessionDetail(sessionId || sid);
+            setModelTestSubmitting(false);
+          }
+        } catch { /* ignore poll errors */ }
+      }, 3000);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "请求失败";
       setModelTestError(msg);
-    } finally {
       setModelTestSubmitting(false);
     }
   };
@@ -1354,7 +1407,7 @@ export default function Page() {
       });
       if (!resp.ok) {
         const t = await resp.text();
-        throw new Error(t || resp.statusText);
+        throw new Error(extractApiErrorMessage(t, resp.statusText));
       }
       const json: unknown = await resp.json();
       if (!json || typeof json !== "object") return;
@@ -2119,6 +2172,8 @@ export default function Page() {
             submitModelTestImage={submitModelTestImage}
             modelTestImageResolution={modelTestImageResolution}
             setModelTestImageResolution={setModelTestImageResolution}
+            capParams={modelTestCapParams}
+            onCapParamsChange={setModelTestCapParams}
             addModelOpen={addModelOpen}
             setAddModelOpen={setAddModelOpen}
             catalogSearch={catalogSearch}

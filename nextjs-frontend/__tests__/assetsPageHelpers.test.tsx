@@ -85,7 +85,8 @@ describe("mapAssetsFromApi", () => {
         type: "CHARACTER",
       })
     );
-    expect(mapped[0]?.resources?.[0]?.thumbnail).toBe("/api/vfs/nodes/node-1/download");
+    expect(mapped[0]?.resources?.[0]?.thumbnail).toBe("/api/vfs/nodes/node-1/thumbnail");
+    expect(mapped[0]?.resources?.[0]?.originalUrl).toBe("/api/vfs/nodes/node-1/download");
   });
 });
 

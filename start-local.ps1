@@ -1,5 +1,4 @@
 $ErrorActionPreference = "Stop"
-Set-StrictMode -Version Latest
 
 $repoRoot = "F:\animate-serial\apps\anyreason"
 $backendDir = Join-Path $repoRoot "fastapi_backend"
@@ -10,62 +9,41 @@ $backendPort = "8100"
 $frontendHost = "0.0.0.0"
 $frontendPort = "3000"
 
-# 终止已运行的进程
-function Stop-ExistingProcesses {
-    Write-Output "检查并终止已运行的进程..."
-    
-    # 终止占用 8000 端口的进程（后端）
-    $backend = Get-NetTCPConnection -LocalPort $backendPort -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
-    if ($backend) {
-        $backend | ForEach-Object {
-            Write-Output "  终止后端进程 PID: $_"
-            Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
-        }
-    }
-    
-    # 终止占用 3000 端口的进程（前端）
-    $frontend = Get-NetTCPConnection -LocalPort $frontendPort -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess -Unique
-    if ($frontend) {
-        $frontend | ForEach-Object {
-            Write-Output "  终止前端进程 PID: $_"
-            Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue
-        }
-    }
-    
-    # 终止 worker 进程（通过命令行匹配）
-    Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object {
-        $_.CommandLine -like "*app.tasks.worker*"
-    } | ForEach-Object {
-        Write-Output "  终止 Worker 进程 PID: $($_.Id)"
-        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-    }
-    
-    # 终止 watcher 进程
-    Get-Process -Name "python" -ErrorAction SilentlyContinue | Where-Object {
-        $_.CommandLine -like "*watcher.py*"
-    } | ForEach-Object {
-        Write-Output "  终止 Watcher 进程 PID: $($_.Id)"
-        Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
-    }
-    
-    # 等待端口释放
-    Start-Sleep -Milliseconds 500
-    Write-Output "已清理旧进程"
+# ── Kill existing processes on target ports ──
+Write-Host "Cleaning up existing processes..." -ForegroundColor DarkGray
+
+Get-NetTCPConnection -LocalPort $backendPort -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique |
+    ForEach-Object { Write-Host "  Killing PID $_ (port $backendPort)" -ForegroundColor DarkGray; Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+
+Get-NetTCPConnection -LocalPort $frontendPort -ErrorAction SilentlyContinue |
+    Select-Object -ExpandProperty OwningProcess -Unique |
+    ForEach-Object { Write-Host "  Killing PID $_ (port $frontendPort)" -ForegroundColor DarkGray; Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
+
+Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue | Where-Object {
+    $_.CommandLine -like "*app.tasks.worker*" -or $_.CommandLine -like "*watcher.py*"
+} | ForEach-Object {
+    Write-Host "  Killing PID $($_.ProcessId) ($($_.CommandLine.Substring(0, [Math]::Min(60, $_.CommandLine.Length)))...)" -ForegroundColor DarkGray
+    Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
 }
 
-# 先终止已有进程
-Stop-ExistingProcesses
+Start-Sleep -Milliseconds 500
+Write-Host "Done." -ForegroundColor DarkGray
+Write-Host ""
 
-Write-Output ""
-Write-Output "启动服务..."
+# ── Launch four terminals ──
+$backend  = "cd '$backendDir'; uv run fastapi dev app/main.py --host $backendHost --port $backendPort --reload"
+$worker   = "cd '$backendDir'; uv run python -m app.tasks.worker --reload"
+$watcher  = "cd '$backendDir'; uv run python watcher.py"
+$frontend = "cd '$frontendDir'; pnpm dev --hostname $frontendHost --port $frontendPort"
 
-Start-Process -WorkingDirectory $backendDir -FilePath "uv" -ArgumentList @("run","fastapi","dev","app/main.py","--host",$backendHost,"--port",$backendPort,"--reload") | Out-Null
-Start-Process -WorkingDirectory $backendDir -FilePath "uv" -ArgumentList @("run","python","watcher.py") | Out-Null
-Start-Process -WorkingDirectory $backendDir -FilePath "uv" -ArgumentList @("run","python","-m","app.tasks.worker","--reload") | Out-Null
-Start-Process -WorkingDirectory $frontendDir -FilePath "pnpm" -ArgumentList @("dev","--hostname",$frontendHost,"--port",$frontendPort) | Out-Null
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $backend  -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $worker   -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $watcher  -WindowStyle Normal
+Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontend -WindowStyle Normal
 
-Write-Output ""
-Write-Output "backend:  http://localhost:$backendPort"
-Write-Output "frontend: http://localhost:$frontendPort"
-Write-Output "minio:    http://localhost:9001"
-Write-Output "litellm:  http://localhost:4000"
+Write-Host "All 4 services launched in separate terminals:" -ForegroundColor Green
+Write-Host "  backend:  http://localhost:$backendPort" -ForegroundColor Cyan
+Write-Host "  worker:   task worker (redis)" -ForegroundColor Yellow
+Write-Host "  watcher:  file watcher" -ForegroundColor Magenta
+Write-Host "  frontend: http://localhost:$frontendPort" -ForegroundColor Green

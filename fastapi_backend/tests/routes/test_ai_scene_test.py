@@ -23,8 +23,8 @@ async def test_admin_ai_scene_test_options_names_non_empty(test_client, authenti
 @pytest.mark.asyncio
 async def test_admin_ai_scene_test_chat_ok(test_client, authenticated_superuser, monkeypatch):
     async def _fake_resolve_builtin_agent_version(*, db, agent_code, version):
-        _ = (db, agent_code, version)
-        return SimpleNamespace(system_prompt="你是测试agent", ai_model_config_id=None, model_settings={})
+        _ = (db,)
+        return SimpleNamespace(system_prompt="你是测试agent", ai_model_config_id=None, model_settings={}, agent_code=agent_code, version=version)
 
     async def _fake_resolve_text_model_for_pydantic_ai(*, db, binding_key, ai_model_config_id):
         assert binding_key == "chatbox"
@@ -72,8 +72,8 @@ async def test_admin_ai_scene_test_chat_ok(test_client, authenticated_superuser,
 @pytest.mark.asyncio
 async def test_admin_ai_scene_test_chat_stream_ok(test_client, authenticated_superuser, monkeypatch):
     async def _fake_resolve_builtin_agent_version(*, db, agent_code, version):
-        _ = (db, agent_code, version)
-        return SimpleNamespace(system_prompt="你是测试agent", ai_model_config_id=None, model_settings={})
+        _ = (db,)
+        return SimpleNamespace(system_prompt="你是测试agent", ai_model_config_id=None, model_settings={}, agent_code=agent_code, version=version)
 
     async def _fake_resolve_text_model_for_pydantic_ai(*, db, binding_key, ai_model_config_id):
         assert binding_key == "chatbox"

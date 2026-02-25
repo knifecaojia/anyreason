@@ -17,6 +17,7 @@ from app.schemas_ai_catalog import (
     AIModelUpdate,
     AIModelWithManufacturerRead,
     AICatalogItem,
+    ManufacturerWithModels,
 )
 from app.schemas_response import ResponseBase
 from app.services.ai_catalog_service import ai_manufacturer_service, ai_model_service
@@ -287,3 +288,18 @@ async def get_catalog(
         )
 
     return ResponseBase(code=200, msg="OK", data=items)
+@router.get(
+    "/ai/catalog/models",
+    response_model=ResponseBase[list[ManufacturerWithModels]],
+)
+async def get_models_with_capabilities(
+    category: str = "image",
+    enabled_only: bool = True,
+    db: AsyncSession = Depends(get_async_session),
+) -> ResponseBase[list[ManufacturerWithModels]]:
+    """查询指定类别的模型及其能力信息，按厂商分组返回。"""
+    rows = await ai_model_service.list_with_capabilities(
+        db=db, category=category, enabled_only=enabled_only,
+    )
+    data = [ManufacturerWithModels(**r) for r in rows]
+    return ResponseBase(code=200, msg="OK", data=data)

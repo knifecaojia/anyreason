@@ -15,6 +15,8 @@ from app.tasks.handlers.episode_doc_backfill import EpisodeDocBackfillHandler
 from app.tasks.handlers.asset_image_generate import AssetImageGenerateHandler
 from app.tasks.handlers.shot_video_generate import ShotVideoGenerateHandler
 from app.tasks.handlers.apply_plan_execute import ApplyPlanExecuteHandler
+from app.tasks.handlers.model_test_image_generate import ModelTestImageGenerateHandler
+from app.tasks.handlers.model_test_video_generate import ModelTestVideoGenerateHandler
 
 TASK_HANDLER_REGISTRY = {
     NoopTaskHandler.task_type: NoopTaskHandler(),
@@ -35,4 +37,6 @@ TASK_HANDLER_REGISTRY = {
     AssetImageGenerateHandler.task_type: AssetImageGenerateHandler(),
     ShotVideoGenerateHandler.task_type: ShotVideoGenerateHandler(),
     ApplyPlanExecuteHandler.task_type: ApplyPlanExecuteHandler(),
+    ModelTestImageGenerateHandler.task_type: ModelTestImageGenerateHandler(),
+    ModelTestVideoGenerateHandler.task_type: ModelTestVideoGenerateHandler(),
 }

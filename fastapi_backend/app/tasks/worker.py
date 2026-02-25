@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from app.config import settings
+from app.log import setup_logging
 from app.tasks.redis_client import get_redis, close_redis
 from app.tasks.process_task import process_task
 
@@ -67,6 +68,8 @@ async def _worker_loop() -> None:
 
 
 def _run_worker() -> None:
+    # 子进程（reload fork）也需要初始化日志
+    setup_logging()
     try:
         asyncio.run(_worker_loop())
     finally:
@@ -80,6 +83,7 @@ def _run_worker() -> None:
 
 
 def main() -> None:
+    setup_logging()
     registry = _load_task_handler_registry()
     now = datetime.now(timezone.utc).isoformat()
     known = ", ".join(sorted(registry.keys()))

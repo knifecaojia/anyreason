@@ -163,16 +163,23 @@ class AssetImageGenerateHandler(BaseTaskHandler):
                 if not s.startswith("data:"):
                     continue
                 image_data_urls_to_send.append(s)
-        raw = await ai_gateway_service.generate_image(
+        param_json: dict[str, Any] = {}
+        if resolution is not None:
+            param_json["resolution"] = str(resolution)
+        if image_data_urls_to_send:
+            param_json["image_data_urls"] = image_data_urls_to_send
+
+        media_resp = await ai_gateway_service.generate_media(
             db=db,
             user_id=task.user_id,
             binding_key=binding_key,
             model_config_id=UUID(str(model_config_id)) if model_config_id else None,
             prompt=prompt,
-            resolution=str(resolution) if resolution else None,
-            image_data_urls=image_data_urls_to_send,
+            param_json=param_json,
+            category="image",
         )
-        url = str(raw.get("url") or "").strip()
+        raw = {"url": media_resp.url}
+        url = str(media_resp.url or "").strip()
         if not url:
             raise RuntimeError("image_url_missing")
 

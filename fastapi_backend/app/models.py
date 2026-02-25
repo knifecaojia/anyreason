@@ -1447,6 +1447,8 @@ class AIModel(Base):
     name = Column(String(128), nullable=False)
     response_format = Column(String(16), nullable=False, server_default=text("'schema'"))
     param_schema = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    model_capabilities = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    category = Column(String(16), nullable=True)
     supports_image = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     supports_think = Column(Boolean, nullable=False, server_default=text("false"), default=False)
     supports_tool = Column(Boolean, nullable=False, server_default=text("true"), default=True)
@@ -1464,8 +1466,13 @@ class AIModel(Base):
         Index("idx_ai_models_manufacturer", "manufacturer_id"),
         Index("idx_ai_models_enabled", "enabled"),
         Index("idx_ai_models_sort", "manufacturer_id", "sort_order"),
+        Index("idx_ai_models_category", "category"),
         CheckConstraint(
             "response_format IN ('schema', 'object')",
             name="ck_ai_models_response_format",
+        ),
+        CheckConstraint(
+            "category IS NULL OR category IN ('text', 'image', 'video')",
+            name="ck_ai_models_category",
         ),
     )

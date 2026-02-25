@@ -155,7 +155,7 @@ class LoggingConfig:
         intercept_handler = InterceptHandler()
         logging.basicConfig(handlers=[intercept_handler], level=0, force=True)
 
-        for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi"):
+        for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access", "fastapi", "app", "httpx", "httpcore"):
             standard_logger = logging.getLogger(logger_name)
             standard_logger.handlers = [intercept_handler]
             standard_logger.propagate = False

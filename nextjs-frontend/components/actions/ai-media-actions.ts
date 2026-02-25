@@ -1,7 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
-import { MediaModelConfig, MediaGenerationRequest, MediaGenerationResponse } from "@/lib/aistudio/types";
+import { MediaModelConfig, MediaGenerationRequest, MediaGenerationResponse, ManufacturerWithModels } from "@/lib/aistudio/types";
 
 type ApiResponse<T> = { code: number; msg: string; data: T | null };
 
@@ -51,4 +51,10 @@ export async function generateMedia(payload: MediaGenerationRequest) {
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export async function listModelsWithCapabilities(category: string) {
+  return authedFetch<ManufacturerWithModels[]>(
+    `/api/v1/ai/catalog/models?category=${category}`
+  );
 }

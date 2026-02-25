@@ -56,6 +56,8 @@ class AIModelBase(BaseModel):
     code: str = Field(..., min_length=1, max_length=128, description="模型标识，如 gpt-4o, deepseek-chat")
     name: str = Field(..., min_length=1, max_length=128, description="显示名称")
     response_format: str = Field("schema", pattern="^(schema|object)$", description="响应格式")
+    model_capabilities: dict[str, Any] = Field(default_factory=dict, description="模型能力描述")
+    category: str | None = Field(None, pattern="^(text|image|video)$", description="模型类别")
     supports_image: bool = Field(False, description="是否支持图像")
     supports_think: bool = Field(False, description="是否支持思考链")
     supports_tool: bool = Field(True, description="是否支持工具调用")
@@ -73,6 +75,8 @@ class AIModelUpdate(BaseModel):
     code: str | None = Field(None, min_length=1, max_length=128)
     name: str | None = Field(None, min_length=1, max_length=128)
     response_format: str | None = Field(None, pattern="^(schema|object)$")
+    model_capabilities: dict[str, Any] | None = None
+    category: str | None = Field(None, pattern="^(text|image|video)$")
     supports_image: bool | None = None
     supports_think: bool | None = None
     supports_tool: bool | None = None
@@ -88,6 +92,8 @@ class AIModelRead(BaseModel):
     code: str
     name: str
     response_format: str
+    model_capabilities: dict[str, Any]
+    category: str | None
     supports_image: bool
     supports_think: bool
     supports_tool: bool
@@ -120,3 +126,20 @@ class AICatalogItem(BaseModel):
     supports_think: bool
     supports_tool: bool
     default_base_url: str | None
+
+
+# ==================== 模型能力查询 API 响应 ====================
+
+
+class ModelWithCapabilities(BaseModel):
+    code: str
+    name: str
+    model_capabilities: dict[str, Any] = Field(default_factory=dict)
+    param_schema: dict[str, Any] = Field(default_factory=dict)
+    enabled: bool = True
+
+
+class ManufacturerWithModels(BaseModel):
+    code: str
+    name: str
+    models: list[ModelWithCapabilities] = []

@@ -44,12 +44,14 @@ async def test_asset_image_generate_replaces_extension_for_mime(db_session, monk
         project_id=project_id,
     )
 
-    async def _fake_generate_image(*, db, user_id, binding_key, model_config_id, prompt, resolution, image_data_urls):
-        _ = (db, user_id, binding_key, model_config_id, prompt, resolution, image_data_urls)
-        payload = base64.b64encode(b"hello").decode("ascii")
-        return {"url": f"data:image/jpeg;base64,{payload}"}
+    from app.schemas_media import MediaResponse
 
-    monkeypatch.setattr(ai_gateway_service, "generate_image", _fake_generate_image)
+    async def _fake_generate_media(*, db, user_id, binding_key, model_config_id, prompt, param_json, category, negative_prompt=None, callback_url=None):
+        _ = (db, user_id, binding_key, model_config_id, prompt, param_json, category)
+        payload = base64.b64encode(b"hello").decode("ascii")
+        return MediaResponse(url=f"data:image/jpeg;base64,{payload}", usage_id="", meta={})
+
+    monkeypatch.setattr(ai_gateway_service, "generate_media", _fake_generate_media)
 
     handler = AssetImageGenerateHandler()
     task = SimpleNamespace(

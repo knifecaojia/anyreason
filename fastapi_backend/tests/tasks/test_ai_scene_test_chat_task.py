@@ -9,7 +9,7 @@ from app.tasks.reporter import TaskReporter
 async def test_ai_scene_test_chat_task_handler_ok(db_session, authenticated_user, monkeypatch):
     async def _fake_run_scene_test_chat(*, body, db, user_id, trace_queue=None):
         _ = (body, db, user_id, trace_queue)
-        return "ok", [], [{"type": "tool_start", "tool_id": "preview_script_split"}]
+        return "ok", [], [{"type": "tool_start", "tool_id": "preview_script_split"}], None
 
     monkeypatch.setattr("app.tasks.handlers.ai_scene_test_chat.run_scene_test_chat", _fake_run_scene_test_chat)
 

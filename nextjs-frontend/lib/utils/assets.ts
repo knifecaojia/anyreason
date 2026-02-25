@@ -69,24 +69,33 @@ export function mapAssetsFromApi(items: any[]): Asset[] {
     effect: "EFFECT"
   };
   return items.map((item: any) => {
-    const resources: AssetResource[] = (item.resources || []).map((r: any) => ({
-      id: r.id,
-      thumbnail: r.meta_data?.file_node_id ? `/api/vfs/nodes/${r.meta_data.file_node_id}/download` : "",
-      is_cover: r.is_cover || r.meta_data?.is_cover,
-      res_type: r.res_type,
-      minio_bucket: r.minio_bucket,
-      minio_key: r.minio_key
-    }));
+    const resources: AssetResource[] = (item.resources || []).map((r: any) => {
+      const fileNodeId = r.meta_data?.file_node_id;
+      return {
+        id: r.id,
+        // Use thumbnail endpoint for list view, original for zoom
+        thumbnail: fileNodeId ? `/api/vfs/nodes/${fileNodeId}/thumbnail` : "",
+        originalUrl: fileNodeId ? `/api/vfs/nodes/${fileNodeId}/download` : "",
+        is_cover: r.is_cover || r.meta_data?.is_cover,
+        res_type: r.res_type,
+        minio_bucket: r.minio_bucket,
+        minio_key: r.minio_key
+      };
+    });
     
     const variants = (item.variants || []).map((v: any) => ({
       id: v.id,
       variant_code: v.variant_code,
-      resources: (v.resources || []).map((r: any) => ({
-        id: r.id,
-        thumbnail: r.meta_data?.file_node_id ? `/api/vfs/nodes/${r.meta_data.file_node_id}/download` : "",
-        is_cover: r.is_cover || r.meta_data?.is_cover,
-        res_type: r.res_type
-      }))
+      resources: (v.resources || []).map((r: any) => {
+        const fileNodeId = r.meta_data?.file_node_id;
+        return {
+          id: r.id,
+          thumbnail: fileNodeId ? `/api/vfs/nodes/${fileNodeId}/thumbnail` : "",
+          originalUrl: fileNodeId ? `/api/vfs/nodes/${fileNodeId}/download` : "",
+          is_cover: r.is_cover || r.meta_data?.is_cover,
+          res_type: r.res_type
+        };
+      })
     }));
 
     let thumb = "";

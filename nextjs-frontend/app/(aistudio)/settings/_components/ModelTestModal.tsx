@@ -1,22 +1,11 @@
 "use client";
 
-import { useMemo, useRef, useState, type RefObject } from "react";
-import { Download, X, ZoomIn } from "lucide-react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
+import { Download, LoaderCircle, X, ZoomIn } from "lucide-react";
 import { ImagePromptComposer } from "@/components/aistudio/ImagePromptComposer";
+import { listModelsWithCapabilities } from "@/components/actions/ai-media-actions";
 import type { AICategory } from "@/components/actions/ai-model-actions";
-
-function parseResolution(value: string): { w: number; h: number } | null {
-  const m = value.trim().match(/^(\d+)\s*x\s*(\d+)$/i);
-  if (!m) return null;
-  const w = Number(m[1]);
-  const h = Number(m[2]);
-  if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) return null;
-  return { w, h };
-}
-
-function roundTo64(n: number) {
-  return Math.max(64, Math.round(n / 64) * 64);
-}
+import type { ModelCapabilities, ManufacturerWithModels } from "@/lib/aistudio/types";
 
 export function ModelTestModal(props: {
   open: boolean;
@@ -55,6 +44,9 @@ export function ModelTestModal(props: {
   submitModelTestImage: () => Promise<void>;
   modelTestImageResolution: string;
   setModelTestImageResolution: (value: string) => void;
+  /** 动态参数 — 由 CapabilityParams 驱动 */
+  capParams: Record<string, any>;
+  onCapParamsChange: (params: Record<string, any>) => void;
 }) {
   const {
     open,
@@ -93,79 +85,67 @@ export function ModelTestModal(props: {
     submitModelTestImage,
     modelTestImageResolution,
     setModelTestImageResolution,
+    capParams,
+    onCapParamsChange,
   } = props;
 
-  if (!open) return null;
+  // ---- 加载 catalog capabilities ----
+  const [catalogData, setCatalogData] = useState<ManufacturerWithModels[]>([]);
+  useEffect(() => {
+    if (!open || activeModelTab === "text") return;
+    listModelsWithCapabilities(activeModelTab)
+      .then((data) => setCatalogData(data || []))
+      .catch(() => setCatalogData([]));
+  }, [open, activeModelTab]);
 
-  const aspectOptions = useMemo(
-    () => [
-      { key: "1:1", w: 1, h: 1, label: "1:1" },
-      { key: "4:3", w: 4, h: 3, label: "4:3" },
-      { key: "3:4", w: 3, h: 4, label: "3:4" },
-      { key: "16:9", w: 16, h: 9, label: "16:9" },
-      { key: "9:16", w: 9, h: 16, label: "9:16" },
-    ],
-    [],
-  );
-
-  const resolutionParsed = useMemo(() => parseResolution(modelTestImageResolution), [modelTestImageResolution]);
-  const defaultAspectKey = useMemo(() => {
-    if (!resolutionParsed) return "1:1";
-    const r = resolutionParsed.w / resolutionParsed.h;
-    let best = aspectOptions[0]!;
-    let bestDiff = Number.POSITIVE_INFINITY;
-    for (const o of aspectOptions) {
-      const rr = o.w / o.h;
-      const d = Math.abs(rr - r);
-      if (d < bestDiff) {
-        best = o;
-        bestDiff = d;
-      }
+  // 根据选中的 model config 匹配 catalog 中的 capabilities
+  const selectedCaps: ModelCapabilities = useMemo(() => {
+    if (!modelTestModelConfigId) return {};
+    const cfg = aiModelConfigs.find((c) => c.id === modelTestModelConfigId);
+    if (!cfg) return {};
+    for (const mfr of catalogData) {
+      // manufacturer code 匹配（catalog 用 code，config 用 manufacturer 字段可能是 code 或 name）
+      const model = mfr.models.find(
+        (m) => m.code === cfg.model,
+      );
+      if (model) return model.model_capabilities || {};
     }
-    return best.key;
-  }, [aspectOptions, resolutionParsed]);
+    return {};
+  }, [modelTestModelConfigId, aiModelConfigs, catalogData]);
 
-  const defaultBase = useMemo(() => {
-    if (!resolutionParsed) return 1024;
-    return Math.max(resolutionParsed.w, resolutionParsed.h);
-  }, [resolutionParsed]);
+  const hasCaps = Object.keys(selectedCaps).length > 0;
 
-  const [aspectKey, setAspectKey] = useState<string>(defaultAspectKey);
-  const [baseSize, setBaseSize] = useState<number>(defaultBase);
-  const [customW, setCustomW] = useState<number>(resolutionParsed?.w ?? 0);
-  const [customH, setCustomH] = useState<number>(resolutionParsed?.h ?? 0);
-  const [useCustom, setUseCustom] = useState<boolean>(Boolean(resolutionParsed));
-
-  const computeResolutionFrom = (params: {
-    aspectKey: string;
-    baseSize: number;
-    useCustom: boolean;
-    customW: number;
-    customH: number;
-  }) => {
-    const opt = aspectOptions.find((a) => a.key === params.aspectKey) || aspectOptions[0]!;
-    if (params.useCustom && params.customW > 0 && params.customH > 0) return `${roundTo64(params.customW)}x${roundTo64(params.customH)}`;
-
-    const ratio = opt.w / opt.h;
-    if (ratio >= 1) {
-      const w = roundTo64(params.baseSize);
-      const h = roundTo64(params.baseSize / ratio);
-      return `${w}x${h}`;
+  // 切换模型时重置参数为默认值（与 ModelSelector 逻辑一致）
+  useEffect(() => {
+    if (!hasCaps) return;
+    const defaults: Record<string, any> = {};
+    if (selectedCaps.resolution_tiers && typeof selectedCaps.resolution_tiers === "object" && !Array.isArray(selectedCaps.resolution_tiers) && Object.keys(selectedCaps.resolution_tiers).length > 0) {
+      const tierKeys = Object.keys(selectedCaps.resolution_tiers);
+      defaults.resolution_tier = tierKeys[0];
+      const tierRes = selectedCaps.resolution_tiers[tierKeys[0]];
+      if (tierRes?.length) defaults.resolution = tierRes[0];
+    } else if (selectedCaps.resolutions?.length) {
+      defaults.resolution = selectedCaps.resolutions[0];
     }
-    const h = roundTo64(params.baseSize);
-    const w = roundTo64(params.baseSize * ratio);
-    return `${w}x${h}`;
-  };
-
-  const computedResolution = useMemo(() => {
-    return computeResolutionFrom({ aspectKey, baseSize, useCustom, customW, customH });
-  }, [aspectOptions, aspectKey, baseSize, customH, customW, useCustom]);
+    if (selectedCaps.aspect_ratios?.length) defaults.aspect_ratio = selectedCaps.aspect_ratios[0];
+    if (selectedCaps.duration_options?.length) {
+      defaults.duration = selectedCaps.duration_options[0];
+    } else if (selectedCaps.duration_range) {
+      defaults.duration = selectedCaps.duration_range.min;
+    }
+    if (selectedCaps.input_modes?.length) defaults.input_mode = selectedCaps.input_modes[0];
+    onCapParamsChange(defaults);
+    if (defaults.resolution) setModelTestImageResolution(String(defaults.resolution));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCaps]);
 
   const [imagePreview, setImagePreview] = useState<{
     src: string;
     downloadHref: string;
     title: string;
   } | null>(null);
+
+  if (!open) return null;
 
   return (
     <div
@@ -273,9 +253,7 @@ export function ModelTestModal(props: {
                               >
                                 <div className="flex items-center justify-between gap-3">
                                   <div className="text-sm font-bold text-textMain truncate">{s.title}</div>
-                                  <div className="text-[11px] text-textMuted whitespace-nowrap">
-                                    {typeof s.run_count === "number" ? s.run_count : typeof s.image_run_count === "number" ? s.image_run_count : 0}
-                                  </div>
+                                  <div className="text-[11px] text-textMuted whitespace-nowrap">{count}</div>
                                 </div>
                                 <div className="text-[11px] text-textMuted mt-1 truncate">{s.updated_at || s.id}</div>
                               </button>
@@ -325,7 +303,7 @@ export function ModelTestModal(props: {
                         </>
                       ) : activeModelTab === "video" ? (
                         <>
-                          {modelTestSessionId && modelTestVideoRuns.length === 0 ? <div className="text-sm text-textMuted">该会话暂无记录。</div> : null}
+                          {modelTestSessionId && modelTestVideoRuns.length === 0 && !modelTestSubmitting ? <div className="text-sm text-textMuted">该会话暂无记录。</div> : null}
                           {modelTestVideoRuns.map((r: any) => {
                             const refCount = r.input_file_node_ids.length || 0;
                             const meta = `${r.aspect_ratio || "auto"} · 参考图 ${refCount}`;
@@ -365,6 +343,14 @@ export function ModelTestModal(props: {
                               </div>
                             );
                           })}
+                          {modelTestSubmitting && (
+                            <div className="flex justify-start">
+                              <div className="max-w-[78%] rounded-2xl border border-border bg-background/40 px-4 py-3 flex items-center gap-2">
+                                <LoaderCircle size={16} className="animate-spin text-primary" />
+                                <span className="text-sm text-textMuted">视频生成任务已提交，请等待…</span>
+                              </div>
+                            </div>
+                          )}
                         </>
                       ) : (
                         <>
@@ -468,6 +454,14 @@ export function ModelTestModal(props: {
                               </div>
                             );
                           })}
+                          {modelTestSubmitting && (
+                            <div className="flex justify-start">
+                              <div className="max-w-[78%] rounded-2xl border border-border bg-background/40 px-4 py-3 flex items-center gap-2">
+                                <LoaderCircle size={16} className="animate-spin text-primary" />
+                                <span className="text-sm text-textMuted">图片生成任务已提交，请等待…</span>
+                              </div>
+                            </div>
+                          )}
                         </>
                       )}
                     </div>
@@ -508,153 +502,83 @@ export function ModelTestModal(props: {
                   </button>
                 </div>
               ) : (activeModelTab as AICategory) === "image" || (activeModelTab as AICategory) === "video" ? (
-                <ImagePromptComposer
-                  prompt={modelTestImagePrompt}
-                  onPromptChange={handlePromptChange}
-                  onPromptKeyDown={(e) => {
-                    if (e.key === "Escape") {
-                      setMentionPopupOpen(false);
-                      return;
-                    }
-                    if (e.key !== "Enter") return;
-                    if (e.shiftKey) return;
-                    e.preventDefault();
-                    void submitModelTestImage();
-                  }}
-                  promptRef={modelTestImagePromptRef}
-                  images={modelTestSessionImageAttachmentNodeIds.map((id, idx) => ({
-                    id,
-                    url: `/api/vfs/nodes/${encodeURIComponent(id)}/download`,
-                    index: idx + 1,
-                    isSelected: parseMentionIndices(modelTestImagePrompt).includes(idx + 1),
-                  }))}
-                  mentionPopupOpen={mentionPopupOpen}
-                  mentionPosition={mentionPosition}
-                  onMentionSelect={handleMentionSelect}
-                  onCloseMention={() => setMentionPopupOpen(false)}
-                  onUpload={addModelTestImages}
-                  onPreview={(url, title) =>
-                    setImagePreview({
-                      src: url,
-                      downloadHref: url,
-                      title,
-                    })
-                  }
-                  onInsertMention={insertModelTestImageMention}
-                  onRemoveAttachment={removeModelTestSessionImageAttachment}
-                  disabled={modelTestSubmitting}
-                  submitDisabled={modelTestSubmitting || !modelTestImagePrompt.trim()}
-                  onSubmit={() => void submitModelTestImage()}
-                  placeholder={(activeModelTab as AICategory) === "video" ? "请输入视频生成提示词，输入 @ 引用参考图..." : "请描述你想生成的图片，输入 @ 引用参考图"}
-                  generationLabel={(activeModelTab as AICategory) === "video" ? "视频生成" : "图片生成"}
-                  modelLabel={(() => {
-                    const cfg = aiModelConfigs.find((c) => c.id === modelTestModelConfigId);
-                    if (!cfg) return "未选择模型";
-                    return `${cfg.model}`;
-                  })()}
-                  attachmentCountLabel={`参考 ${modelTestSessionImageAttachmentNodeIds.length}/14`}
-                  leftControls={
-                    <>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <div className="text-xs text-textMuted">宽高比</div>
-                        <select
-                          value={aspectKey}
-                          onChange={(e) => {
-                            const nextAspectKey = e.target.value;
-                            setUseCustom(false);
-                            setAspectKey(nextAspectKey);
-                            setModelTestImageResolution(
-                              computeResolutionFrom({ aspectKey: nextAspectKey, baseSize, useCustom: false, customW, customH }),
-                            );
-                          }}
-                          className="bg-surfaceHighlight border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none"
-                          disabled={modelTestSubmitting}
-                        >
-                          {aspectOptions.map((o) => (
-                            <option key={o.key} value={o.key}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </select>
-                        <div className="text-xs text-textMuted">分辨率</div>
-                        <select
-                          value={String(baseSize)}
-                          onChange={(e) => {
-                            const nextBaseSize = Number(e.target.value);
-                            setUseCustom(false);
-                            setBaseSize(nextBaseSize);
-                            setModelTestImageResolution(
-                              computeResolutionFrom({ aspectKey, baseSize: nextBaseSize, useCustom: false, customW, customH }),
-                            );
-                          }}
-                          className="bg-surfaceHighlight border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none"
-                          disabled={modelTestSubmitting}
-                        >
-                          {[512, 768, 1024, 1536, 2048].map((s) => (
-                            <option key={s} value={String(s)}>
-                              {s}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="px-3 py-1.5 rounded-lg border border-border bg-surfaceHighlight/40 hover:bg-surfaceHighlight/60 text-xs font-bold text-textMain transition-colors"
-                          onClick={() => {
-                            setUseCustom(false);
-                            setModelTestImageResolution(
-                              computeResolutionFrom({ aspectKey, baseSize, useCustom: false, customW, customH }),
-                            );
-                          }}
-                          disabled={modelTestSubmitting}
-                        >
-                          应用 {computedResolution}
-                        </button>
+                <div className="flex gap-3">
+                  {/* 左侧：提示词输入 */}
+                  <div className={hasCaps ? "flex-1 min-w-0" : "w-full"}>
+                    <ImagePromptComposer
+                      prompt={modelTestImagePrompt}
+                      onPromptChange={handlePromptChange}
+                      onPromptKeyDown={(e) => {
+                        if (e.key === "Escape") {
+                          setMentionPopupOpen(false);
+                          return;
+                        }
+                        if (e.key !== "Enter") return;
+                        if (e.shiftKey) return;
+                        e.preventDefault();
+                        void submitModelTestImage();
+                      }}
+                      promptRef={modelTestImagePromptRef}
+                      images={modelTestSessionImageAttachmentNodeIds.map((id, idx) => ({
+                        id,
+                        url: `/api/vfs/nodes/${encodeURIComponent(id)}/download`,
+                        index: idx + 1,
+                        isSelected: parseMentionIndices(modelTestImagePrompt).includes(idx + 1),
+                      }))}
+                      mentionPopupOpen={mentionPopupOpen}
+                      mentionPosition={mentionPosition}
+                      onMentionSelect={handleMentionSelect}
+                      onCloseMention={() => setMentionPopupOpen(false)}
+                      onUpload={addModelTestImages}
+                      onPreview={(url, title) =>
+                        setImagePreview({
+                          src: url,
+                          downloadHref: url,
+                          title,
+                        })
+                      }
+                      onInsertMention={insertModelTestImageMention}
+                      onRemoveAttachment={removeModelTestSessionImageAttachment}
+                      disabled={modelTestSubmitting}
+                      submitDisabled={modelTestSubmitting || !modelTestImagePrompt.trim()}
+                      submitting={modelTestSubmitting}
+                      onSubmit={() => void submitModelTestImage()}
+                      placeholder={(activeModelTab as AICategory) === "video" ? "请输入视频生成提示词，输入 @ 引用参考图..." : "请描述你想生成的图片，输入 @ 引用参考图"}
+                      generationLabel={(activeModelTab as AICategory) === "video" ? "视频生成" : "图片生成"}
+                      modelLabel={(() => {
+                        const cfg = aiModelConfigs.find((c) => c.id === modelTestModelConfigId);
+                        if (!cfg) return "未选择模型";
+                        return `${cfg.model}`;
+                      })()}
+                      attachmentCountLabel={`参考 ${modelTestSessionImageAttachmentNodeIds.length}/14`}
+                    />
+                  </div>
+                  {/* 右侧：模型参数面板 */}
+                  {hasCaps && (
+                    <div className="w-[260px] shrink-0 rounded-2xl border border-border bg-surfaceHighlight/20 overflow-hidden flex flex-col">
+                      <div className="px-3 py-2 border-b border-border bg-surfaceHighlight/30">
+                        <div className="text-xs font-bold text-textMain">生成参数</div>
                       </div>
-                      <details className="rounded-xl border border-border bg-surfaceHighlight/20 px-3 py-2">
-                        <summary className="cursor-pointer text-xs font-bold text-textMain select-none">高级</summary>
-                        <div className="mt-2 flex items-center gap-2 flex-wrap">
-                          <div className="text-xs text-textMuted">W</div>
-                          <input
-                            value={String(customW || "")}
-                            onChange={(e) => {
-                              const v = Number(e.target.value || 0);
-                              setCustomW(v);
-                              setUseCustom(true);
-                            }}
-                            className="w-24 bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none font-mono"
-                            type="number"
-                            min={64}
-                            step={64}
-                            disabled={modelTestSubmitting}
-                          />
-                          <div className="text-xs text-textMuted">H</div>
-                          <input
-                            value={String(customH || "")}
-                            onChange={(e) => {
-                              const v = Number(e.target.value || 0);
-                              setCustomH(v);
-                              setUseCustom(true);
-                            }}
-                            className="w-24 bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none font-mono"
-                            type="number"
-                            min={64}
-                            step={64}
-                            disabled={modelTestSubmitting}
-                          />
-                          <button
-                            type="button"
-                            className="px-3 py-1.5 rounded-lg border border-border bg-surfaceHighlight/40 hover:bg-surfaceHighlight/60 text-xs font-bold text-textMain transition-colors"
-                            onClick={() => setModelTestImageResolution(computedResolution)}
-                            disabled={modelTestSubmitting || !(customW > 0 && customH > 0)}
-                          >
-                            设置为 {computedResolution}
-                          </button>
-                          <div className="text-[11px] text-textMuted">当前：{modelTestImageResolution || "auto"}</div>
-                        </div>
-                      </details>
-                    </>
-                  }
-                />
+                      <div className="flex-1 overflow-y-auto px-3 py-2 space-y-3">
+                        <CompactCapabilityParams
+                          caps={selectedCaps}
+                          params={capParams}
+                          onChange={(key, value) => {
+                            const next = { ...capParams, [key]: value };
+                            onCapParamsChange(next);
+                            if (key === "resolution") setModelTestImageResolution(String(value));
+                          }}
+                          onBatchChange={(updates) => {
+                            const next = { ...capParams, ...updates };
+                            onCapParamsChange(next);
+                            if (updates.resolution) setModelTestImageResolution(String(updates.resolution));
+                          }}
+                          category={activeModelTab === "video" ? "video" : "image"}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
               ) : (
                 <div className="text-sm text-textMuted p-4">请选择测试类型</div>
               )}
@@ -703,6 +627,233 @@ export function ModelTestModal(props: {
               </div>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---- 紧凑参数面板（右侧窄栏专用） ----
+
+const INPUT_MODE_LABELS: Record<string, string> = {
+  text_to_video: "文生视频",
+  first_frame: "首帧生视频",
+  first_last_frame: "首尾帧生视频",
+  reference_to_video: "参考生视频",
+};
+
+function CompactCapabilityParams({
+  caps,
+  params,
+  onChange,
+  onBatchChange,
+  category,
+}: {
+  caps: ModelCapabilities;
+  params: Record<string, any>;
+  onChange: (key: string, value: any) => void;
+  onBatchChange?: (updates: Record<string, any>) => void;
+  category: "image" | "video";
+}) {
+  const hasTiers = caps.resolution_tiers && typeof caps.resolution_tiers === "object" && !Array.isArray(caps.resolution_tiers) && Object.keys(caps.resolution_tiers).length > 0;
+  const hasFlatResolutions = !hasTiers && caps.resolutions && caps.resolutions.length > 0;
+  const tierKeys = hasTiers ? Object.keys(caps.resolution_tiers!) : [];
+  const currentTier = params.resolution_tier || tierKeys[0] || "";
+  const tierResolutions = hasTiers && currentTier ? (caps.resolution_tiers![currentTier] ?? []) : [];
+
+  return (
+    <div className="space-y-3 text-xs">
+      {/* 分辨率档位 */}
+      {hasTiers && (
+        <>
+          <div>
+            <div className="text-textMuted font-medium mb-1">清晰度</div>
+            <div className="flex gap-1 flex-wrap">
+              {tierKeys.map((tier) => (
+                <button
+                  key={tier}
+                  type="button"
+                  onClick={() => {
+                    const resolutions = caps.resolution_tiers![tier] ?? [];
+                    const firstRes = resolutions[0] || "";
+                    if (onBatchChange) onBatchChange({ resolution_tier: tier, resolution: firstRes });
+                    else { onChange("resolution_tier", tier); onChange("resolution", firstRes); }
+                  }}
+                  className={`px-2.5 py-1 rounded-md border transition-colors ${
+                    currentTier === tier
+                      ? "bg-primary/20 border-primary/40 text-primary font-bold"
+                      : "border-border bg-background/40 text-textMain hover:bg-surfaceHighlight"
+                  }`}
+                >
+                  {tier}
+                </button>
+              ))}
+            </div>
+          </div>
+          {tierResolutions.length > 0 && (
+            <div>
+              <div className="text-textMuted font-medium mb-1">分辨率</div>
+              <select
+                value={params.resolution || ""}
+                onChange={(e) => onChange("resolution", e.target.value)}
+                className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none focus:border-primary"
+              >
+                {tierResolutions.map((r) => (
+                  <option key={r} value={r}>{r}</option>
+                ))}
+              </select>
+            </div>
+          )}
+        </>
+      )}
+
+      {/* 平铺分辨率 */}
+      {hasFlatResolutions && (
+        <div>
+          <div className="text-textMuted font-medium mb-1">分辨率</div>
+          <select
+            value={params.resolution || ""}
+            onChange={(e) => onChange("resolution", e.target.value)}
+            className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none focus:border-primary"
+          >
+            {caps.resolutions!.map((r) => (
+              <option key={r} value={r}>{r}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* 宽高比 */}
+      {caps.aspect_ratios && caps.aspect_ratios.length > 0 && (
+        <div>
+          <div className="text-textMuted font-medium mb-1">宽高比</div>
+          <div className="flex gap-1 flex-wrap">
+            {caps.aspect_ratios.map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => onChange("aspect_ratio", r)}
+                className={`px-2 py-1 rounded-md border transition-colors ${
+                  params.aspect_ratio === r
+                    ? "bg-primary/20 border-primary/40 text-primary font-bold"
+                    : "border-border bg-background/40 text-textMain hover:bg-surfaceHighlight"
+                }`}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* 时长 */}
+      {category === "video" && caps.duration_options && caps.duration_options.length > 0 && (
+        <div>
+          <div className="text-textMuted font-medium mb-1">时长</div>
+          <div className="flex gap-1 flex-wrap">
+            {caps.duration_options.map((d) => (
+              <button
+                key={d}
+                type="button"
+                onClick={() => onChange("duration", d)}
+                className={`px-2.5 py-1 rounded-md border transition-colors ${
+                  params.duration === d
+                    ? "bg-primary/20 border-primary/40 text-primary font-bold"
+                    : "border-border bg-background/40 text-textMain hover:bg-surfaceHighlight"
+                }`}
+              >
+                {d}s
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {category === "video" && !caps.duration_options?.length && caps.duration_range && (
+        <div>
+          <div className="text-textMuted font-medium mb-1">时长 ({params.duration ?? caps.duration_range.min}s)</div>
+          <input
+            type="range"
+            min={caps.duration_range.min}
+            max={caps.duration_range.max}
+            step={1}
+            value={params.duration ?? caps.duration_range.min}
+            onChange={(e) => onChange("duration", Number(e.target.value))}
+            className="w-full h-1.5 bg-surfaceHighlight rounded-lg appearance-none cursor-pointer"
+          />
+        </div>
+      )}
+
+      {/* 输入模式 */}
+      {category === "video" && caps.input_modes && caps.input_modes.length > 0 && (
+        <div>
+          <div className="text-textMuted font-medium mb-1">输入模式</div>
+          <select
+            value={params.input_mode || ""}
+            onChange={(e) => onChange("input_mode", e.target.value)}
+            className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none focus:border-primary"
+          >
+            {caps.input_modes.map((m) => (
+              <option key={m} value={m}>{INPUT_MODE_LABELS[m] || m}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* 开关类参数 */}
+      <div className="flex flex-wrap gap-x-4 gap-y-2">
+        {caps.supports_prompt_extend === true && (
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!params.prompt_extend}
+              onChange={() => onChange("prompt_extend", !params.prompt_extend)}
+              className="rounded border-border w-3.5 h-3.5"
+            />
+            <span className="text-textMain">提示词扩展</span>
+          </label>
+        )}
+        {caps.supports_watermark === true && (
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!params.watermark}
+              onChange={() => onChange("watermark", !params.watermark)}
+              className="rounded border-border w-3.5 h-3.5"
+            />
+            <span className="text-textMain">水印</span>
+          </label>
+        )}
+      </div>
+
+      {/* Seed */}
+      {caps.supports_seed === true && (
+        <div>
+          <div className="text-textMuted font-medium mb-1">Seed</div>
+          <input
+            type="number"
+            value={params.seed ?? ""}
+            onChange={(e) => onChange("seed", e.target.value === "" ? undefined : Number(e.target.value))}
+            placeholder="随机"
+            className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none focus:border-primary font-mono"
+          />
+        </div>
+      )}
+
+      {/* 生成数量 */}
+      {caps.max_output_images != null && caps.max_output_images > 1 && (
+        <div>
+          <div className="text-textMuted font-medium mb-1">数量 (最多 {caps.max_output_images})</div>
+          <input
+            type="number"
+            min={1}
+            max={caps.max_output_images}
+            value={params.batch_count ?? 1}
+            onChange={(e) => {
+              const raw = Number(e.target.value);
+              onChange("batch_count", Math.max(1, Math.min(caps.max_output_images!, Math.round(raw))));
+            }}
+            className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-xs text-textMain outline-none focus:border-primary font-mono"
+          />
         </div>
       )}
     </div>

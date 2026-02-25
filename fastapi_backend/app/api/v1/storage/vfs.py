@@ -13,7 +13,7 @@ from app.database import User, get_async_session
 from app.schemas_response import ResponseBase
 from app.users import current_active_user
 from app.schemas import FileNodeRead
-from app.services.storage.vfs_service import vfs_service, get_or_create_user_ai_folder, AI_GENERATED_FOLDER_NAME
+from app.services.storage.vfs_service import vfs_service, get_or_create_user_ai_folder, get_or_create_project_ai_folder, AI_GENERATED_FOLDER_NAME
 
 router = APIRouter()
 
@@ -168,18 +168,53 @@ async def delete_node(
 
 @router.get("/ai-generated", response_model=ResponseBase[list[FileNodeRead]])
 async def list_ai_generated_images(
+    project_id: UUID | None = Query(None),
     user: User = Depends(current_active_user),
     db: AsyncSession = Depends(get_async_session),
 ):
-    """List all AI generated images for the current user."""
-    folder = await get_or_create_user_ai_folder(db=db, user_id=user.id)
-    rows = await vfs_service.list_nodes(
-        db=db,
-        user_id=user.id,
-        parent_id=folder.id,
+    """List AI generated images. If project_id given, list that project's AI folder.
+    Otherwise list the user-level AI folder AND all project-level AI folders."""
+    if project_id:
+        folder = await get_or_create_project_ai_folder(db=db, user_id=user.id, project_id=project_id)
+        rows = await vfs_service.list_nodes(db=db, user_id=user.id, parent_id=folder.id)
+        image_nodes = [
+            r for r in rows
+            if not r.is_folder and r.content_type and r.content_type.startswith("image/")
+        ]
+        return ResponseBase(code=200, msg="OK", data=[FileNodeRead.model_validate(r) for r in image_nodes])
+
+    # Collect from user-level AI folder
+    user_folder = await get_or_create_user_ai_folder(db=db, user_id=user.id)
+    user_rows = await vfs_service.list_nodes(db=db, user_id=user.id, parent_id=user_folder.id)
+
+    # Collect from all project-level AI folders
+    from sqlalchemy import select as sa_select
+    from app.models import FileNode as FileNodeModel
+    proj_folder_res = await db.execute(
+        sa_select(FileNodeModel).where(
+            FileNodeModel.name == AI_GENERATED_FOLDER_NAME,
+            FileNodeModel.is_folder.is_(True),
+            FileNodeModel.created_by == user.id,
+            FileNodeModel.project_id.isnot(None),
+        )
     )
+    proj_folders = list(proj_folder_res.scalars().all())
+    proj_rows = []
+    for pf in proj_folders:
+        rows = await vfs_service.list_nodes(db=db, user_id=user.id, parent_id=pf.id)
+        proj_rows.extend(rows)
+
+    all_rows = list(user_rows) + proj_rows
     image_nodes = [
-        r for r in rows
+        r for r in all_rows
         if not r.is_folder and r.content_type and r.content_type.startswith("image/")
     ]
-    return ResponseBase(code=200, msg="OK", data=[FileNodeRead.model_validate(r) for r in image_nodes])
+    # Deduplicate by id and sort newest first
+    seen = set()
+    unique = []
+    for n in image_nodes:
+        if n.id not in seen:
+            seen.add(n.id)
+            unique.append(n)
+    unique.sort(key=lambda n: n.created_at or n.id, reverse=True)
+    return ResponseBase(code=200, msg="OK", data=[FileNodeRead.model_validate(r) for r in unique])

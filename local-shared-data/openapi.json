@@ -2779,7 +2779,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResponseBase_AdminAIModelConfigTestImageResponse_"
+                  "$ref": "#/components/schemas/ResponseBase_AdminAIModelConfigTestAsyncResponse_"
                 }
               }
             }
@@ -2837,7 +2837,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ResponseBase_AdminAIModelConfigTestVideoResponse_"
+                  "$ref": "#/components/schemas/ResponseBase_AdminAIModelConfigTestAsyncResponse_"
                 }
               }
             }
@@ -4126,6 +4126,60 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ResponseBase_list_AICatalogItem__"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ai/catalog/models": {
+      "get": {
+        "tags": [
+          "ai"
+        ],
+        "summary": "Get Models With Capabilities",
+        "description": "\u67e5\u8be2\u6307\u5b9a\u7c7b\u522b\u7684\u6a21\u578b\u53ca\u5176\u80fd\u529b\u4fe1\u606f\uff0c\u6309\u5382\u5546\u5206\u7ec4\u8fd4\u56de\u3002",
+        "operationId": "get_models_with_capabilities",
+        "parameters": [
+          {
+            "name": "category",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "default": "image",
+              "title": "Category"
+            }
+          },
+          {
+            "name": "enabled_only",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": true,
+              "title": "Enabled Only"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseBase_list_ManufacturerWithModels__"
                 }
               }
             }
@@ -7862,8 +7916,32 @@
           "vfs"
         ],
         "summary": "List Ai Generated Images",
-        "description": "List all AI generated images for the current user.",
+        "description": "List AI generated images. If project_id given, list that project's AI folder.\nOtherwise list the user-level AI folder AND all project-level AI folders.",
         "operationId": "list_ai_generated_images",
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "uuid"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Project Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -7874,13 +7952,18 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
           }
-        },
-        "security": [
-          {
-            "OAuth2PasswordBearer": []
-          }
-        ]
+        }
       }
     },
     "/api/v1/scenes": {
@@ -11290,6 +11373,24 @@
             "description": "\u54cd\u5e94\u683c\u5f0f",
             "default": "schema"
           },
+          "model_capabilities": {
+            "type": "object",
+            "title": "Model Capabilities",
+            "description": "\u6a21\u578b\u80fd\u529b\u63cf\u8ff0"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(text|image|video)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category",
+            "description": "\u6a21\u578b\u7c7b\u522b"
+          },
           "supports_image": {
             "type": "boolean",
             "title": "Supports Image",
@@ -11859,6 +11960,29 @@
             ],
             "title": "Response Format"
           },
+          "model_capabilities": {
+            "anyOf": [
+              {
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Capabilities"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^(text|image|video)$"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
           "supports_image": {
             "anyOf": [
               {
@@ -11966,6 +12090,21 @@
             "type": "string",
             "title": "Response Format"
           },
+          "model_capabilities": {
+            "type": "object",
+            "title": "Model Capabilities"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
           "supports_image": {
             "type": "boolean",
             "title": "Supports Image"
@@ -12029,6 +12168,8 @@
           "code",
           "name",
           "response_format",
+          "model_capabilities",
+          "category",
           "supports_image",
           "supports_think",
           "supports_tool",
@@ -13549,6 +13690,24 @@
         ],
         "title": "AdminAIModelConfigCreateRequest"
       },
+      "AdminAIModelConfigTestAsyncResponse": {
+        "properties": {
+          "task_id": {
+            "type": "string",
+            "title": "Task Id"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "task_id",
+          "session_id"
+        ],
+        "title": "AdminAIModelConfigTestAsyncResponse"
+      },
       "AdminAIModelConfigTestChatRequest": {
         "properties": {
           "messages": {
@@ -13662,92 +13821,6 @@
         ],
         "title": "AdminAIModelConfigTestImageRequest"
       },
-      "AdminAIModelConfigTestImageResponse": {
-        "properties": {
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "raw": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Raw"
-          },
-          "session_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Session Id"
-          },
-          "run_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Run Id"
-          },
-          "output_file_node_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Output File Node Id"
-          },
-          "output_content_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Output Content Type"
-          },
-          "input_file_node_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Input File Node Ids"
-          }
-        },
-        "type": "object",
-        "required": [
-          "url"
-        ],
-        "title": "AdminAIModelConfigTestImageResponse"
-      },
       "AdminAIModelConfigTestVideoRequest": {
         "properties": {
           "prompt": {
@@ -13810,92 +13883,6 @@
           "prompt"
         ],
         "title": "AdminAIModelConfigTestVideoRequest"
-      },
-      "AdminAIModelConfigTestVideoResponse": {
-        "properties": {
-          "url": {
-            "type": "string",
-            "title": "Url"
-          },
-          "raw": {
-            "anyOf": [
-              {
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Raw"
-          },
-          "session_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Session Id"
-          },
-          "run_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Run Id"
-          },
-          "output_file_node_id": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "uuid"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Output File Node Id"
-          },
-          "output_content_type": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Output Content Type"
-          },
-          "input_file_node_ids": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string",
-                  "format": "uuid"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Input File Node Ids"
-          }
-        },
-        "type": "object",
-        "required": [
-          "url"
-        ],
-        "title": "AdminAIModelConfigTestVideoResponse"
       },
       "AdminAIModelConfigUpdateRequest": {
         "properties": {
@@ -17304,6 +17291,32 @@
         ],
         "title": "ItemRead"
       },
+      "ManufacturerWithModels": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/ModelWithCapabilities"
+            },
+            "type": "array",
+            "title": "Models",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "ManufacturerWithModels"
+      },
       "MePasswordUpdate": {
         "properties": {
           "current_password": {
@@ -17406,6 +17419,37 @@
           "usage_id"
         ],
         "title": "MediaResponse"
+      },
+      "ModelWithCapabilities": {
+        "properties": {
+          "code": {
+            "type": "string",
+            "title": "Code"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "model_capabilities": {
+            "type": "object",
+            "title": "Model Capabilities"
+          },
+          "param_schema": {
+            "type": "object",
+            "title": "Param Schema"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "code",
+          "name"
+        ],
+        "title": "ModelWithCapabilities"
       },
       "Page_ItemRead_": {
         "properties": {
@@ -18211,6 +18255,32 @@
         "type": "object",
         "title": "ResponseBase[AIVideoGenerateResponse]"
       },
+      "ResponseBase_AdminAIModelConfigTestAsyncResponse_": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AdminAIModelConfigTestAsyncResponse"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[AdminAIModelConfigTestAsyncResponse]"
+      },
       "ResponseBase_AdminAIModelConfigTestChatResponse_": {
         "properties": {
           "code": {
@@ -18236,58 +18306,6 @@
         },
         "type": "object",
         "title": "ResponseBase[AdminAIModelConfigTestChatResponse]"
-      },
-      "ResponseBase_AdminAIModelConfigTestImageResponse_": {
-        "properties": {
-          "code": {
-            "type": "integer",
-            "title": "Code",
-            "default": 200
-          },
-          "msg": {
-            "type": "string",
-            "title": "Msg",
-            "default": "OK"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AdminAIModelConfigTestImageResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "title": "ResponseBase[AdminAIModelConfigTestImageResponse]"
-      },
-      "ResponseBase_AdminAIModelConfigTestVideoResponse_": {
-        "properties": {
-          "code": {
-            "type": "integer",
-            "title": "Code",
-            "default": 200
-          },
-          "msg": {
-            "type": "string",
-            "title": "Msg",
-            "default": "OK"
-          },
-          "data": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/AdminAIModelConfigTestVideoResponse"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "type": "object",
-        "title": "ResponseBase[AdminAIModelConfigTestVideoResponse]"
       },
       "ResponseBase_AdminAISceneRead_": {
         "properties": {
@@ -19665,6 +19683,36 @@
         },
         "type": "object",
         "title": "ResponseBase[list[FileNodeRead]]"
+      },
+      "ResponseBase_list_ManufacturerWithModels__": {
+        "properties": {
+          "code": {
+            "type": "integer",
+            "title": "Code",
+            "default": 200
+          },
+          "msg": {
+            "type": "string",
+            "title": "Msg",
+            "default": "OK"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ManufacturerWithModels"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "title": "ResponseBase[list[ManufacturerWithModels]]"
       },
       "ResponseBase_list_SceneInfoRead__": {
         "properties": {
@@ -21559,6 +21607,21 @@
             "type": "string",
             "title": "Response Format"
           },
+          "model_capabilities": {
+            "type": "object",
+            "title": "Model Capabilities"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category"
+          },
           "supports_image": {
             "type": "boolean",
             "title": "Supports Image"
@@ -21612,6 +21675,8 @@
           "code",
           "name",
           "response_format",
+          "model_capabilities",
+          "category",
           "supports_image",
           "supports_think",
           "supports_tool",

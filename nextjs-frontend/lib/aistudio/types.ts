@@ -47,11 +47,50 @@ export interface MediaGenerationResponse {
   meta?: any;
 }
 
+// ==================== 模型能力查询 API 类型 ====================
+
+export interface ModelCapabilities {
+  // 已有字段
+  resolutions?: string[];
+  aspect_ratios?: string[];
+  duration_range?: { min: number; max: number };
+  input_modes?: string[];
+  supports_negative_prompt?: boolean;
+  supports_reference_image?: boolean;
+  // 新增字段
+  resolution_tiers?: Record<string, string[]>;
+  duration_options?: number[];
+  pixel_range?: { min: number; max: number };
+  aspect_ratio_range?: { min: number; max: number };
+  max_output_images?: number;
+  supports_prompt_extend?: boolean;
+  supports_watermark?: boolean;
+  supports_seed?: boolean;
+  max_reference_images?: number;
+  special_features?: string[];
+  [key: string]: any;
+}
+
+export interface AIModelWithCapabilities {
+  code: string;
+  name: string;
+  model_capabilities: ModelCapabilities;
+  param_schema: MediaParamSchema;
+  enabled: boolean;
+}
+
+export interface ManufacturerWithModels {
+  code: string;
+  name: string;
+  models: AIModelWithCapabilities[];
+}
+
 export type AssetType = "CHARACTER" | "SCENE" | "PROP" | "EFFECT";
 
 export interface AssetResource {
   id: string;
   thumbnail: string;
+  originalUrl?: string;  // Full resolution image URL for zoom/download
   is_cover?: boolean;
   meta_data?: any;
   minio_bucket?: string;

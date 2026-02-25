@@ -20,7 +20,7 @@ async def test_seed_agent_platform_assets(db_session):
         await db_session.execute(select(func.count()).select_from(Scene))
     ).scalar_one()
 
-    assert builtin_agents_count == 7
-    assert prompt_versions_count == 7
-    assert scenes_count == 5
+    assert builtin_agents_count == 9
+    assert prompt_versions_count == 9
+    assert scenes_count == 6
 

@@ -83,6 +83,7 @@ class AdminAIModelConfigTestImageRequest(BaseModel):
     image_data_urls: list[str] | None = None
     attachment_file_node_ids: list[UUID] | None = None
     session_id: UUID | None = None
+    param_json: dict[str, Any] | None = None
 
 
 class AdminAIModelConfigTestVideoRequest(BaseModel):
@@ -91,6 +92,7 @@ class AdminAIModelConfigTestVideoRequest(BaseModel):
     aspect_ratio: str | None = None
     attachment_file_node_ids: list[UUID] | None = None
     session_id: UUID | None = None
+    param_json: dict[str, Any] | None = None
 
 
 class AdminAIModelConfigTestVideoResponse(BaseModel):
@@ -101,6 +103,11 @@ class AdminAIModelConfigTestVideoResponse(BaseModel):
     output_file_node_id: UUID | None = None
     output_content_type: str | None = None
     input_file_node_ids: list[UUID] | None = None
+
+
+class AdminAIModelConfigTestAsyncResponse(BaseModel):
+    task_id: str
+    session_id: str
 
 
 class AdminAIModelConfigTestImageResponse(BaseModel):

@@ -48,7 +48,7 @@ class CreditService:
         res = await db.execute(select(UserCreditAccount.balance).where(UserCreditAccount.user_id == user_id))
         bal = res.scalar_one_or_none()
         if bal is None:
-            raise AppError(msg="Credit account missing", code=404, status_code=404)
+            raise AppError(msg="积分账户不存在", code=404, status_code=404)
         return int(bal)
 
     async def adjust_balance(
@@ -72,11 +72,11 @@ class CreditService:
         )
         account = row_res.scalars().first()
         if not account:
-            raise AppError(msg="Credit account missing", code=404, status_code=404)
+            raise AppError(msg="积分账户不存在", code=404, status_code=404)
 
         next_balance = int(account.balance or 0) + int(delta)
         if not allow_negative and next_balance < 0:
-            raise AppError(msg="Insufficient credits", code=402, status_code=402)
+            raise AppError(msg="积分余额不足", code=402, status_code=402)
 
         account.balance = next_balance
         db.add(
@@ -112,7 +112,7 @@ class CreditService:
         )
         account = row_res.scalars().first()
         if not account:
-            raise AppError(msg="Credit account missing", code=404, status_code=404)
+            raise AppError(msg="积分账户不存在", code=404, status_code=404)
 
         delta = int(new_balance) - int(account.balance or 0)
         if delta == 0:

@@ -107,7 +107,8 @@ export function AssetPreviewModal({
                 ) : (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 content-start">
                     {uniqueResources.filter(isImage).map((res) => {
-                      const url = res.thumbnail;
+                      const thumbUrl = res.thumbnail;
+                      const fullUrl = res.originalUrl || res.thumbnail;
                       const isCover = res.is_cover;
                       
                       return (
@@ -118,17 +119,23 @@ export function AssetPreviewModal({
                           }`}
                         >
                           <img
-                            src={url}
+                            src={thumbUrl}
                             alt="Asset Resource"
                             className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                             loading="lazy"
+                            onError={(e) => {
+                              // Fallback to original if thumbnail fails
+                              if (fullUrl && e.currentTarget.src !== fullUrl) {
+                                e.currentTarget.src = fullUrl;
+                              }
+                            }}
                           />
                           
                           {/* Overlay Actions */}
                           <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2 backdrop-blur-[1px]">
                             <button
                               type="button"
-                              onClick={() => setZoomedImage(url)}
+                              onClick={() => setZoomedImage(fullUrl)}
                               className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white"
                               title="放大"
                             >
@@ -149,7 +156,7 @@ export function AssetPreviewModal({
                               </button>
                             )}
                             <a
-                              href={url}
+                              href={fullUrl}
                               download={`asset-${asset.name}-${res.id}.png`}
                               className="p-1.5 bg-white/10 hover:bg-white/20 rounded-lg transition-colors text-white"
                               title="下载"

@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef } from "react";
-import { ArrowUp, Check, Loader2, Plus, Sparkles, X } from "lucide-react";
+import { ArrowUp, Check, Loader2, Plus, Sparkles, X, LoaderCircle } from "lucide-react";
 import { getCaretAbsoluteCoordinates } from "@/lib/utils/caret-coordinates";
 
 import { MentionPopup, type MentionPopupTab } from "@/components/settings/MentionPopup";
@@ -30,6 +30,7 @@ type ImagePromptComposerProps = {
   onRemoveAttachment: (id: string) => void;
   disabled?: boolean;
   submitDisabled?: boolean;
+  submitting?: boolean;
   onSubmit: () => void;
   onOptimize?: () => void;
   isOptimizing?: boolean;
@@ -58,6 +59,7 @@ export function ImagePromptComposer({
   onRemoveAttachment,
   disabled,
   submitDisabled,
+  submitting,
   onSubmit,
   onOptimize,
   isOptimizing,
@@ -201,23 +203,30 @@ export function ImagePromptComposer({
         </div>
 
         <div className="px-4 pb-4 flex items-center justify-end gap-3 border-t border-border pt-3 mt-2">
-          <button
-            type="button"
-            className="h-10 w-10 rounded-full bg-surfaceHighlight hover:bg-surface border border-border text-textMain flex items-center justify-center transition-colors disabled:opacity-60"
-            onClick={() => uploadInputRef.current?.click()}
-            disabled={disabled}
-            aria-label="上传参考图"
-          >
-            <Plus size={18} />
-          </button>
-          <button
-            type="button"
-            onClick={onSubmit}
-            className="h-10 w-10 rounded-full bg-primary hover:bg-blue-600 disabled:opacity-60 text-white flex items-center justify-center transition-colors"
-            disabled={submitDisabled}
-          >
-            <ArrowUp size={18} />
-          </button>
+          {leftControls && (
+            <div className="flex-1 min-w-0">
+              {leftControls}
+            </div>
+          )}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              type="button"
+              className="h-10 w-10 rounded-full bg-surfaceHighlight hover:bg-surface border border-border text-textMain flex items-center justify-center transition-colors disabled:opacity-60"
+              onClick={() => uploadInputRef.current?.click()}
+              disabled={disabled}
+              aria-label="上传参考图"
+            >
+              <Plus size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={onSubmit}
+              className="h-10 w-10 rounded-full bg-primary hover:bg-blue-600 disabled:opacity-60 text-white flex items-center justify-center transition-colors"
+              disabled={submitDisabled}
+            >
+              {submitting ? <LoaderCircle size={18} className="animate-spin" /> : <ArrowUp size={18} />}
+            </button>
+          </div>
         </div>
       </div>
     </div>

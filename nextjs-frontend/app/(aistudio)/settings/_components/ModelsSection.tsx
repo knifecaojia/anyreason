@@ -57,6 +57,8 @@ export function ModelsSection(props: {
   submitModelTestImage: () => Promise<void>;
   modelTestImageResolution: string;
   setModelTestImageResolution: (value: string) => void;
+  capParams: Record<string, any>;
+  onCapParamsChange: (params: Record<string, any>) => void;
   addModelOpen: boolean;
   setAddModelOpen: (open: boolean) => void;
   catalogSearch: string;
@@ -131,6 +133,8 @@ export function ModelsSection(props: {
     submitModelTestImage,
     modelTestImageResolution,
     setModelTestImageResolution,
+    capParams,
+    onCapParamsChange,
     addModelOpen,
     setAddModelOpen,
     catalogSearch,
@@ -477,6 +481,8 @@ export function ModelsSection(props: {
         submitModelTestImage={submitModelTestImage}
         modelTestImageResolution={modelTestImageResolution}
         setModelTestImageResolution={setModelTestImageResolution}
+        capParams={capParams}
+        onCapParamsChange={onCapParamsChange}
       />
 
       {addModelOpen && (

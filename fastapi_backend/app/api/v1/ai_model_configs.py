@@ -15,9 +15,11 @@ from app.audit import write_audit_log
 from app.core.exceptions import AppError
 from app.database import User, get_async_session
 from app.rbac import require_permissions
+from app.schemas import TaskCreateRequest
 from app.schemas_ai_models import (
     AdminAIModelBindingUpsertRequest,
     AdminAIModelConfigCreateRequest,
+    AdminAIModelConfigTestAsyncResponse,
     AdminAIModelConfigTestChatRequest,
     AdminAIModelConfigTestChatResponse,
     AdminAIModelConfigTestImageRequest,
@@ -32,6 +34,7 @@ from app.schemas_response import ResponseBase
 from app.services.ai_model_config_service import ai_model_binding_service, ai_model_config_service
 from app.services.ai_model_test_service import ai_model_test_service
 from app.services.storage.vfs_service import vfs_service
+from app.services.task_service import task_service
 
 
 router = APIRouter()
@@ -61,6 +64,12 @@ def _ext_from_mime(mime: str) -> str:
         return ".jpg"
     if m == "image/webp":
         return ".webp"
+    if m == "video/mp4":
+        return ".mp4"
+    if m == "video/webm":
+        return ".webm"
+    if m in {"video/quicktime", "video/mov"}:
+        return ".mov"
     return ""
 
 
@@ -138,7 +147,7 @@ async def admin_test_model_config_chat(
 
 @router.post(
     "/ai/admin/model-configs/{model_config_id}/test-image",
-    response_model=ResponseBase[AdminAIModelConfigTestImageResponse],
+    response_model=ResponseBase[AdminAIModelConfigTestAsyncResponse],
     dependencies=[Depends(require_permissions(["system.ai_models"]))],
 )
 async def admin_test_model_config_image(
@@ -146,7 +155,7 @@ async def admin_test_model_config_image(
     body: AdminAIModelConfigTestImageRequest,
     db: AsyncSession = Depends(get_async_session),
     actor: User = Depends(require_permissions(["system.ai_models"])),
-) -> ResponseBase[AdminAIModelConfigTestImageResponse]:
+) -> ResponseBase[AdminAIModelConfigTestAsyncResponse]:
     session = await ai_model_test_service.ensure_session_for_image_test(
         db=db,
         user_id=actor.id,
@@ -207,112 +216,43 @@ async def admin_test_model_config_image(
             except Exception:
                 continue
 
-    input_image_count = len(image_data_urls_to_send or [])
+    # 合并 param_json：前端传来的动态参数优先，兼容旧字段
+    merged_param_json = dict(body.param_json or {})
+    if resolution and "resolution" not in merged_param_json:
+        merged_param_json["resolution"] = resolution
 
-    try:
-        raw = await ai_gateway_service.generate_image(
-            db=db,
-            user_id=actor.id,
-            binding_key=None,
-            model_config_id=model_config_id,
-            prompt=prompt,
-            resolution=resolution,
-            image_data_urls=image_data_urls_to_send,
-            credits_cost=0,
-        )
-        url = ""
-        if isinstance(raw, dict):
-            u = raw.get("url")
-            if isinstance(u, str):
-                url = u
-        output_node_id: UUID | None = None
-        output_ct: str | None = None
-        parsed_out = _parse_data_url(url)
-        if parsed_out:
-            mime, data = parsed_out
-            ext = _ext_from_mime(mime) or ".png"
-            out_node = await vfs_service.create_bytes_file(
-                db=db,
-                user_id=actor.id,
-                name=f"model_test_output{ext}",
-                data=data,
-                content_type=mime,
-            )
-            output_node_id = out_node.id
-            output_ct = out_node.content_type
-        elif url.startswith("http://") or url.startswith("https://"):
-            try:
-                data, ct = await _download_bytes(url, max_bytes=50 * 1024 * 1024)
-                mime = ct or "application/octet-stream"
-                ext = _ext_from_mime(mime) or ".png"
-                out_node = await vfs_service.create_bytes_file(
-                    db=db,
-                    user_id=actor.id,
-                    name=f"model_test_output{ext}",
-                    data=data,
-                    content_type=mime,
-                )
-                output_node_id = out_node.id
-                output_ct = out_node.content_type
-            except Exception:
-                txt = await vfs_service.create_text_file(
-                    db=db,
-                    user_id=actor.id,
-                    name="model_test_output.url.txt",
-                    content=f"url: {url}\n",
-                    content_type="text/plain; charset=utf-8",
-                )
-                output_node_id = txt.id
-                output_ct = txt.content_type
-        run = await ai_model_test_service.add_image_run(
-            db=db,
-            session_id=session.id,
-            prompt=prompt,
-            resolution=resolution,
-            input_image_count=input_image_count,
-            input_file_node_ids=input_nodes,
-            output_file_node_id=output_node_id,
-            output_content_type=output_ct,
-            output_url=url,
-            raw_payload=raw if isinstance(raw, dict) else None,
-            error_message=None,
-        )
-        await db.commit()
-        return ResponseBase(
-            code=200,
-            msg="OK",
-            data=AdminAIModelConfigTestImageResponse(
-                url=str(url),
-                raw=raw if isinstance(raw, dict) else None,
-                session_id=session.id,
-                run_id=run.id,
-                output_file_node_id=output_node_id,
-                output_content_type=output_ct,
-                input_file_node_ids=input_nodes,
-            ),
-        )
-    except Exception as e:
-        msg = e.msg if isinstance(e, Exception) and hasattr(e, "msg") and isinstance(getattr(e, "msg"), str) else str(e)
-        _ = await ai_model_test_service.add_image_run(
-            db=db,
-            session_id=session.id,
-            prompt=prompt,
-            resolution=resolution,
-            input_image_count=input_image_count,
-            input_file_node_ids=input_nodes,
-            output_file_node_id=None,
-            output_content_type=None,
-            output_url=None,
-            raw_payload=None,
-            error_message=msg,
-        )
-        await db.commit()
-        raise
+    input_json = {
+        "prompt": prompt,
+        "resolution": resolution,
+        "model_config_id": str(model_config_id),
+        "session_id": str(session.id),
+        "image_data_urls": image_data_urls_to_send,
+        "input_file_node_ids": [str(n) for n in input_nodes],
+        "param_json": merged_param_json,
+    }
+
+    task = await task_service.create_task(
+        db=db,
+        user_id=actor.id,
+        payload=TaskCreateRequest(
+            type="model_test_image_generate",
+            input_json=input_json,
+        ),
+    )
+
+    return ResponseBase(
+        code=200,
+        msg="OK",
+        data=AdminAIModelConfigTestAsyncResponse(
+            task_id=str(task.id),
+            session_id=str(session.id),
+        ),
+    )
 
 
 @router.post(
     "/ai/admin/model-configs/{model_config_id}/test-video",
-    response_model=ResponseBase[AdminAIModelConfigTestVideoResponse],
+    response_model=ResponseBase[AdminAIModelConfigTestAsyncResponse],
     dependencies=[Depends(require_permissions(["system.ai_models"]))],
 )
 async def admin_test_model_config_video(
@@ -320,7 +260,7 @@ async def admin_test_model_config_video(
     body: AdminAIModelConfigTestVideoRequest,
     db: AsyncSession = Depends(get_async_session),
     actor: User = Depends(require_permissions(["system.ai_models"])),
-) -> ResponseBase[AdminAIModelConfigTestVideoResponse]:
+) -> ResponseBase[AdminAIModelConfigTestAsyncResponse]:
     session = await ai_model_test_service.ensure_session_for_video_test(
         db=db,
         user_id=actor.id,
@@ -364,93 +304,41 @@ async def admin_test_model_config_video(
     else:
         image_data_urls_to_send = []
 
-    try:
-        raw = await ai_gateway_service.generate_video(
-            db=db,
-            user_id=actor.id,
-            binding_key=None,
-            model_config_id=model_config_id,
-            prompt=prompt,
-            duration=duration,
-            aspect_ratio=aspect_ratio,
-            image_data_urls=image_data_urls_to_send,
-            credits_cost=0,
-        )
-        url = ""
-        if isinstance(raw, dict):
-            u = raw.get("url")
-            if isinstance(u, str):
-                url = u
-        output_node_id: UUID | None = None
-        output_ct: str | None = None
-        parsed_out = _parse_data_url(url)
-        if parsed_out:
-            mime, data = parsed_out
-            ext = _ext_from_mime(mime) or ".mp4"
-            out_node = await vfs_service.create_bytes_file(
-                db=db,
-                user_id=actor.id,
-                name=f"model_test_video_output{ext}",
-                data=data,
-                content_type=mime,
-            )
-            output_node_id = out_node.id
-            output_ct = out_node.content_type
-        elif url.startswith("http://") or url.startswith("https://"):
-            txt = await vfs_service.create_text_file(
-                db=db,
-                user_id=actor.id,
-                name="model_test_video_output.url.txt",
-                content=f"url: {url}\n",
-                content_type="text/plain; charset=utf-8",
-            )
-            output_node_id = txt.id
-            output_ct = txt.content_type
+    # 合并 param_json：前端传来的动态参数优先，兼容旧字段
+    merged_param_json = dict(body.param_json or {})
+    if duration is not None and "duration" not in merged_param_json:
+        merged_param_json["duration"] = duration
+    if aspect_ratio and "aspect_ratio" not in merged_param_json:
+        merged_param_json["aspect_ratio"] = aspect_ratio
 
-        run = await ai_model_test_service.add_video_run(
-            db=db,
-            session_id=session.id,
-            prompt=prompt,
-            duration=duration,
-            aspect_ratio=aspect_ratio,
-            input_file_node_ids=input_nodes,
-            output_file_node_id=output_node_id,
-            output_content_type=output_ct,
-            output_url=url,
-            raw_payload=raw if isinstance(raw, dict) else None,
-            error_message=None,
-        )
-        await db.commit()
-        return ResponseBase(
-            code=200,
-            msg="OK",
-            data=AdminAIModelConfigTestVideoResponse(
-                url=str(url),
-                raw=raw if isinstance(raw, dict) else None,
-                session_id=session.id,
-                run_id=run.id,
-                output_file_node_id=output_node_id,
-                output_content_type=output_ct,
-                input_file_node_ids=input_nodes,
-            ),
-        )
-    except Exception as e:
-        msg = e.msg if isinstance(e, Exception) and hasattr(e, "msg") and isinstance(getattr(e, "msg"), str) else str(e)
-        _ = await ai_model_test_service.add_video_run(
-            db=db,
-            session_id=session.id,
-            prompt=prompt,
-            duration=duration,
-            aspect_ratio=aspect_ratio,
-            input_file_node_ids=input_nodes,
-            output_file_node_id=None,
-            output_content_type=None,
-            output_url=None,
-            raw_payload=None,
-            error_message=msg,
-        )
-        await db.commit()
-        raise
+    input_json = {
+        "prompt": prompt,
+        "duration": duration,
+        "aspect_ratio": aspect_ratio,
+        "model_config_id": str(model_config_id),
+        "session_id": str(session.id),
+        "image_data_urls": image_data_urls_to_send,
+        "input_file_node_ids": [str(n) for n in input_nodes],
+        "param_json": merged_param_json,
+    }
+
+    task = await task_service.create_task(
+        db=db,
+        user_id=actor.id,
+        payload=TaskCreateRequest(
+            type="model_test_video_generate",
+            input_json=input_json,
+        ),
+    )
+
+    return ResponseBase(
+        code=200,
+        msg="OK",
+        data=AdminAIModelConfigTestAsyncResponse(
+            task_id=str(task.id),
+            session_id=str(session.id),
+        ),
+    )
 
 
 @router.post(
@@ -471,6 +359,7 @@ async def admin_test_model_config_chat_stream(
         title=None,
     )
     session_id = session.id
+    await db.commit()
 
     messages = [{"role": m.role, "content": m.content} for m in body.messages]
 

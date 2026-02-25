@@ -65,7 +65,7 @@ async def admin_get_user_credits(
 ) -> ResponseBase[dict]:
     acc = (await db.execute(select(UserCreditAccount).where(UserCreditAccount.user_id == user_id))).scalars().first()
     if not acc:
-        raise AppError(msg="Credit account missing", code=404, status_code=404)
+        raise AppError(msg="积分账户不存在", code=404, status_code=404)
     tx_rows = (
         await db.execute(
             select(CreditTransaction)

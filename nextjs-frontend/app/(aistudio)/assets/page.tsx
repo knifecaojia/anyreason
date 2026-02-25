@@ -413,33 +413,40 @@ export default function Page() {
   
   const [tasksRunning, setTasksRunning] = useState<Array<{ id: string; label: string; status: string; progress: number; error?: string | null; assetId?: string | null }>>([]);
 
-  // Poll tasks
+  // Poll tasks - use ref to prevent duplicate processing
+  const pollingTaskIds = useRef<Set<string>>(new Set());
+  const processedTaskIds = useRef<Set<string>>(new Set());
+  
   useEffect(() => {
     const timer = setInterval(() => {
         setTasksRunning(prev => {
             if (prev.length === 0) return prev;
             
-            // Check pending/running tasks
-            const activeTasks = prev.filter(t => t.status === "running" || t.status === "pending" || t.status === "created");
+            // Check pending/running tasks (backend uses: queued, running, succeeded, failed, canceled)
+            const activeTasks = prev.filter(t => 
+                (t.status === "running" || t.status === "queued" || t.status === "created") &&
+                !pollingTaskIds.current.has(t.id)
+            );
             if (activeTasks.length === 0) return prev;
 
             activeTasks.forEach(t => {
+                // Mark as polling to prevent duplicate requests
+                pollingTaskIds.current.add(t.id);
+                
                 fetchTask(t.id).then(async (res) => {
-                    // Handle Asset Binding if completed
-                    if (res.status === "completed" && t.assetId) {
-                        // Extract file node IDs from result_json
-                        // Assuming result_json has node_ids or we can infer from structure
-                        // If backend returns images list (urls), we might need to parse node ID from URL if it's VFS
-                        // URL format: /api/vfs/nodes/{id}/download
+                    // Skip if already processed
+                    if (res.status === "succeeded" && processedTaskIds.current.has(t.id)) {
+                        pollingTaskIds.current.delete(t.id);
+                        return;
+                    }
+                    
+                    // Handle Asset Binding if succeeded
+                    if (res.status === "succeeded" && t.assetId && !processedTaskIds.current.has(t.id)) {
                         const nodeIds: string[] = [];
-                        if (res.result_json?.images && Array.isArray(res.result_json.images)) {
-                             res.result_json.images.forEach((url: string) => {
-                                 const match = url.match(/\/api\/vfs\/nodes\/([^\/]+)\/download/);
-                                 if (match && match[1]) nodeIds.push(match[1]);
-                             });
-                        }
                         
-                        // Also check if result_json has explicit file_node_ids
+                        if (res.result_json?.file_node_id && typeof res.result_json.file_node_id === "string") {
+                            nodeIds.push(res.result_json.file_node_id);
+                        }
                         if (res.result_json?.file_node_ids && Array.isArray(res.result_json.file_node_ids)) {
                             nodeIds.push(...res.result_json.file_node_ids);
                         }
@@ -449,7 +456,6 @@ export default function Page() {
                                  await createAssetResource(t.assetId, {
                                      file_node_ids: [...new Set(nodeIds)],
                                      res_type: "image",
-                                     // variant_id: undefined // Add to default variant?
                                  });
                                  toast.success("已自动绑定到资产");
                              } catch (e) {
@@ -463,17 +469,22 @@ export default function Page() {
                         return current.map(ct => {
                             if (ct.id !== t.id) return ct;
                             
-                            // If status changed to completed, handle result
-                            if (res.status === "completed" && ct.status !== "completed") {
+                            // If status changed to succeeded and not yet processed
+                            if (res.status === "succeeded" && ct.status !== "succeeded" && !processedTaskIds.current.has(t.id)) {
+                                // Mark as processed BEFORE adding to history
+                                processedTaskIds.current.add(t.id);
+                                
                                 toast.success("图片生成完成");
-                                if (res.result_json && Array.isArray(res.result_json.images)) {
-                                    const newImages = res.result_json.images.map((url: string, i: number) => ({
-                                        id: `${t.id}_${i}`,
-                                        url,
+                                
+                                if (res.result_json?.file_node_id) {
+                                    const nodeId = res.result_json.file_node_id;
+                                    setGenerationHistory(h => [{
+                                        id: `${t.id}_0`,
+                                        url: `/api/vfs/nodes/${nodeId}/download`,
                                         prompt: "Generated Image",
-                                        createdAt: Date.now()
-                                    }));
-                                    setGenerationHistory(h => [...newImages, ...h]);
+                                        createdAt: Date.now(),
+                                        nodeId: nodeId
+                                    }, ...h]);
                                 }
                             }
                             
@@ -484,7 +495,9 @@ export default function Page() {
                             return { ...ct, status: res.status, progress: res.progress, error: res.error };
                         });
                     });
-                }).catch(console.error);
+                }).catch(console.error).finally(() => {
+                    pollingTaskIds.current.delete(t.id);
+                });
             });
             return prev;
         });
@@ -794,7 +807,7 @@ export default function Page() {
               {materials.map((mat) => (
                 <div
                   key={mat.id}
-                  className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer bg-surface ${
+                  className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all cursor-pointer bg-surface group ${
                     selectedMaterialIds.has(mat.id)
                       ? "border-primary ring-2 ring-primary/20"
                       : "border-border hover:border-slate-500"
@@ -822,6 +835,14 @@ export default function Page() {
                       <CheckCircle size={16} className="text-white" />
                     </div>
                   )}
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                    <button
+                      className="p-2 bg-white/20 rounded-full hover:bg-white/30 text-white backdrop-blur-sm"
+                      onClick={(e) => { e.stopPropagation(); setLightboxUrl(`/api/vfs/nodes/${mat.id}/download`); }}
+                    >
+                      <Search size={20} />
+                    </button>
+                  </div>
                   <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/70 to-transparent p-2">
                     <p className="text-xs text-white truncate">{mat.name}</p>
                   </div>
@@ -943,29 +964,31 @@ export default function Page() {
                               // In real logic, we should upload them to VFS or MinIO and get IDs.
                               
                               // 2. Call Task API
+                              // If no script selected, save to user-level AI_Generated (public)
+                              // If script selected, save to project-level AI_Generated
                               const payload = {
-                                  type: "asset_image_generate", // Updated to match backend registered task type
-                                  entity_type: "asset",
+                                  type: "asset_image_generate",
+                                  entity_type: studioSelectedAssetId ? "asset" : null,
                                   entity_id: studioSelectedAssetId,
                                   input_json: {
                                       prompt: prompt,
-                                      negative_prompt: "", // Add if needed
+                                      negative_prompt: "",
                                       resolution: resolution,
-                                      parent_node_id: aiGeneratedFolderId || null,
-                                      project_id: selectedScriptId || null,
+                                      parent_node_id: studioSelectedScriptId ? (aiGeneratedFolderId || null) : null,
+                                      project_id: studioSelectedScriptId || null,
                                       model_config_id: selectedModelConfigId,
-                                      // attachments: attachments.map(...)
                                   }
                               };
                               
                               const taskRes = await createTask(payload);
                               toast.success("生成任务已提交");
                               
-                              // Start polling or add to tracking list
+                              // Add task to running list for polling
+                              // Initial status is "queued", task will be processed async
                               setTasksRunning(prev => [...prev, { 
                                   id: taskRes.id, 
                                   label: "正在生成图片...", 
-                                  status: "running", 
+                                  status: taskRes.status, 
                                   progress: 0,
                                   assetId: studioSelectedAssetId
                               }]);
@@ -1008,20 +1031,31 @@ export default function Page() {
                     </div>
                  </div>
                  <div className="flex-1 overflow-y-auto p-4 bg-background/50">
-                    {tasksRunning.length > 0 && tasksRunning.some(t => t.status === "running" || t.status === "pending") && (
-                         <div className="mb-4 p-3 bg-surface border border-primary/20 rounded-xl flex items-center gap-3 animate-pulse">
+                    {tasksRunning.filter(t => t.status === "queued" || t.status === "running").map(t => (
+                         <div key={t.id} className="mb-4 p-3 bg-surface border border-primary/20 rounded-xl flex items-center gap-3 animate-pulse">
                              <Loader2 className="animate-spin text-primary" size={20} />
                              <div className="flex-1">
-                                 <div className="text-sm font-medium text-textMain">正在生成图片...</div>
-                                 <div className="text-xs text-textMuted">AI 正在努力绘制中</div>
+                                 <div className="text-sm font-medium text-textMain">
+                                     {t.status === "queued" ? "排队中..." : "正在生成图片..."}
+                                 </div>
+                                 <div className="text-xs text-textMuted">
+                                     {t.progress > 0 ? `进度 ${t.progress}%` : "AI 正在努力绘制中"}
+                                 </div>
+                                 {t.progress > 0 && (
+                                     <div className="mt-2 h-1.5 bg-surfaceHighlight rounded-full overflow-hidden">
+                                         <div className="h-full bg-primary rounded-full transition-all duration-500" style={{ width: `${t.progress}%` }} />
+                                     </div>
+                                 )}
                              </div>
                          </div>
-                    )}
+                    ))}
 
                     {generationHistory.length > 0 ? (
                         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                             {generationHistory.map((img) => (
-                                <div key={img.id} className="relative group aspect-square rounded-xl overflow-hidden border border-border bg-surface">
+                                <div key={img.id} className="relative group aspect-square rounded-xl overflow-hidden border border-border bg-surface cursor-pointer"
+                                     onClick={() => setLightboxUrl(img.url)}
+                                >
                                     <NextImage 
                                         src={img.url}
                                         alt={img.prompt} 
@@ -1031,11 +1065,9 @@ export default function Page() {
                                         height={300}
                                     />
                                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                        <button className="p-2 bg-white/10 rounded-full hover:bg-white/20 text-white backdrop-blur-sm">
+                                        <button className="p-2 bg-white/10 rounded-full hover:bg-white/20 text-white backdrop-blur-sm"
+                                                onClick={(e) => { e.stopPropagation(); setLightboxUrl(img.url); }}>
                                             <Search size={16} />
-                                        </button>
-                                        <button className="p-2 bg-white/10 rounded-full hover:bg-white/20 text-white backdrop-blur-sm">
-                                            <CheckCircle size={16} />
                                         </button>
                                     </div>
                                 </div>
@@ -1063,6 +1095,27 @@ export default function Page() {
         onSelect={setSelectedModelConfigId}
         category="image"
       />
+
+      {/* Lightbox for image preview */}
+      {lightboxUrl && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center cursor-pointer"
+          onClick={() => setLightboxUrl(null)}
+        >
+          <button 
+            className="absolute top-4 right-4 p-2 text-white/70 hover:text-white transition-colors"
+            onClick={() => setLightboxUrl(null)}
+          >
+            <X size={32} />
+          </button>
+          <img 
+            src={lightboxUrl} 
+            alt="Preview" 
+            className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </div>
   );
 }

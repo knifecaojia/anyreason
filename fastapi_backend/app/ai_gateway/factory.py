@@ -1,11 +1,6 @@
 from __future__ import annotations
 
 from app.ai_gateway.providers import (
-    DoubaoSeedreamImageProvider,
-    GeminiImageProvider,
-    KlingImageProvider,
-    KlingVideoProvider,
-    OpenAIImageProvider,
     OpenAITextProvider,
 )
 
@@ -13,7 +8,6 @@ from app.ai_gateway.providers import (
 class ProviderFactory:
     def __init__(self) -> None:
         openai_compatible = OpenAITextProvider()
-        openai_image = OpenAIImageProvider()
         self._text = {
             "openai": openai_compatible,
             "qwen": openai_compatible,
@@ -26,34 +20,12 @@ class ProviderFactory:
             "newapi": openai_compatible,
             "other": openai_compatible,
         }
-        self._image = {
-            "kling": KlingImageProvider(),
-            "gemini": GeminiImageProvider(),
-            "openai": openai_image,
-            "doubao": DoubaoSeedreamImageProvider(),
-            "volcengine": DoubaoSeedreamImageProvider(),  # Alias for volcengine
-        }
-        self._video = {"kling": KlingVideoProvider()}
 
     def get_text_provider(self, *, manufacturer: str):
         m = (manufacturer or "").strip().lower()
         p = self._text.get(m)
         if p is None:
             p = self._text.get("other")
-        if p is None:
-            raise KeyError(m)
-        return p
-
-    def get_image_provider(self, *, manufacturer: str):
-        m = (manufacturer or "").strip().lower()
-        p = self._image.get(m)
-        if p is None:
-            raise KeyError(m)
-        return p
-
-    def get_video_provider(self, *, manufacturer: str):
-        m = (manufacturer or "").strip().lower()
-        p = self._video.get(m)
         if p is None:
             raise KeyError(m)
         return p

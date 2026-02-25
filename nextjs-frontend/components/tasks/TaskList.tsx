@@ -319,8 +319,42 @@ export function TaskList({
                             <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
                             输入参数 (Input)
                         </div>
+
+                        {/* 图片预览：input_file_node_ids */}
+                        {(() => {
+                          const ij = detailTask.input_json as Record<string, unknown>;
+                          const nodeIds = Array.isArray(ij.input_file_node_ids) ? ij.input_file_node_ids.filter((x): x is string => typeof x === "string" && x.length > 0) : [];
+                          const dataUrls = Array.isArray(ij.image_data_urls) ? ij.image_data_urls.filter((x): x is string => typeof x === "string" && x.startsWith("data:image/")) : [];
+                          if (nodeIds.length === 0 && dataUrls.length === 0) return null;
+                          return (
+                            <div className="mb-3">
+                              <div className="text-[11px] text-textMuted mb-1.5">参考图片 ({nodeIds.length || dataUrls.length} 张)</div>
+                              <div className="flex flex-wrap gap-2">
+                                {nodeIds.length > 0
+                                  ? nodeIds.map((id) => (
+                                      <a key={id} href={`/api/vfs/nodes/${encodeURIComponent(id)}/download`} target="_blank" rel="noreferrer"
+                                         className="block h-20 w-20 rounded-lg overflow-hidden border border-border bg-black/10 hover:border-primary/40 transition-colors">
+                                        <img src={`/api/vfs/nodes/${encodeURIComponent(id)}/download`} alt="ref" className="h-full w-full object-cover" />
+                                      </a>
+                                    ))
+                                  : dataUrls.map((url, idx) => (
+                                      <div key={idx} className="h-20 w-20 rounded-lg overflow-hidden border border-border bg-black/10">
+                                        <img src={url} alt={`ref-${idx}`} className="h-full w-full object-cover" />
+                                      </div>
+                                    ))
+                                }
+                              </div>
+                            </div>
+                          );
+                        })()}
+
                         <pre className="text-xs bg-surfaceHighlight/30 border border-border rounded-xl p-4 overflow-auto max-h-[300px] font-mono text-textMuted/90">
-                            {JSON.stringify(detailTask.input_json, null, 2)}
+                            {JSON.stringify(detailTask.input_json, (key, value) => {
+                              if (key === "image_data_urls" && Array.isArray(value)) {
+                                return value.map((v: unknown) => typeof v === "string" && v.length > 100 ? `<base64 image, ${Math.round(String(v).length / 1024)}KB>` : v);
+                              }
+                              return value;
+                            }, 2)}
                         </pre>
                      </div>
                   )}

@@ -173,6 +173,47 @@ class AIModelService:
             q = q.join(AIManufacturer).where(AIManufacturer.category == category)
         q = q.order_by(AIModel.sort_order.asc(), AIModel.created_at.asc())
         return list((await db.execute(q)).scalars().all())
+    async def list_with_capabilities(
+        self,
+        *,
+        db: AsyncSession,
+        category: str,
+        enabled_only: bool = True,
+    ) -> list[dict]:
+        """返回指定 category 的模型，按厂商分组，包含 model_capabilities。"""
+        q = (
+            select(AIModel)
+            .options(selectinload(AIModel.manufacturer))
+            .join(AIManufacturer)
+            .where(AIManufacturer.category == category)
+        )
+        if enabled_only:
+            q = q.where(AIModel.enabled == True, AIManufacturer.enabled == True)
+        q = q.order_by(AIManufacturer.sort_order, AIModel.sort_order)
+
+        models = list((await db.execute(q)).scalars().all())
+
+        grouped: dict[str, dict] = {}
+        for m in models:
+            manu = m.manufacturer
+            if manu is None:
+                continue
+            key = manu.code
+            if key not in grouped:
+                grouped[key] = {
+                    "code": manu.code,
+                    "name": manu.name,
+                    "models": [],
+                }
+            grouped[key]["models"].append({
+                "code": m.code,
+                "name": m.name,
+                "model_capabilities": m.model_capabilities or {},
+                "param_schema": m.param_schema or {},
+                "enabled": m.enabled,
+            })
+
+        return list(grouped.values())
 
     async def get(
         self,
@@ -210,6 +251,8 @@ class AIModelService:
         code: str,
         name: str,
         response_format: str = "schema",
+        model_capabilities: dict | None = None,
+        category: str | None = None,
         supports_image: bool = False,
         supports_think: bool = False,
         supports_tool: bool = True,
@@ -236,6 +279,8 @@ class AIModelService:
             code=code,
             name=name,
             response_format=response_format or "schema",
+            model_capabilities=model_capabilities or {},
+            category=category,
             supports_image=bool(supports_image),
             supports_think=bool(supports_think),
             supports_tool=bool(supports_tool),
