@@ -1056,7 +1056,7 @@ function StudioCanvasInner() {
             edgeTypes={edgeTypes as any}
             fitView
           >
-            <Controls />
+            <Controls className="!left-4 !bottom-4 !top-auto !flex !flex-row !w-auto !h-auto !bg-surface/90 !backdrop-blur !border !border-border !rounded-lg !shadow-xl" />
             <AlignmentGuides draggingNode={draggingNodeBounds} otherNodes={otherNodeBounds} />
           </ReactFlow>
           <NodeLibrary />

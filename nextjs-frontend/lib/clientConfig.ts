@@ -1,7 +1,7 @@
 import { client } from "@/app/openapi-client/client.gen";
 
 const useMockApi =
-  process.env.NEXT_PUBLIC_USE_MOCK_API !== "false" && process.env.USE_MOCK_API !== "false";
+  process.env.NEXT_PUBLIC_USE_MOCK_API === "true" || process.env.USE_MOCK_API === "true";
 
 const configureClient = () => {
   if (useMockApi) return;

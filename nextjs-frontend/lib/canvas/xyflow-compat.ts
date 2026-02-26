@@ -1,32 +1,26 @@
 /**
  * Compatibility shim for @xyflow/react v12 type exports.
  *
- * In @xyflow/react v12, some types (NodeProps, EdgeProps) and even some
- * runtime exports (BaseEdge, getBezierPath, Handle, Position) fail to
- * resolve during webpack builds due to moduleResolution mismatches between
- * the IDE (bundler mode) and the webpack TypeScript checker.
- *
- * This module provides compatible type aliases and re-exports runtime
- * values via require() to bypass the TS module resolution issue.
+ * All runtime values MUST use ES re-exports (not require()) to ensure
+ * they share the same module instance — and therefore the same zustand
+ * store — as the ReactFlow / ReactFlowProvider imported in page components.
  */
 
 import type { Node } from '@xyflow/react';
 
-// ---- Runtime re-exports via require() to bypass TS module resolution ----
-// eslint-disable-next-line @typescript-eslint/no-var-requires
-const xyflow = require('@xyflow/react');
-
-export const BaseEdge: any = xyflow.BaseEdge;
-export const getBezierPath: any = xyflow.getBezierPath;
-export const Handle: any = xyflow.Handle;
-export const Position: any = xyflow.Position;
-export const useReactFlow: any = xyflow.useReactFlow;
+// ---- Runtime re-exports (ES imports — same module instance) ----
+export {
+  BaseEdge,
+  getBezierPath,
+  Handle,
+  Position,
+  useReactFlow,
+} from '@xyflow/react';
 
 // ---- Type-only exports ----
 
 /**
  * Props passed to custom node components by ReactFlow.
- * Mirrors the internal NodeProps from @xyflow/react.
  */
 export type NodeProps<NodeType extends Node = Node> = {
   id: string;
@@ -50,7 +44,6 @@ export type NodeProps<NodeType extends Node = Node> = {
 
 /**
  * Props passed to custom edge components by ReactFlow.
- * Mirrors the internal EdgeProps from @xyflow/react.
  */
 export type EdgeProps = {
   id: string;

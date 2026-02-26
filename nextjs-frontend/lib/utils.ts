@@ -69,17 +69,34 @@ export function getErrorMessage(error: unknown): string {
 
   const axiosResponse = err.response as Record<string, unknown> | undefined;
   if (axiosResponse && typeof axiosResponse === "object") {
+    const status = axiosResponse["status"];
     const data = (axiosResponse as Record<string, unknown>)["data"];
     if (data && typeof data === "object") {
       const msg = (data as Record<string, unknown>)["msg"];
-      if (typeof msg === "string" && msg.trim().length > 0) return decodeUtf8Mojibake(msg);
+      const code = (data as Record<string, unknown>)["code"];
+      if (typeof msg === "string" && msg.trim().length > 0) {
+        if (msg.includes("database connection failed")) {
+          return "服务暂时不可用，数据库连接失败，请稍后重试或联系管理员。";
+        }
+        // Map generic server errors to friendly Chinese messages
+        if (status === 503 || code === 503) {
+          return "服务暂时不可用，请稍后重试或联系管理员。";
+        }
+        if (status === 500 || code === 500) {
+          return "服务器内部错误，请稍后重试。如持续出现请联系管理员。";
+        }
+        return decodeUtf8Mojibake(msg);
+      }
     }
     const detail = (data as Record<string, unknown> | undefined)?.["detail"];
     const axiosDetail = normalizeDetail(detail) ?? normalizeFastApiValidationErrors(detail);
     if (axiosDetail) return decodeUtf8Mojibake(mapLoginDetail(axiosDetail));
     if (typeof data === "string" && data.trim().length > 0) return decodeUtf8Mojibake(data);
-    const status = axiosResponse["status"];
-    if (typeof status === "number") return `请求失败（${status}）`;
+    if (typeof status === "number") {
+      if (status === 503) return "服务暂时不可用，请稍后重试或联系管理员。";
+      if (status === 500) return "服务器内部错误，请稍后重试。如持续出现请联系管理员。";
+      return `请求失败（${status}）`;
+    }
   }
 
   const direct = normalizeDetail(err.detail);
@@ -93,6 +110,12 @@ export function getErrorMessage(error: unknown): string {
   if (typeof message === "string" && message.trim().length > 0) {
     if (message.includes("ECONNREFUSED") || message.includes("connect") || message.includes("WinError 10061")) {
       return "无法连接后端 API（默认 http://127.0.0.1:8000）。请先启动 fastapi_backend，或设置 NEXT_PUBLIC_API_BASE_URL/API_BASE_URL。";
+    }
+    if (message.includes("status code 503")) {
+      return "服务暂时不可用，数据库连接失败，请稍后重试或联系管理员。";
+    }
+    if (message.includes("status code 500")) {
+      return "服务器内部错误，请稍后重试。如持续出现请联系管理员。";
     }
     return decodeUtf8Mojibake(message);
   }

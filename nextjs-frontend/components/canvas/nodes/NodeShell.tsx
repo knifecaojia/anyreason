@@ -64,21 +64,9 @@ function PortHandles({ ports }: { ports: PortDefinition[] }) {
   );
 }
 
+/** No-op: nodes with no port definitions render nothing */
 function DefaultPortHandles() {
-  return (
-    <>
-      <Handle
-        type="target"
-        position={Position.Left}
-        style={{ width: 10, height: 10, borderRadius: 9999 }}
-      />
-      <Handle
-        type="source"
-        position={Position.Right}
-        style={{ width: 10, height: 10, borderRadius: 9999 }}
-      />
-    </>
-  );
+  return null;
 }
 
 function EditableTitle({

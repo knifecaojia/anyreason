@@ -88,8 +88,14 @@ export async function login(prevState: unknown, formData: FormData) {
     });
   } catch (err) {
     const msg = getErrorMessage(err);
+    // Skip noisy debug dump for server infrastructure errors (500/503)
+    const resp = (err as Record<string, unknown>)?.response as Record<string, unknown> | undefined;
+    const httpStatus = resp?.status;
+    const isServerError = typeof httpStatus === "number" && httpStatus >= 500;
     const debug =
-      process.env.NODE_ENV === "production" ? "" : `（${getLoginErrorDebugSummary(err)}）`;
+      process.env.NODE_ENV === "production" || isServerError
+        ? ""
+        : `（${getLoginErrorDebugSummary(err)}）`;
     return {
       server_validation_error: `${msg}${debug}`,
     };
