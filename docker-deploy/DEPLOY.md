@@ -70,7 +70,7 @@ vi .env  # 或 nano .env
 | `VERIFICATION_SECRET_KEY` | 邮箱验证令牌密钥 | 用 `openssl rand -hex 32` 生成 |
 | `DEFAULT_ADMIN_PASSWORD` | 管理员登录密码 | `Admin@2026!` |
 | `DOMAIN` | 你的域名 | `ai.example.com` |
-| `CORS_ORIGINS` | 允许的跨域来源 | `["https://ai.example.com"]` |
+| `CORS_ORIGINS` | 允许的跨域来源 | `https://ai.example.com` |
 | `FRONTEND_URL` | 前端访问地址 | `https://ai.example.com` |
 | `DEFAULT_ADMIN_EMAIL` | 管理员邮箱 | `admin@example.com` |
 

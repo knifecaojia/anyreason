@@ -49,6 +49,11 @@ fi
 
 # 将选中的配置复制为 Nginx 挂载的默认配置
 cp "$NGINX_CONF_SRC" nginx/default.conf
+# HTTPS 配置中包含 ${NGINX_DOMAIN} 占位符，需要替换为实际域名
+if [ "$NGINX_CONF_SRC" = "nginx/anyreason-https.conf" ]; then
+    export NGINX_DOMAIN="${DOMAIN:-localhost}"
+    envsubst '${NGINX_DOMAIN}' < "$NGINX_CONF_SRC" > nginx/default.conf
+fi
 echo "[✓] Nginx 配置已设置: $NGINX_CONF_SRC → nginx/default.conf"
 
 # ------------------------------------------------------------------
