@@ -1,5 +1,6 @@
 from typing import Set
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,8 +41,25 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
 
-    # CORS
+    # CORS — 支持逗号分隔字符串或 JSON 数组格式
     CORS_ORIGINS: Set[str] = {"http://localhost:3000"}
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def parse_cors_origins(cls, v: object) -> object:
+        """Accept comma-separated string, JSON array, or Set."""
+        if isinstance(v, str):
+            v = v.strip()
+            # 如果看起来像 JSON 数组就尝试解析
+            if v.startswith("["):
+                import json
+                try:
+                    return set(json.loads(v))
+                except json.JSONDecodeError:
+                    # 方括号但不是合法 JSON，去掉方括号当逗号分隔处理
+                    v = v.strip("[]")
+            return {origin.strip() for origin in v.split(",") if origin.strip()}
+        return v
 
     # Default admin seed (development convenience)
     CREATE_DEFAULT_ADMIN: bool = False
