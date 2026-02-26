@@ -1,6 +1,5 @@
-from typing import Set
+from functools import cached_property
 
-from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -41,25 +40,20 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://localhost:3000"
 
-    # CORS — 支持逗号分隔字符串或 JSON 数组格式
-    CORS_ORIGINS: Set[str] = {"http://localhost:3000"}
+    # CORS — 纯字符串，逗号分隔多个来源（避免 pydantic-settings 对复杂类型做 json.loads）
+    CORS_ORIGINS: str = "http://localhost:3000"
 
-    @field_validator("CORS_ORIGINS", mode="before")
-    @classmethod
-    def parse_cors_origins(cls, v: object) -> object:
-        """Accept comma-separated string, JSON array, or Set."""
-        if isinstance(v, str):
-            v = v.strip()
-            # 如果看起来像 JSON 数组就尝试解析
-            if v.startswith("["):
-                import json
-                try:
-                    return set(json.loads(v))
-                except json.JSONDecodeError:
-                    # 方括号但不是合法 JSON，去掉方括号当逗号分隔处理
-                    v = v.strip("[]")
-            return {origin.strip() for origin in v.split(",") if origin.strip()}
-        return v
+    @cached_property
+    def cors_origins_list(self) -> list[str]:
+        """将 CORS_ORIGINS 字符串解析为列表，支持逗号分隔和 JSON 数组格式。"""
+        v = self.CORS_ORIGINS.strip()
+        if v.startswith("["):
+            import json
+            try:
+                return list(json.loads(v))
+            except json.JSONDecodeError:
+                v = v.strip("[]")
+        return [o.strip() for o in v.split(",") if o.strip()]
 
     # Default admin seed (development convenience)
     CREATE_DEFAULT_ADMIN: bool = False
