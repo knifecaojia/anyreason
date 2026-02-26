@@ -184,17 +184,26 @@ class TestNginxDependencies:
 # Named volumes (Req 2.1, 2.2, 2.3)
 # ---------------------------------------------------------------------------
 
-class TestNamedVolumes:
-    """Verify named volumes exist."""
+class TestBindMountVolumes:
+    """Verify bind mount volumes use relative paths under ./data/."""
 
-    EXPECTED_VOLUMES = {"pg_data", "redis_data", "minio_data"}
+    def test_postgres_uses_bind_mount(self, services):
+        volumes = services["postgres"].get("volumes", [])
+        pg_vol = [v for v in volumes if "/var/lib/postgresql/data" in v]
+        assert len(pg_vol) == 1
+        assert pg_vol[0].startswith("./data/postgres:")
 
-    def test_volumes_section_exists(self, compose):
-        assert "volumes" in compose
+    def test_redis_uses_bind_mount(self, services):
+        volumes = services["redis"].get("volumes", [])
+        redis_vol = [v for v in volumes if ":/data" in v]
+        assert len(redis_vol) == 1
+        assert redis_vol[0].startswith("./data/redis:")
 
-    @pytest.mark.parametrize("vol", sorted(EXPECTED_VOLUMES))
-    def test_volume_defined(self, compose, vol):
-        assert vol in compose["volumes"], f"Named volume '{vol}' not defined"
+    def test_minio_uses_bind_mount(self, services):
+        volumes = services["minio"].get("volumes", [])
+        minio_vol = [v for v in volumes if ":/data" in v]
+        assert len(minio_vol) == 1
+        assert minio_vol[0].startswith("./data/minio:")
 
 
 # ---------------------------------------------------------------------------

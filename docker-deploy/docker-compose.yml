@@ -18,7 +18,7 @@ services:
       APP_DB_USER: ${APP_DB_USER:-anyreason_app}
       APP_DB_PASSWORD: ${APP_DB_PASSWORD:-anyreason_app}
     volumes:
-      - pg_data:/var/lib/postgresql/data
+      - ./data/postgres:/var/lib/postgresql/data
       - ./init-db/00-create-app-user.sh:/docker-entrypoint-initdb.d/00-create-app-user.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
@@ -35,7 +35,7 @@ services:
     restart: unless-stopped
     command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD}"]
     volumes:
-      - redis_data:/data
+      - ./data/redis:/data
     healthcheck:
       test: ["CMD-SHELL", "redis-cli -a \"${REDIS_PASSWORD}\" ping | grep -q PONG"]
       interval: 5s
@@ -56,7 +56,7 @@ services:
       - "${MINIO_API_PORT:-9000}:9000"
       - "${MINIO_CONSOLE_PORT:-9001}:9001"
     volumes:
-      - minio_data:/data
+      - ./data/minio:/data
     networks:
       - anyreason-net
 
@@ -202,14 +202,6 @@ services:
       - minio-init
     networks:
       - anyreason-net
-
-# -----------------------------------------------------------------
-# 数据卷
-# -----------------------------------------------------------------
-volumes:
-  pg_data:
-  redis_data:
-  minio_data:
 
 # -----------------------------------------------------------------
 # 网络

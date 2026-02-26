@@ -1,3 +1,4 @@
 # 部署时生成的文件
 .env
 nginx/default.conf
+data/
