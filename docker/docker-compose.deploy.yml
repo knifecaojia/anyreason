@@ -194,6 +194,7 @@ services:
       OPENAPI_OUTPUT_FILE: ./shared-data/openapi.json
     ports:
       - "${FRONTEND_PORT:-3000}:3000"
+    command: ["bash", "/app/start.sh"]
     volumes:
       - ../nextjs-frontend:/app
       - nextjs-node-modules:/app/node_modules

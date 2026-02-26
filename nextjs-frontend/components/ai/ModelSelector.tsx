@@ -87,11 +87,12 @@ export function ModelSelector({
     if (!selectedModel) return;
     const defaults: Record<string, any> = {};
     // resolution_tiers takes priority over flat resolutions
-    if (caps?.resolution_tiers && Object.keys(caps.resolution_tiers).length > 0) {
-      const tierKeys = Object.keys(caps.resolution_tiers);
+    if (caps?.resolution_tiers && !Array.isArray(caps.resolution_tiers) && Object.keys(caps.resolution_tiers).length > 0) {
+      const tiers = caps.resolution_tiers as Record<string, string[]>;
+      const tierKeys = Object.keys(tiers);
       const firstTier = tierKeys[0];
       defaults.resolution_tier = firstTier;
-      const tierResolutions = caps.resolution_tiers[firstTier];
+      const tierResolutions = tiers[firstTier];
       if (tierResolutions?.length) defaults.resolution = tierResolutions[0];
     } else if (caps?.resolutions?.length) {
       defaults.resolution = caps.resolutions[0];
@@ -410,16 +411,18 @@ export function CapabilityParams({
   onBatchChange?: (updates: Record<string, any>) => void;
   category: "image" | "video";
 }) {
-  const hasTiers = caps.resolution_tiers && Object.keys(caps.resolution_tiers).length > 0;
+  const tiers = (caps.resolution_tiers && !Array.isArray(caps.resolution_tiers)) ? (caps.resolution_tiers as Record<string, string[]>) : undefined;
+  const hasTiers = !!tiers && Object.keys(tiers).length > 0;
   const hasFlatResolutions = !hasTiers && caps.resolutions && caps.resolutions.length > 0;
 
   // Tier keys for the first-level selector
-  const tierKeys = hasTiers ? Object.keys(caps.resolution_tiers!) : [];
+  const tierKeys = hasTiers && tiers ? Object.keys(tiers) : [];
   const currentTier = params.resolution_tier || tierKeys[0] || "";
-  const tierResolutions = hasTiers && currentTier ? (caps.resolution_tiers![currentTier] ?? []) : [];
+  const tierResolutions: string[] = hasTiers && tiers && currentTier ? (tiers[currentTier] ?? []) : [];
 
   const handleTierChange = (tier: string) => {
-    const resolutions = caps.resolution_tiers![tier] ?? [];
+    if (!tiers) return;
+    const resolutions = tiers[tier] ?? [];
     const firstRes = resolutions[0] || "";
     // Atomically update both tier and resolution to avoid stale state
     if (onBatchChange) {
