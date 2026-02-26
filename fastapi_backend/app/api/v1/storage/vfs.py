@@ -177,11 +177,11 @@ async def list_ai_generated_images(
     if project_id:
         folder = await get_or_create_project_ai_folder(db=db, user_id=user.id, project_id=project_id)
         rows = await vfs_service.list_nodes(db=db, user_id=user.id, parent_id=folder.id)
-        image_nodes = [
+        media_nodes = [
             r for r in rows
-            if not r.is_folder and r.content_type and r.content_type.startswith("image/")
+            if not r.is_folder and r.content_type and (r.content_type.startswith("image/") or r.content_type.startswith("video/"))
         ]
-        return ResponseBase(code=200, msg="OK", data=[FileNodeRead.model_validate(r) for r in image_nodes])
+        return ResponseBase(code=200, msg="OK", data=[FileNodeRead.model_validate(r) for r in media_nodes])
 
     # Collect from user-level AI folder
     user_folder = await get_or_create_user_ai_folder(db=db, user_id=user.id)
@@ -205,14 +205,14 @@ async def list_ai_generated_images(
         proj_rows.extend(rows)
 
     all_rows = list(user_rows) + proj_rows
-    image_nodes = [
+    media_nodes = [
         r for r in all_rows
-        if not r.is_folder and r.content_type and r.content_type.startswith("image/")
+        if not r.is_folder and r.content_type and (r.content_type.startswith("image/") or r.content_type.startswith("video/"))
     ]
     # Deduplicate by id and sort newest first
     seen = set()
     unique = []
-    for n in image_nodes:
+    for n in media_nodes:
         if n.id not in seen:
             seen.add(n.id)
             unique.append(n)

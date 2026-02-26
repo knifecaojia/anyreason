@@ -292,6 +292,7 @@ export default function Page() {
   const [attachmentNodeIds, setAttachmentNodeIds] = useState<string[]>([]);
   const [attachments, setAttachments] = useState<{ id: string; url: string; index: number; isSelected: boolean }[]>([]);
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
+  const [lightboxIsVideo, setLightboxIsVideo] = useState(false);
   const [configDrawerOpen, setConfigDrawerOpen] = useState(false);
 
   // Helper to handle image uploads
@@ -636,19 +637,54 @@ export default function Page() {
     return assets.filter(a => !boundAssetIds.has(a.id));
   }, [assets, hierarchyEpisodes]);
 
-  // Load materials (AI generated images)
+  // Load materials (AI generated images & videos)
   useEffect(() => {
     if (mode === "materials") {
       setMaterialsLoading(true);
-      fetch("/api/vfs/ai-generated")
-        .then((res) => res.json())
-        .then((json) => {
-          if (Array.isArray(json.data)) {
-            setMaterials(json.data);
+      // Step 1: fetch from ai-generated endpoint
+      // Step 2: also fetch raw VFS nodes from AI_Generated folders to catch videos
+      //         that the backend filter may have missed
+      const fetchMaterials = async () => {
+        try {
+          // Primary: use ai-generated endpoint
+          const mainResp = await fetch("/api/vfs/ai-generated");
+          const mainJson = await mainResp.json();
+          const mainItems: VfsNode[] = Array.isArray(mainJson?.data) ? mainJson.data : [];
+          const seenIds = new Set(mainItems.map((n) => n.id));
+
+          // Secondary: list root VFS nodes to find AI_Generated folders, then list their children
+          const rootResp = await fetch("/api/vfs/nodes");
+          const rootJson = await rootResp.json();
+          const rootNodes: VfsNode[] = Array.isArray(rootJson?.data) ? rootJson.data : [];
+          const aiFolders = rootNodes.filter((n) => n.is_folder && n.name === "AI_Generated");
+
+          for (const folder of aiFolders) {
+            const childResp = await fetch(`/api/vfs/nodes?parent_id=${folder.id}`);
+            const childJson = await childResp.json();
+            const children: VfsNode[] = Array.isArray(childJson?.data) ? childJson.data : [];
+            for (const child of children) {
+              if (
+                !child.is_folder &&
+                child.content_type &&
+                (child.content_type.startsWith("image/") || child.content_type.startsWith("video/")) &&
+                !seenIds.has(child.id)
+              ) {
+                mainItems.push(child);
+                seenIds.add(child.id);
+              }
+            }
           }
-        })
-        .catch(console.error)
-        .finally(() => setMaterialsLoading(false));
+
+          // Sort newest first
+          mainItems.sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+          setMaterials(mainItems);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setMaterialsLoading(false);
+        }
+      };
+      fetchMaterials();
     }
   }, [mode]);
 
@@ -860,7 +896,8 @@ export default function Page() {
           materialsLoading={materialsLoading}
           selectedMaterialIds={selectedMaterialIds}
           setSelectedMaterialIds={setSelectedMaterialIds}
-          setLightboxUrl={setLightboxUrl}
+          setLightboxUrl={(url) => { setLightboxUrl(url); setLightboxIsVideo(false); }}
+          setLightboxVideo={(url) => { setLightboxUrl(url); setLightboxIsVideo(true); }}
         />
       )}
 
@@ -1099,18 +1136,28 @@ export default function Page() {
         category="image"
       />
 
-      {/* Lightbox for image preview */}
+      {/* Lightbox for media preview */}
       {lightboxUrl && (
         <div 
           className="fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center cursor-pointer"
-          onClick={() => setLightboxUrl(null)}
+          onClick={() => { setLightboxUrl(null); setLightboxIsVideo(false); }}
         >
-          <img 
-            src={lightboxUrl} 
-            alt="Preview" 
-            className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          />
+          {lightboxIsVideo ? (
+            <video
+              src={lightboxUrl}
+              controls
+              autoPlay
+              className="max-w-[90vw] max-h-[80vh] rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          ) : (
+            <img 
+              src={lightboxUrl} 
+              alt="Preview" 
+              className="max-w-[90vw] max-h-[80vh] object-contain rounded-lg shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
           <div className="mt-4 flex items-center gap-3" onClick={(e) => e.stopPropagation()}>
             <a
               href={lightboxUrl}
@@ -1122,7 +1169,7 @@ export default function Page() {
             </a>
             <button 
               className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-white/15 backdrop-blur-md border border-white/20 text-white hover:bg-white/25 transition-colors"
-              onClick={() => setLightboxUrl(null)}
+              onClick={() => { setLightboxUrl(null); setLightboxIsVideo(false); }}
               aria-label="关闭预览"
             >
               <X size={18} />

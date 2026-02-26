@@ -66,7 +66,14 @@ export function ChatSessionList({
           {sessions.slice(0, 5).map((s) => (
             <button
               key={s.id}
-              onClick={() => onSelectSession(s.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectSession(s.id);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                onSelectSession(s.id);
+              }}
               className={`w-8 h-8 flex items-center justify-center rounded-lg transition-colors ${
                 s.id === currentSessionId
                   ? "bg-primary/20 text-primary"
@@ -117,7 +124,14 @@ export function ChatSessionList({
                   ? "bg-primary/10 border border-primary/30"
                   : "hover:bg-surfaceHighlight/30 border border-transparent"
               }`}
-              onClick={() => onSelectSession(session.id)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectSession(session.id);
+              }}
+              onDoubleClick={(e) => {
+                e.stopPropagation();
+                onSelectSession(session.id);
+              }}
               onMouseEnter={() => setHoveredId(session.id)}
               onMouseLeave={() => setHoveredId(null)}
             >

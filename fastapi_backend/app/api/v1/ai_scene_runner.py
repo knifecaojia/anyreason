@@ -3,21 +3,26 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from uuid import UUID
+import logging
 
 from app.database import User, get_async_session
 from app.models import BuiltinAgent, BuiltinAgentPromptVersion, Scene
 from app.schemas_ai_scene_test import AISceneTestAgentSelect, AISceneTestChatMessage, AISceneTestChatRequest
 from app.schemas import TaskCreateRequest, TaskRead
 from app.services.task_service import task_service
+from app.services.ai_chat_session_service import ai_chat_session_service
 from app.schemas_response import ResponseBase
 from app.users import current_active_user
 from app.ai_scene_test.tool_registry import TOOL_REGISTRY
 from app.api.v1.ai_scene_test import _resolve_default_version as _resolve_default_version_test
 
+logger = logging.getLogger(__name__)
+
 from pydantic import BaseModel, Field
 
 class AISceneRunChatRequest(BaseModel):
     project_id: UUID | None = None
+    session_id: UUID | None = None
     script_text: str | None = None
     messages: list[AISceneTestChatMessage] | None = None
     context_exclude_types: list[str] | None = None
@@ -194,6 +199,7 @@ async def ai_scene_chat(
         script_text=final_script_text,
         messages=list(body.messages or []),
         project_id=body.project_id,
+        session_id=body.session_id,
         context_exclude_types=list(body.context_exclude_types or []),
         scene_code=scene_code,
     )
@@ -208,5 +214,36 @@ async def ai_scene_chat(
             entity_id=row.id,
         ),
     )
+
+    logger.info(
+        "[ai-scene-runner] created task=%s session_id=%s input_json.session_id=%s",
+        task.id, body.session_id, req.model_dump(mode='json').get('session_id'),
+    )
+
+    if body.session_id:
+        # Save user message immediately to session
+        msg_content = ""
+        if body.messages and body.messages[-1].role == "user":
+            msg_content = body.messages[-1].content
+        else:
+            msg_content = body.script_text
+            
+        if msg_content:
+             logger.info("[ai-scene-runner] saving user message to session=%s len=%d", body.session_id, len(msg_content))
+             await ai_chat_session_service.add_message(
+                db=db,
+                session_id=body.session_id,
+                role="user",
+                content=msg_content,
+            )
+             await ai_chat_session_service.touch_session(db=db, session_id=body.session_id)
+             
+             # Must commit to persist the message and session update
+             await db.commit()
+             logger.info("[ai-scene-runner] committed user message to session=%s", body.session_id)
+        else:
+             logger.warning("[ai-scene-runner] no msg_content to save, session_id=%s", body.session_id)
+    else:
+        logger.info("[ai-scene-runner] no session_id in request, skipping user message save")
 
     return ResponseBase(code=200, msg="OK", data=TaskRead.model_validate(task))

@@ -60,6 +60,7 @@ async def list_tasks(
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
     status: str | None = Query(None, description="Comma-separated statuses"),
+    type: str | None = Query(None, description="Task type filter"),
     entity_type: str | None = Query(None),
     entity_id: UUID | None = Query(None),
     page: int = Query(1, ge=1),
@@ -76,6 +77,7 @@ async def list_tasks(
         statuses=statuses,
         entity_type=entity_type,
         entity_id=entity_id,
+        task_type=type,
     )
     return ResponseBase(code=200, msg="OK", data=data)
 

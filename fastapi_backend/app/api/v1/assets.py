@@ -225,6 +225,67 @@ async def download_asset_resource(
     )
 
 
+@router.get("/assets/{asset_id}/resources/{resource_id}/thumbnail")
+async def download_asset_resource_thumbnail(
+    asset_id: UUID,
+    resource_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    """
+    Download thumbnail for an asset resource.
+    Tries to find associated VFS node to get the thumbnail.
+    """
+    resource = await asset_service.get_resource_for_download(
+        db=db,
+        user_id=user.id,
+        asset_id=asset_id,
+        resource_id=resource_id,
+    )
+    if not resource:
+        raise AppError(msg="Resource not found or not authorized", code=404, status_code=404)
+
+    # 1. Try to get file_node_id from metadata
+    meta = resource.meta_data or {}
+    file_node_id_str = meta.get("file_node_id")
+    
+    file_node_id: UUID | None = None
+    if file_node_id_str:
+        try:
+            file_node_id = UUID(str(file_node_id_str))
+        except ValueError:
+            pass
+            
+    # 2. If no valid file_node_id in meta, try to lookup by minio_key
+    if not file_node_id and resource.minio_key:
+        res = await db.execute(select(FileNode).where(FileNode.minio_key == resource.minio_key).limit(1))
+        node = res.scalars().first()
+        if node:
+            file_node_id = node.id
+            
+    if not file_node_id:
+        raise AppError(msg="Thumbnail not available (no associated VFS node)", code=404, status_code=404)
+        
+    # 3. Use VFS service to serve the thumbnail
+    # Note: this will check VFS permissions on the node.
+    # If the user has access to the asset but NOT the file node (e.g. cross-project binding with strict permissions),
+    # this might fail. But typically asset binding implies access.
+    # For now we rely on vfs_service permission checks.
+    node, data = await vfs_service.read_thumbnail_bytes(db=db, user_id=user.id, node_id=file_node_id)
+    
+    filename = (node.name or "thumbnail").rsplit(".", 1)[0] + "_thumb"
+    disposition = f"inline; filename*=UTF-8''{quote(filename)}"
+
+    def iterator():
+        yield data
+
+    return StreamingResponse(
+        iterator(),
+        media_type=node.thumb_content_type or "image/jpeg",
+        headers={"Content-Disposition": disposition},
+    )
+
+
 @router.patch("/assets/{asset_id}", response_model=ResponseBase[AssetRead])
 async def update_asset(
     asset_id: UUID,

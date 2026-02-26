@@ -287,26 +287,38 @@ async function listScriptAssets(scriptId: string): Promise<AssetEntity[]> {
   if (!res.ok) return [];
   const json = await res.json();
   const list = Array.isArray(json.data) ? json.data : [];
-  return list.map((a: any) => ({
-    id: a.id,
-    name: a.name,
-    type: a.type?.toLowerCase() || "character",
-    thumbnail: a.resources?.[0]?.minio_key ? `/api/assets/${a.id}/resources/${a.resources[0].id}/download` : "",
-    tags: Array.isArray(a.tags) ? a.tags : [],
-    doc_node_id: a.doc_node_id,
-    resources: Array.isArray(a.resources)
-      ? a.resources.map((r: any) => ({
-          id: r.id,
-          url: `/api/assets/${a.id}/resources/${r.id}/download`,
-          filename: r.filename || r.name || ""
-        }))
-      : []
-  }));
+  return list.map((a: any) => {
+    let thumbnail = "";
+    const r0 = a.resources?.[0];
+    if (r0?.meta_data?.file_node_id) {
+      thumbnail = `/api/vfs/nodes/${r0.meta_data.file_node_id}/thumbnail`;
+    } else if (r0?.minio_key) {
+      thumbnail = `/api/assets/${a.id}/resources/${r0.id}/thumbnail`;
+    }
+
+    return {
+      id: a.id,
+      name: a.name,
+      type: a.type?.toLowerCase() || "character",
+      thumbnail,
+      tags: Array.isArray(a.tags) ? a.tags : [],
+      doc_node_id: a.doc_node_id,
+      resources: Array.isArray(a.resources)
+        ? a.resources.map((r: any) => ({
+            id: r.id,
+            url: `/api/assets/${a.id}/resources/${r.id}/download`,
+            filename: r.filename || r.name || ""
+          }))
+        : []
+    };
+  });
 }
 
 function AssetEntityCard({ asset, onClick, onOpenDoc, onDelete, onGenerate }: { asset: AssetEntity; onClick: () => void; onOpenDoc: () => void; onDelete?: () => void; onGenerate?: () => void }) {
   const [docPreview, setDocPreview] = useState<string | null>(null);
   const [docLoading, setDocLoading] = useState(false);
+  const [imgError, setImgError] = useState(false);
+
   useEffect(() => {
     if (!asset.doc_node_id) {
       setDocPreview(null);
@@ -338,11 +350,20 @@ function AssetEntityCard({ asset, onClick, onOpenDoc, onDelete, onGenerate }: { 
   return (
     <div className="group relative flex flex-col rounded-xl border border-border bg-gradient-to-br from-surface/80 to-surface/40 overflow-hidden hover:border-primary/50 transition-all hover:shadow-lg cursor-pointer h-80">
       <div className="h-32 relative bg-black/20 flex-shrink-0" onClick={onClick}>
-        {asset.thumbnail ? (
+        {asset.thumbnail && !imgError ? (
           <img 
             src={asset.thumbnail} 
             alt={asset.name} 
             className="w-full h-full object-cover transition-transform group-hover:scale-105"
+            onError={(e) => {
+              const target = e.target as HTMLImageElement;
+              const fallback = asset.resources?.[0]?.url;
+              if (fallback && !target.src.endsWith("/download") && target.src !== fallback) {
+                target.src = fallback;
+              } else {
+                setImgError(true);
+              }
+            }}
           />
         ) : (
           <div className="absolute inset-0 flex flex-col items-center justify-center text-textMuted opacity-50 bg-surface/50">

@@ -50,6 +50,7 @@ class AISceneTestChatRequest(BaseModel):
     script_text: str = Field(default="", description="用户粘贴的剧本文本")
     messages: list[AISceneTestChatMessage] = Field(default_factory=list)
     project_id: UUID | None = Field(default=None, description="可选：用于上下文注入与归档的项目 ID")
+    session_id: UUID | None = Field(default=None, description="可选：关联的会话 ID，用于持久化消息")
     context_exclude_types: list[str] = Field(default_factory=list, description="可选：上下文注入排除的资产类型")
 
 

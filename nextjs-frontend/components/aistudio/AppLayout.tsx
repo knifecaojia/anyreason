@@ -255,7 +255,7 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
     if (path.includes("/storyboard")) return "内容创作 / Content Creation";
     if (path.includes("/assets")) return "资产管理 / Asset Management";
     if (path.includes("/studio")) return "AI 创作工坊 / Studio";
-    if (path.includes("/ai-scenes")) return "AI 场景测试 / AI Scenes";
+    if (path.includes("/ai-scenes")) return "AI 场景管理 / AI Scenes";
     if (path.includes("/chat")) return "AI 助手 / Chat";
     if (path.includes("/tasks")) return "任务清单 / Tasks";
     if (path.includes("/settings")) return "系统设置 / Settings";
@@ -336,7 +336,7 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
               <SidebarItem
                 to="/ai-scenes"
                 icon={Wand2}
-                label="AI 场景测试"
+                label="AI 场景管理"
                 collapsed={collapsed}
               />
 

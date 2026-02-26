@@ -14,6 +14,7 @@ import { Label } from "@/components/ui/label";
 
 import { login } from "@/components/actions/login-action";
 import { useActionState } from "react";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SubmitButton } from "@/components/ui/submitButton";
 import { FieldError, FormError } from "@/components/ui/FormError";
 import { useI18n } from "@/components/i18n/LocaleProvider";
@@ -82,12 +83,23 @@ export default function Page() {
                 className="border-gray-300 dark:border-gray-600"
               />
               <FieldError state={state} field="password" />
-              <Link
-                href="/password-recovery"
-                className="ml-auto inline-block text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-500"
-              >
-                {t("login.forgotPassword")}
-              </Link>
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-2">
+                  <Checkbox id="remember" name="remember" />
+                  <label
+                    htmlFor="remember"
+                    className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70 text-gray-700 dark:text-gray-300"
+                  >
+                    {t("login.rememberMe")}
+                  </label>
+                </div>
+                <Link
+                  href="/password-recovery"
+                  className="text-sm text-blue-500 hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-500"
+                >
+                  {t("login.forgotPassword")}
+                </Link>
+              </div>
             </div>
             <SubmitButton text={t("login.signIn")} />
             <FormError state={state} />

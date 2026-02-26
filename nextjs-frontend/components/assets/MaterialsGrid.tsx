@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckCircle, Loader2, Image as ImageIcon, Search } from "lucide-react";
+import { CheckCircle, Loader2, Image as ImageIcon, Film, Search } from "lucide-react";
 import { toast } from "sonner";
 
 type VfsNode = {
@@ -11,6 +11,7 @@ type VfsNode = {
   content_type?: string | null;
   size_bytes?: number;
   created_at?: string;
+  thumb_minio_key?: string;
 };
 
 const PAGE_SIZE = 30;
@@ -21,12 +22,14 @@ export function MaterialsGrid({
   selectedMaterialIds,
   setSelectedMaterialIds,
   setLightboxUrl,
+  setLightboxVideo,
 }: {
   materials: VfsNode[];
   materialsLoading: boolean;
   selectedMaterialIds: Set<string>;
   setSelectedMaterialIds: React.Dispatch<React.SetStateAction<Set<string>>>;
   setLightboxUrl: (url: string) => void;
+  setLightboxVideo?: (url: string) => void;
 }) {
   const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const sentinelRef = useRef<HTMLDivElement>(null);
@@ -73,7 +76,7 @@ export function MaterialsGrid({
       <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-bold text-textMain">素材库</h2>
         <div className="text-sm text-textMuted">
-          共 {materials.length} 张图片
+          共 {materials.length} 个素材
           {hasMore && ` · 已加载 ${visibleCount}`}
         </div>
       </div>
@@ -86,7 +89,7 @@ export function MaterialsGrid({
         <div className="flex flex-col items-center justify-center py-20 text-textMuted gap-4">
           <ImageIcon size={48} className="opacity-50" />
           <p>暂无素材</p>
-          <p className="text-sm">在 Studio 中创作的图片会自动保存在这里</p>
+          <p className="text-sm">在 Studio 中创作的图片和视频会自动保存在这里</p>
         </div>
       ) : (
         <>
@@ -101,12 +104,33 @@ export function MaterialsGrid({
                 }`}
                 onClick={() => toggleSelect(mat.id)}
               >
-                <img
-                  src={`/api/vfs/nodes/${mat.id}/download`}
-                  alt={mat.name}
-                  className="w-full h-auto block"
-                  loading="lazy"
-                />
+                {mat.content_type?.startsWith("video/") ? (
+                  <div className="relative">
+                    <video
+                      src={`/api/vfs/nodes/${mat.id}/download`}
+                      className="w-full h-auto block"
+                      muted
+                      preload="metadata"
+                      onMouseEnter={(e) => (e.currentTarget as HTMLVideoElement).play()}
+                      onMouseLeave={(e) => { const v = e.currentTarget as HTMLVideoElement; v.pause(); v.currentTime = 0; }}
+                    />
+                    <div className="absolute top-2 left-2 bg-black/60 rounded px-1.5 py-0.5 pointer-events-none">
+                      <Film size={14} className="text-white" />
+                    </div>
+                  </div>
+                ) : (
+                  <img
+                    src={`/api/vfs/nodes/${mat.id}/thumbnail`}
+                    alt={mat.name}
+                    className="w-full h-auto block"
+                    loading="lazy"
+                    onError={(e) => {
+                      const target = e.target as HTMLImageElement;
+                      target.onerror = null; // Prevent infinite loop
+                      target.src = `/api/vfs/nodes/${mat.id}/download`;
+                    }}
+                  />
+                )}
                 {selectedMaterialIds.has(mat.id) && (
                   <div className="absolute top-2 right-2 w-6 h-6 bg-primary rounded-full flex items-center justify-center">
                     <CheckCircle size={16} className="text-white" />
@@ -118,7 +142,12 @@ export function MaterialsGrid({
                     className="p-2 bg-white/20 rounded-full hover:bg-white/30 text-white backdrop-blur-sm"
                     onClick={(e) => {
                       e.stopPropagation();
-                      setLightboxUrl(`/api/vfs/nodes/${mat.id}/download`);
+                      const url = `/api/vfs/nodes/${mat.id}/download`;
+                      if (mat.content_type?.startsWith("video/") && setLightboxVideo) {
+                        setLightboxVideo(url);
+                      } else {
+                        setLightboxUrl(url);
+                      }
                     }}
                     aria-label="放大预览"
                   >
@@ -146,7 +175,7 @@ export function MaterialsGrid({
       {selectedMaterialIds.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-surface border border-border rounded-xl shadow-xl px-6 py-4 flex items-center gap-4 z-50">
           <span className="text-sm text-textMuted">
-            已选择 {selectedMaterialIds.size} 张图片
+            已选择 {selectedMaterialIds.size} 个素材
           </span>
           <button
             type="button"

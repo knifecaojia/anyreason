@@ -79,12 +79,15 @@ export async function login(prevState: unknown, formData: FormData) {
     
     // Set cookie
     const cookieStore = await cookies();
+    const remember = formData.get("remember") === "on";
+    const maxAge = remember ? 60 * 60 * 24 * 30 : undefined; // 30 days if remember, otherwise session
+
     cookieStore.set("accessToken", token, {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
       path: "/",
-      maxAge: 60 * 60 * 24 * 7, // 7 days
+      maxAge: maxAge,
     });
   } catch (err) {
     const msg = getErrorMessage(err);

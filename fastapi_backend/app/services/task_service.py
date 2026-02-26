@@ -56,6 +56,7 @@ class TaskService:
         statuses: list[str] | None,
         entity_type: str | None,
         entity_id: UUID | None,
+        task_type: str | None = None,
     ):
         return await task_repository.list_user_tasks(
             db=db,
@@ -64,6 +65,7 @@ class TaskService:
             statuses=statuses,
             entity_type=entity_type,
             entity_id=entity_id,
+            task_type=task_type,
         )
 
     async def list_task_events(

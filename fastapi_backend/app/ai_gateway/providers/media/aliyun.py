@@ -297,7 +297,8 @@ class AliyunMediaProvider(MediaProvider):
     ) -> MediaResponse:
         async with httpx.AsyncClient() as client:
             logger.info("[aliyun-poll] submitting to %s model=%s", url, payload.get("model"))
-            resp = await client.post(url, json=payload, headers=headers, timeout=30.0)
+            # 大 base64 图片 payload 可能超过 1MB，需要更长的写超时
+            resp = await client.post(url, json=payload, headers=headers, timeout=httpx.Timeout(60.0, write=120.0))
             if resp.status_code != 200:
                 body = resp.text[:2000]
                 logger.error("[aliyun-poll] submit failed status=%d body=%s", resp.status_code, body)

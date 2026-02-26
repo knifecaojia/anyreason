@@ -26,11 +26,24 @@ export function shouldRefetchTaskOnEvent(eventType: string) {
 }
 
 function getWsUrl(ticket: string) {
-  // 浏览器端：基于当前页面 origin 构建 WebSocket URL，自动适配 HTTP/HTTPS
-  const loc = typeof window !== "undefined" ? window.location : undefined;
-  const protocol = loc?.protocol === "https:" ? "wss:" : "ws:";
-  const host = loc?.host || "localhost:8000";
-  return `${protocol}//${host}/ws/tasks?ticket=${encodeURIComponent(ticket)}`;
+  if (typeof window === "undefined") return "";
+
+  // 优先从环境变量读取后端地址，与 API route 的 getApiBaseUrl() 保持一致
+  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+  if (apiBase) {
+    try {
+      const u = new URL(apiBase);
+      const protocol = u.protocol === "https:" ? "wss:" : "ws:";
+      return `${protocol}//${u.host}/ws/tasks?ticket=${encodeURIComponent(ticket)}`;
+    } catch {
+      // fall through to location-based detection
+    }
+  }
+
+  // Fallback：基于当前页面 origin 构建 WebSocket URL
+  const loc = window.location;
+  const protocol = loc.protocol === "https:" ? "wss:" : "ws:";
+  return `${protocol}//${loc.host}/ws/tasks?ticket=${encodeURIComponent(ticket)}`;
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -44,15 +57,19 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 export function TaskProvider({ children }: { children: React.ReactNode }) {
   const [tasksById, setTasksById] = useState<Record<string, Task>>({});
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimer = useRef<number | null>(null);
-  const connectRef = useRef<(() => Promise<void>) | null>(null);
+  const reconnectTimer = useRef<NodeJS.Timeout | null>(null);
   const listenersByTaskIdRef = useRef<Map<string, Set<(ev: TaskEventPayload) => void>>>(new Map());
+
+  // Use a ref to store the connect function to avoid dependency cycles in useEffect
+  const connectRef = useRef<(() => Promise<void>) | null>(null);
 
   const upsertTask = useCallback((task: Task) => {
     setTasksById((prev) => ({ ...prev, [task.id]: task }));
   }, []);
-
+  
+  // Define refreshTasks...
   const refreshTasks = useCallback(async (opts?: { status?: TaskStatus[]; page?: number; size?: number }) => {
+    // ... (same implementation)
     const page = opts?.page && opts.page > 0 ? String(opts.page) : "1";
     const size = opts?.size && opts.size > 0 ? String(opts.size) : "50";
     const params = new URLSearchParams();
@@ -61,92 +78,171 @@ export function TaskProvider({ children }: { children: React.ReactNode }) {
     if (opts?.status?.length) {
       params.set("status", opts.status.join(","));
     }
-    const data = await fetchJson<{ data?: { items?: Task[] } }>(`/api/tasks?${params.toString()}`);
-    const items = data?.data?.items || [];
-    setTasksById((prev) => {
-      const next = { ...prev };
-      for (const t of items) next[t.id] = t;
-      return next;
-    });
-    return { items, page: parseInt(page, 10), size: parseInt(size, 10) };
+    
+    try {
+        const res = await fetch(`/api/tasks?${params.toString()}`, { cache: "no-store" });
+        if (!res.ok) throw new Error(await res.text());
+        const data = await res.json();
+        const items = data?.data?.items || [];
+        setTasksById((prev) => {
+          const next = { ...prev };
+          for (const t of items) next[t.id] = t;
+          return next;
+        });
+        return { items, page: parseInt(page, 10), size: parseInt(size, 10) };
+    } catch (e) {
+        console.error("refreshTasks error", e);
+        return { items: [], page: 1, size: 50 };
+    }
   }, []);
 
   const subscribeTask = useCallback((taskId: string, handler: (ev: TaskEventPayload) => void) => {
     const id = String(taskId || "").trim();
     if (!id) return () => {};
+    
+    // Store handler
     const map = listenersByTaskIdRef.current;
-    const set = map.get(id) || new Set();
-    set.add(handler);
-    map.set(id, set);
+    if (!map.has(id)) map.set(id, new Set());
+    map.get(id)!.add(handler);
+    
     return () => {
       const s = map.get(id);
-      if (!s) return;
-      s.delete(handler);
-      if (s.size === 0) map.delete(id);
+      if (s) {
+          s.delete(handler);
+          if (s.size === 0) map.delete(id);
+      }
     };
   }, []);
 
   const connect = useCallback(async () => {
-    if (wsRef.current) return;
-    const ticketRes = await fetchJson<{ data?: { ticket: string } }>("/api/tasks/ws-ticket", {
-      method: "POST",
-    });
-    const ticket = ticketRes?.data?.ticket;
-    if (!ticket) return;
+    // Prevent multiple connections
+    if (wsRef.current?.readyState === WebSocket.OPEN || wsRef.current?.readyState === WebSocket.CONNECTING) return;
+    
+    if (reconnectTimer.current) {
+        clearTimeout(reconnectTimer.current);
+        reconnectTimer.current = null;
+    }
 
-    const ws = new WebSocket(getWsUrl(ticket));
-    wsRef.current = ws;
+    try {
+      const ticketRes = await fetch("/api/tasks/ws-ticket", {
+        method: "POST",
+        cache: "no-store"
+      });
+      if (!ticketRes.ok) return; // Silent fail, will retry
+      
+      const json = await ticketRes.json();
+      const ticket = json?.data?.ticket;
+      if (!ticket) return;
 
-    ws.onmessage = async (ev) => {
-      let payload: TaskEventPayload | null = null;
-      try {
-        payload = JSON.parse(String(ev.data));
-      } catch {
-        payload = null;
-      }
-      if (!payload?.task_id) return;
+      const wsUrl = getWsUrl(ticket);
+      console.log("[TaskProvider] Connecting to WebSocket:", wsUrl);
+      
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
 
-      const listeners = listenersByTaskIdRef.current.get(payload.task_id);
-      if (listeners && listeners.size) {
-        for (const fn of listeners) {
-          try {
-            fn(payload);
-          } catch {
-            continue;
-          }
-        }
-      }
+      ws.onopen = () => {
+        console.log("[TaskProvider] WebSocket connected");
+      };
 
-      if (shouldRefetchTaskOnEvent(payload.event_type)) {
+      ws.onerror = (e) => {
+        // WebSocket error event is usually generic in browsers for security reasons
+        console.error("[TaskProvider] WebSocket error. Check network tab for details.");
+      };
+
+      ws.onmessage = async (ev) => {
+        let payload: TaskEventPayload | null = null;
         try {
-          const res = await fetchJson<{ data?: Task }>(`/api/tasks/${payload.task_id}`);
-          if (res?.data) upsertTask(res.data);
+          payload = JSON.parse(String(ev.data));
         } catch {
           return;
         }
-      }
-    };
+        if (!payload?.task_id) return;
+        
+        console.log("[TaskProvider] Received event:", payload.event_type, payload.task_id);
 
-    ws.onclose = () => {
-      wsRef.current = null;
-      if (reconnectTimer.current) window.clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = window.setTimeout(() => void connectRef.current?.(), 1000);
-    };
-  }, [upsertTask]);
+        const listeners = listenersByTaskIdRef.current.get(payload.task_id);
+        if (listeners) {
+          listeners.forEach(fn => {
+              try { fn(payload!); } catch (e) { console.error(e); }
+          });
+        }
 
+        // Optimistic update: immediately apply progress/status/error from the WS event
+        // so that TaskProgressMonitor reflects changes without waiting for the async refetch.
+        if (payload.progress !== undefined || payload.status) {
+          setTasksById((prev) => {
+            const existing = prev[payload!.task_id];
+            if (!existing) return prev;
+            return {
+              ...prev,
+              [payload!.task_id]: {
+                ...existing,
+                ...(payload!.progress !== undefined ? { progress: payload!.progress } : {}),
+                ...(payload!.status ? { status: payload!.status } : {}),
+                ...(payload!.error ? { error: payload!.error } : {}),
+                // For succeeded events, also write result_json so subscribeTask
+                // callbacks can immediately access the result data (e.g. plans).
+                ...(payload!.event_type === "succeeded" && payload!.result_json
+                  ? { result_json: payload!.result_json }
+                  : {}),
+              },
+            };
+          });
+        }
+
+        if (shouldRefetchTaskOnEvent(payload.event_type)) {
+            // Refetch task details
+            try {
+                const res = await fetch(`/api/tasks/${payload.task_id}`, { cache: "no-store" });
+                if (res.ok) {
+                    const json = await res.json();
+                    if (json.data) upsertTask(json.data);
+                }
+            } catch (e) {
+                console.error("Refetch task error", e);
+            }
+        }
+      };
+
+      ws.onclose = (ev) => {
+        console.log(`[TaskProvider] WebSocket closed: ${ev.code} ${ev.reason}`);
+        wsRef.current = null;
+        // Reconnect after 3s
+        reconnectTimer.current = setTimeout(() => {
+            void connectRef.current?.();
+        }, 3000);
+      };
+    } catch (e) {
+      console.error("[TaskProvider] Connection failed:", e);
+      // Retry after 5s
+      reconnectTimer.current = setTimeout(() => {
+          void connectRef.current?.();
+      }, 5000);
+    }
+  }, [upsertTask]); // Only depend on stable upsertTask
+
+  // Initial setup
   useEffect(() => {
     connectRef.current = connect;
+    
+    // Initial fetch
     void refreshTasks({ status: ["queued", "running"] });
+    
+    // Initial connect
     void connect();
+
     return () => {
-      if (reconnectTimer.current) window.clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = null;
-      wsRef.current?.close();
-      wsRef.current = null;
       connectRef.current = null;
+      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+      if (wsRef.current) {
+          wsRef.current.close();
+          wsRef.current = null;
+      }
       listenersByTaskIdRef.current.clear();
     };
-  }, [connect, refreshTasks]);
+  }, []); // Run once on mount
+
+  // ... (rest of the component)
 
   const tasks = useMemo(() => {
     return Object.values(tasksById).sort((a, b) => (a.created_at < b.created_at ? 1 : -1));

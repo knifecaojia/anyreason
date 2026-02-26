@@ -7,10 +7,14 @@ from uuid import UUID
 
 from sqlalchemy import select
 
+from app.ai_gateway.openai_compat_patch import ensure_openai_compat_patched
 from app.database import async_session_maker
 from app.models import Task
 from app.tasks.handlers.registry import TASK_HANDLER_REGISTRY
 from app.tasks.reporter import TaskReporter
+
+# Ensure OpenAI compatibility patch is applied for tasks
+ensure_openai_compat_patched()
 
 logger = logging.getLogger(__name__)
 

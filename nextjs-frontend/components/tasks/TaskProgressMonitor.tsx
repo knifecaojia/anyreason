@@ -30,7 +30,9 @@ export function TaskProgressMonitor({ taskId, title = "AI 处理中", onComplete
   useEffect(() => {
     if (!taskId) return;
 
+    console.log("[TaskProgressMonitor] Subscribing to task:", taskId);
     const unsubscribe = subscribeTask(taskId, (event) => {
+      console.log("[TaskProgressMonitor] Event received:", event.event_type, event.payload);
       // 处理日志事件
       if (event.event_type === "log" && event.payload) {
         const payload = event.payload as any;
@@ -61,9 +63,13 @@ export function TaskProgressMonitor({ taskId, title = "AI 处理中", onComplete
     };
   }, [taskId, subscribeTask, onComplete, task, isLogsOpen]);
 
+  const effectiveStatus = task?.status || "queued";
+  const effectiveProgress = task?.progress || 0;
+  const effectiveError = task?.error;
+
   // 渲染状态图标
   const renderIcon = () => {
-    switch (status) {
+    switch (effectiveStatus) {
       case "queued":
         return <CircleDashed className="h-5 w-5 text-yellow-500 animate-pulse" />;
       case "running":
@@ -78,11 +84,7 @@ export function TaskProgressMonitor({ taskId, title = "AI 处理中", onComplete
   };
 
   // 渲染进度条颜色
-  const progressColor = status === "failed" ? "bg-red-500" : status === "succeeded" ? "bg-green-500" : "bg-blue-500";
-
-  if (!task && status !== "queued") {
-    return null; 
-  }
+  const progressColor = effectiveStatus === "failed" ? "bg-red-500" : effectiveStatus === "succeeded" ? "bg-green-500" : "bg-blue-500";
 
   return (
     <div className={cn("rounded-xl border border-border bg-surface/50 p-4 shadow-sm transition-all", className)}>
@@ -93,15 +95,15 @@ export function TaskProgressMonitor({ taskId, title = "AI 处理中", onComplete
           <div>
             <h4 className="text-sm font-medium text-textMain">{title}</h4>
             <p className="text-xs text-textMuted mt-0.5">
-              {status === "queued" && "排队等待中..."}
-              {status === "running" && `正在执行... ${progress}%`}
-              {status === "succeeded" && "执行完成"}
-              {status === "failed" && "执行失败"}
+              {effectiveStatus === "queued" && "排队等待中..."}
+              {effectiveStatus === "running" && `正在执行... ${effectiveProgress}%`}
+              {effectiveStatus === "succeeded" && "执行完成"}
+              {effectiveStatus === "failed" && "执行失败"}
             </p>
           </div>
         </div>
         <div className="text-right">
-          <span className="text-2xl font-bold text-textMain tabular-nums">{progress}%</span>
+          <span className="text-2xl font-bold text-textMain tabular-nums">{effectiveProgress}%</span>
         </div>
       </div>
 
@@ -109,14 +111,14 @@ export function TaskProgressMonitor({ taskId, title = "AI 处理中", onComplete
       <div className="h-2 w-full bg-surfaceHighlight rounded-full overflow-hidden mb-3">
         <div
           className={cn("h-full transition-all duration-500 ease-out", progressColor)}
-          style={{ width: `${Math.max(5, progress)}%` }}
+          style={{ width: `${Math.max(5, effectiveProgress)}%` }}
         />
       </div>
 
       {/* 错误信息 */}
-      {task?.error && (
+      {effectiveError && (
         <div className="mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded text-xs text-red-400">
-          {task.error}
+          {effectiveError}
         </div>
       )}
 

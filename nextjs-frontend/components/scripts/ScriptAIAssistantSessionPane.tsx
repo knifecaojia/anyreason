@@ -65,6 +65,39 @@ function buildIntroPrompt(scene: SceneCatalogItem | null) {
     toolList,
   ].join("\n");
 }
+/**
+ * Validate and map raw plan objects from backend result_json to PlanData[].
+ *
+ * Backend `ApplyPlan.model_dump(mode='json')` produces:
+ *   { id: string, kind: string, tool_id: string, inputs: object, preview: object }
+ * which already matches the frontend PlanData interface.
+ *
+ * This function ensures each item has the required fields and correct types,
+ * filtering out any malformed entries rather than crashing at render time.
+ */
+export function mapResultPlans(raw: unknown): PlanData[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const mapped: PlanData[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
+    if (typeof item !== "object" || item === null) continue;
+    const obj = item as Record<string, unknown>;
+    // Best-effort mapping with defaults instead of silently dropping plans
+    const id = typeof obj.id === "string" ? obj.id : (console.warn(`mapResultPlans: plan[${i}] missing/invalid 'id', defaulting`), String(i));
+    const kind = typeof obj.kind === "string" ? obj.kind : (console.warn(`mapResultPlans: plan[${i}] missing/invalid 'kind', defaulting`), "unknown");
+    const tool_id = typeof obj.tool_id === "string" ? obj.tool_id : (console.warn(`mapResultPlans: plan[${i}] missing/invalid 'tool_id', defaulting`), "");
+    mapped.push({
+      id,
+      kind,
+      tool_id,
+      inputs: (typeof obj.inputs === "object" && obj.inputs !== null ? obj.inputs : {}) as Record<string, unknown>,
+      preview: (typeof obj.preview === "object" && obj.preview !== null ? obj.preview : undefined) as PlanData["preview"],
+    });
+  }
+  return mapped.length > 0 ? mapped : null;
+}
+
+
 
 interface EpisodeItem {
   id: string;
@@ -91,7 +124,7 @@ export function ScriptAIAssistantSessionPane({
   selectedEpisodeId: externalSelectedEpisodeId = null,
   onSelectEpisode,
 }: ScriptAIAssistantSessionPaneProps) {
-  const { subscribeTask } = useTasks();
+  const { subscribeTask, upsertTask } = useTasks();
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [scenes, setScenes] = useState<SceneCatalogItem[]>([]);
   const [scenesLoading, setScenesLoading] = useState(true);
@@ -117,10 +150,12 @@ export function ScriptAIAssistantSessionPane({
   const [streamingContent, setStreamingContent] = useState<string>("");
   const [streamingPlans, setStreamingPlans] = useState<PlanData[]>([]);
   const [streamingTrace, setStreamingTrace] = useState<TraceEvent[]>([]);
+  const streamingTraceRef = useRef<TraceEvent[]>([]);
   const [executingPlanIds, setExecutingPlanIds] = useState<Set<string>>(new Set());
   const [applyResults, setApplyResults] = useState<Record<string, any>>({});
 
   const abortRef = useRef<AbortController | null>(null);
+  const loadingSessionRef = useRef<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const sseBufferRef = useRef<string>("");
 
@@ -157,17 +192,168 @@ export function ScriptAIAssistantSessionPane({
   }, [projectId]);
 
   const loadSession = useCallback(async (sessionId: string) => {
+    // Dedup: skip if already loading this session (prevents double/triple calls from click+dblclick)
+    if (loadingSessionRef.current === sessionId) return;
+    loadingSessionRef.current = sessionId;
+
+    // Clean up previous session state to avoid memory leaks and stale subscriptions.
+    // Setting activeTaskId to null triggers the useEffect cleanup which calls unsubscribe().
+    setActiveTaskId(null);
+    setRunning(false);
+    setStreamingContent("");
+    setStreamingPlans([]);
+    setStreamingTrace([]);
+    streamingTraceRef.current = [];
+    setErrorText(null);
+
     try {
-      const res = await fetch(`/api/ai/chat/sessions/${sessionId}`);
+      const res = await fetch(`/api/ai/chat/sessions/${sessionId}`, { cache: "no-store" });
       const data = await res.json();
       if (data?.data) {
         setCurrentSession(data.data);
-        setMessages(data.data.messages || []);
+        // Validate plans in loaded messages through mapResultPlans to ensure
+        // data consistency with live task results (same validation path).
+        const rawMessages: AIChatMessage[] = data.data.messages || [];
+        const validatedMessages = rawMessages.map((msg: AIChatMessage) => ({
+          ...msg,
+          plans: msg.plans ? mapResultPlans(msg.plans) : null,
+        }));
+        setMessages(validatedMessages);
+        
+        // Try to restore active task if any
+        // The session data doesn't have active task ID, but we can infer or fetch it?
+        // Actually, for now, if we switch session, we lose the "active task monitoring" unless we persist it.
+        // But the user issue is "double click card -> cannot load task progress (unfinished)".
+        // If the task is unfinished, it should be in "running" state in backend.
+        // We can search for running tasks associated with this session?
+        // The Task model has input_json which contains session_id.
+        
+        // Let's try to find a running task for this session
+        try {
+            // We need an API to list tasks by session_id in input_json, which is hard with current API.
+            // But we can list tasks by user and filter client side or ask backend to support filter.
+            // Current list_tasks supports entity_type/id.
+            // Maybe we can assume entity_type="scene" and entity_id=scene_id? No.
+            // The task was created with entity_type="scene" and entity_id=scene.id.
+            
+            // However, the input_json has session_id.
+            // Let's fetch recent tasks and check?
+            // Or better, let's just not support "resume monitoring after refresh/switch" for now
+            // unless we store task_id in the session model?
+            
+            // Wait, the user said "Double click card -> cannot load task progress".
+            // This implies they expect to see the progress bar if the task is still running.
+            // Since we don't store task_id in AIChatSession, we can't easily know which task belongs to this session.
+            
+            // But wait, if the task is running, there is no message in the session yet (or just user message).
+            // So the chat looks "stuck".
+            
+            // Workaround: fetch recent running tasks and check their input_json.session_id
+            const tasksRes = await fetch(`/api/tasks?status=queued,running&size=20`);
+            const tasksData = await tasksRes.json();
+            const runningTasks = tasksData?.data?.items || [];
+            // 匹配 session_id（在 input_json 中），取所有匹配项
+            const matchingTasks = runningTasks.filter(
+                (t: any) => t.input_json?.session_id === sessionId
+            );
+            if (matchingTasks.length > 0) {
+                // 取最新的 running task（列表按创建时间倒序，第一个即最新）
+                setActiveTaskId(matchingTasks[0].id);
+                setRunning(true);
+            } else {
+                setActiveTaskId(null);
+                setRunning(false);
+                
+                // Check if we need to recover messages from task results.
+                // Case 1: session has no messages at all (backend save may have failed)
+                // Case 2: session has assistant messages but plans are missing/null
+                const hasAssistantWithPlans = validatedMessages.some(
+                  (m: AIChatMessage) => m.role === "assistant" && m.plans && m.plans.length > 0
+                );
+                const hasAssistantWithoutPlans = validatedMessages.some(
+                  (m: AIChatMessage) => m.role === "assistant" && (!m.plans || m.plans.length === 0)
+                );
+                const needsRecovery = rawMessages.length === 0 || (hasAssistantWithoutPlans && !hasAssistantWithPlans);
+                
+                if (needsRecovery) {
+                  try {
+                    // Fetch more tasks and filter by type to avoid apply_plan_execute crowding out results
+                    const succeededRes = await fetch(`/api/tasks?status=succeeded&type=ai_assistant_chat&size=50`);
+                    const succeededData = await succeededRes.json();
+                    const succeededTasks = succeededData?.data?.items || [];
+                    // Match by session_id in input_json (compare as strings, normalize UUID format)
+                    const normalizeId = (id: unknown) => String(id || "").toLowerCase().trim();
+                    const targetSid = normalizeId(sessionId);
+                    const matchedSucceeded = succeededTasks.filter(
+                      (t: any) => normalizeId(t.input_json?.session_id) === targetSid
+                    );
+                    if (matchedSucceeded.length > 0) {
+                      if (rawMessages.length === 0) {
+                        // Full reconstruction: no messages at all
+                        const reconstructed: AIChatMessage[] = [];
+                        for (const t of matchedSucceeded.reverse()) {
+                          const inputMsgs = t.input_json?.messages || [];
+                          const lastUserMsg = [...inputMsgs].reverse().find((m: any) => m.role === "user");
+                          if (lastUserMsg) {
+                            reconstructed.push({
+                              id: `recovered-user-${t.id}`,
+                              role: "user",
+                              content: lastUserMsg.content || t.input_json?.script_text || "",
+                              plans: null,
+                              trace: null,
+                              created_at: t.created_at || new Date().toISOString(),
+                            });
+                          }
+                          const result = t.result_json;
+                          if (result) {
+                            reconstructed.push({
+                              id: `recovered-assistant-${t.id}`,
+                              role: "assistant",
+                              content: String(result.output_text || ""),
+                              plans: mapResultPlans(result.plans),
+                              trace: result.trace_events || null,
+                              created_at: t.finished_at || new Date().toISOString(),
+                            });
+                          }
+                        }
+                        if (reconstructed.length > 0) {
+                          console.warn("[loadSession] session had no messages, reconstructed from tasks:", reconstructed.length);
+                          setMessages(reconstructed);
+                        }
+                      } else {
+                        // Partial recovery: messages exist but plans are missing
+                        // Try to patch plans from the most recent matching task
+                        const latestTask = matchedSucceeded[0]; // already sorted by created_at desc
+                        const taskPlans = mapResultPlans(latestTask.result_json?.plans);
+                        const taskTrace = latestTask.result_json?.trace_events || null;
+                        if (taskPlans && taskPlans.length > 0) {
+                          const patched = validatedMessages.map((msg: AIChatMessage) => {
+                            if (msg.role === "assistant" && (!msg.plans || msg.plans.length === 0)) {
+                              return { ...msg, plans: taskPlans, trace: msg.trace || taskTrace };
+                            }
+                            return msg;
+                          });
+                          console.warn("[loadSession] patched missing plans from task result, plans count:", taskPlans.length);
+                          setMessages(patched);
+                        }
+                      }
+                    }
+                  } catch (e) {
+                    console.error("check succeeded tasks error", e);
+                  }
+                }
+            }
+        } catch (e) {
+            console.error("check running tasks error", e);
+        }
+
         const scene = scenes.find((s) => s.scene_code === data.data.scene_code);
         if (scene) setSelectedScene(scene);
       }
     } catch (e) {
       console.error("load session error", e);
+    } finally {
+      loadingSessionRef.current = null;
     }
   }, [scenes]);
 
@@ -308,6 +494,7 @@ export function ScriptAIAssistantSessionPane({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           project_id: projectId,
+          session_id: currentSession.id,
           script_text: enrichedContent, // For now we pass content as script_text, or we should use messages?
           // The backend ai_scene_chat uses AISceneRunChatRequest which has script_text AND messages.
           // But here we are integrating with the session-based chat UI which usually sends messages.
@@ -355,6 +542,11 @@ export function ScriptAIAssistantSessionPane({
       if (!taskData?.id) {
         throw new Error("Task creation failed");
       }
+      
+      // Upsert the new task immediately so TaskProgressMonitor can find it
+      if (taskData) {
+        upsertTask(taskData as any);
+      }
 
       setActiveTaskId(taskData.id);
 
@@ -368,49 +560,84 @@ export function ScriptAIAssistantSessionPane({
     }
   }, [draft, running, currentSession, selectedScene, effectiveSelectedEpisodeIds, episodes, projectId]);
 
+  const currentSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    currentSessionIdRef.current = currentSession?.id || null;
+  }, [currentSession]);
+
   // Effect to listen to active task
   useEffect(() => {
     if (!activeTaskId) return;
 
     let assistantMsgId = uid("assistant");
     
-    // Create a placeholder assistant message if not exists? 
-    // Or just stream into the "streaming" state variables.
-    
     const unsubscribe = subscribeTask(activeTaskId, (event) => {
       if (event.event_type === "log" && event.payload) {
          const payload = event.payload as any;
          // Handle trace events from log
          if (payload.type === "tool_event" || payload.type === "agent_run_start" || payload.type === "agent_run_done" || payload.type === "tool_start" || payload.type === "tool_done") {
-             // Map to TraceEvent
-             setStreamingTrace(prev => [...prev, payload]);
+             // Map to TraceEvent — update both state (for rendering) and ref (for succeeded callback)
+             setStreamingTrace(prev => {
+               const next = [...prev, payload];
+               streamingTraceRef.current = next;
+               return next;
+             });
          }
       }
       
       if (event.event_type === "succeeded") {
-        const result = event.result_json; // This should match AISceneRunChatResponse structure (output_text, plans, etc.)
-        
-        const assistantMsg: AIChatMessage = {
-          id: assistantMsgId,
-          role: "assistant",
-          content: String(result?.output_text || ""),
-          plans: (result?.plans as unknown as PlanData[]) || null,
-          trace: streamingTrace, // Use collected trace
-          created_at: new Date().toISOString(),
+        // Defect 1 fix: fallback fetch when WebSocket payload is incomplete
+        // Defect 2 fix: read trace from ref instead of stale closure
+        // Defect 3 fix: fetch-then-append only, no loadSession call
+        // Defect 4 fix: defer setActiveTaskId(null) and setRunning(false) until after message append
+        const buildAndAppendMessage = (resultJson: Record<string, unknown> | undefined) => {
+          const assistantMsg: AIChatMessage = {
+            id: assistantMsgId,
+            role: "assistant",
+            content: String(resultJson?.output_text || ""),
+            plans: mapResultPlans(resultJson?.plans),
+            trace: streamingTraceRef.current, // Defect 2: use ref, not stale closure
+            created_at: new Date().toISOString(),
+          };
+
+          // Defect 3: single write strategy — append only, no loadSession
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === assistantMsgId)) return prev;
+            return [...prev, assistantMsg];
+          });
+          setStreamingContent("");
+          setStreamingPlans([]);
+          setStreamingTrace([]);
+          streamingTraceRef.current = [];
+          // Defect 4: defer cleanup until AFTER message is appended
+          setActiveTaskId(null);
+          setRunning(false);
         };
-        
-        setMessages((prev) => {
-          if (prev.some((m) => m.id === assistantMsgId)) return prev;
-          return [...prev, assistantMsg];
-        });
-        setStreamingContent("");
-        setStreamingPlans([]);
-        setStreamingTrace([]);
-        setActiveTaskId(null);
-        setRunning(false);
-        
-        // TODO: Save this message to the session in DB if we want persistence?
-        // For now, we just update local state.
+
+        const result = event.result_json;
+        const isIncomplete = !result || !result.plans || !result.output_text;
+
+        if (isIncomplete) {
+          // Fallback: fetch full task details from API
+          (async () => {
+            try {
+              const res = await fetch(`/api/tasks/${encodeURIComponent(activeTaskId)}`, { cache: "no-store" });
+              if (res.ok) {
+                const json = await res.json();
+                const fetchedResult = json?.data?.result_json;
+                buildAndAppendMessage(fetchedResult ?? result);
+              } else {
+                console.warn("Fallback fetch for task result failed, using WebSocket payload", res.status);
+                buildAndAppendMessage(result);
+              }
+            } catch (e) {
+              console.warn("Fallback fetch for task result errored, using WebSocket payload", e);
+              buildAndAppendMessage(result);
+            }
+          })();
+        } else {
+          buildAndAppendMessage(result);
+        }
       }
       
       if (event.event_type === "failed") {
@@ -423,7 +650,7 @@ export function ScriptAIAssistantSessionPane({
     return () => {
       unsubscribe();
     };
-  }, [activeTaskId, subscribeTask, streamingTrace]);
+  }, [activeTaskId, subscribeTask]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();

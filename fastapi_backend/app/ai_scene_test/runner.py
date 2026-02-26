@@ -117,7 +117,24 @@ async def run_scene_test_chat(
         chat_lines.append(f"[{role}] {content}")
     user_intent = "\n".join(chat_lines).strip() or "请基于剧本文本评估并输出预览结果。"
 
-    input_text = f"剧本文本：\n{deps.script_text}\n\n对话：\n{user_intent}\n"
+    # Build tool instruction: when multiple tools are provided, explicitly instruct
+    # the agent to call ALL of them. This prevents the LLM from skipping tools
+    # (e.g. skipping location extraction when 4 extraction tools are given).
+    tool_instruction = ""
+    if len(tool_ids) > 1:
+        tool_labels = []
+        for tid in tool_ids:
+            reg = TOOL_REGISTRY.get(tid)
+            label = reg[1] if reg else tid
+            tool_labels.append(f"  - {tid}（{label}）")
+        tool_instruction = (
+            "\n\n【重要：工具调用要求】\n"
+            "你必须依次调用以下所有工具，每个工具都必须被调用一次，不可遗漏：\n"
+            + "\n".join(tool_labels)
+            + "\n请逐一调用上述全部工具，将每个工具的结果汇总后再输出最终回复。\n"
+        )
+
+    input_text = f"剧本文本：\n{deps.script_text}\n\n对话：\n{user_intent}\n{tool_instruction}"
     await debug_logger.log(
         "main_agent_run_start",
         {

@@ -42,6 +42,7 @@ async def list_user_tasks(
     statuses: list[str] | None = None,
     entity_type: str | None = None,
     entity_id: UUID | None = None,
+    task_type: str | None = None,
 ):
     query = select(Task).where(Task.user_id == user_id).order_by(desc(Task.created_at))
     if statuses:
@@ -50,6 +51,8 @@ async def list_user_tasks(
         query = query.where(Task.entity_type == entity_type)
     if entity_id:
         query = query.where(Task.entity_id == entity_id)
+    if task_type:
+        query = query.where(Task.type == task_type)
     return await apaginate(db, query, params, transformer=_transform_tasks)
 
 
