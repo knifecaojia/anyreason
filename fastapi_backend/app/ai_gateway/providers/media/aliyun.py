@@ -212,12 +212,33 @@ class AliyunMediaProvider(MediaProvider):
     # ------------------------------------------------------------------
     # 视频生成（所有视频模型统一异步提交 + 轮询）
     # ------------------------------------------------------------------
+    # wan2.6/wan2.5 video-generation 端点只接受 tier 格式（720P / 1080P）
+    _VIDEO_RESOLUTION_TIER_ONLY = {"wan2.6-i2v", "wan2.5-i2v", "wan2.6-r2v", "wan2.6-r2v-flash"}
+    _PIXEL_TO_TIER: Dict[str, str] = {
+        "1280x720": "720P", "720x1280": "720P", "854x480": "720P",
+        "480x854": "720P", "960x540": "720P", "540x960": "720P",
+        "1920x1080": "1080P", "1080x1920": "1080P",
+    }
+
     async def _generate_video(self, request: MediaRequest) -> MediaResponse:
         endpoint = self._get_endpoint(request.model_key)
         url = f"{self.base_url}/services/aigc/{endpoint}"
         headers = self._build_headers(async_mode=True)
 
         params = dict(request.param_json)
+
+        # wan2.6/wan2.5 系列只接受 resolution_tier（720P/1080P），不接受像素分辨率
+        if request.model_key in self._VIDEO_RESOLUTION_TIER_ONLY:
+            raw_res = params.pop("resolution", None)
+            tier = params.pop("resolution_tier", None)
+            if not tier and raw_res:
+                tier = self._PIXEL_TO_TIER.get(raw_res, "720P")
+            if tier:
+                # 只允许 720P / 1080P
+                if tier not in ("720P", "1080P"):
+                    tier = "720P"
+                params["resolution"] = tier
+
         input_block: Dict[str, Any] = {"prompt": request.prompt}
 
         # 统一处理 image_data_urls
