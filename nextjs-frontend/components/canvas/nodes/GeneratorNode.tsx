@@ -13,7 +13,8 @@ export default function GeneratorNode(props: NodeProps) {
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
   const reg = getNodeType('generatorNode');
   const ports = reg?.ports ?? [];
-  const { updateNodeData } = useReactFlow();
+  const rf = useReactFlow() as any;
+  const updateNodeData = rf.updateNodeData as (id: string, data: any) => void;
   const mode = data.generationMode ?? 'image';
 
   return (

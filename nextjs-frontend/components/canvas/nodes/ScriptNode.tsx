@@ -10,7 +10,8 @@ import NodeShell from './NodeShell';
 const MAX_TEXT_LENGTH = 10000;
 
 export default function ScriptNode(props: NodeProps) {
-  const { updateNodeData } = useReactFlow();
+  const rf = useReactFlow() as any;
+  const updateNodeData = rf.updateNodeData as (id: string, data: any) => void;
   const data = props.data as unknown as ScriptNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);

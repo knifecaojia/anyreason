@@ -38,7 +38,8 @@ function parseCandidateOutput(json: unknown): AssetCandidate[] {
 }
 
 export default function CandidateNode(props: NodeProps) {
-  const { updateNodeData } = useReactFlow();
+  const rf = useReactFlow() as any;
+  const updateNodeData = rf.updateNodeData as (id: string, data: any) => void;
   const data = props.data as unknown as CandidateNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);

@@ -36,7 +36,8 @@ function parseSlicerOutput(json: unknown): StoryboardItem[] {
 }
 
 export default function SlicerNode(props: NodeProps) {
-  const { updateNodeData } = useReactFlow();
+  const rf = useReactFlow() as any;
+  const updateNodeData = rf.updateNodeData as (id: string, data: any) => void;
   const data = props.data as unknown as SlicerNodeData;
   const selected = Boolean(props.selected);
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);

@@ -106,24 +106,45 @@ sudo certbot certonly --standalone -d ai.example.com
 
 ## 第五步：执行部署
 
+两种部署方式可选：
+
+### 方式 A：Docker Hub 拉取（推荐，无需构建）
+
+CI 已自动构建并推送镜像到 Docker Hub，服务器直接拉取即可：
+
+```bash
+chmod +x scripts/*.sh
+./scripts/deploy-hub.sh
+```
+
+首次拉取镜像约 1-2 分钟。后续更新只需重新执行此脚本。
+
+如需指定版本标签，编辑 `.env` 中的：
+```
+BACKEND_TAG=backend-latest
+FRONTEND_TAG=frontend-latest
+```
+
+### 方式 B：本地构建（需要完整源码）
+
+如果需要从源码构建镜像（需要项目完整源码在服务器上）：
+
 ```bash
 chmod +x scripts/*.sh
 ./scripts/deploy.sh
 ```
 
-首次部署会构建镜像，大约需要 5-10 分钟。部署脚本会自动完成：
-
-1. 检查 `.env` 文件
-2. 根据 SSL 证书选择 HTTP/HTTPS Nginx 配置
-3. 构建后端和前端 Docker 镜像
-4. 启动所有服务（PostgreSQL → Redis → MinIO → 数据库初始化 → 后端 → Worker → 前端 → Nginx）
+首次构建约 5-10 分钟。
 
 ---
 
 ## 第六步：验证部署
 
 ```bash
-# 查看所有容器状态
+# 查看所有容器状态（根据部署方式选择对应的 compose 文件）
+# Hub 模式：
+docker compose -f docker-compose.hub.yml ps
+# 构建模式：
 docker compose ps
 
 # 查看日志（确认无报错）
@@ -171,6 +192,19 @@ cd docker-deploy
 ---
 
 ## 更新部署
+
+### Hub 模式（推荐）
+
+CI 推送新镜像后，在服务器上：
+
+```bash
+cd /opt/anyreason/docker-deploy
+./scripts/deploy-hub.sh
+```
+
+脚本会自动 pull 最新镜像并重启。
+
+### 构建模式
 
 当有代码更新时：
 
