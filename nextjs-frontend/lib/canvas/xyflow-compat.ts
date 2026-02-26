@@ -6,7 +6,8 @@
  * store — as the ReactFlow / ReactFlowProvider imported in page components.
  */
 
-import type { Node } from '@xyflow/react';
+import type { Node, Edge, ReactFlowInstance } from '@xyflow/react';
+import { useReactFlow as _useReactFlow } from '@xyflow/react';
 
 // ---- Runtime re-exports (ES imports — same module instance) ----
 export {
@@ -14,8 +15,15 @@ export {
   getBezierPath,
   Handle,
   Position,
-  useReactFlow,
 } from '@xyflow/react';
+
+/** Re-export useReactFlow with explicit return type to preserve full ReactFlowInstance type. */
+export function useReactFlow<
+  NodeType extends Node = Node,
+  EdgeType extends Edge = Edge,
+>(): ReactFlowInstance<NodeType, EdgeType> {
+  return _useReactFlow<NodeType, EdgeType>();
+}
 
 // ---- Type-only exports ----
 
