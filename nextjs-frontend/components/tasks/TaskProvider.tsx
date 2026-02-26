@@ -26,14 +26,11 @@ export function shouldRefetchTaskOnEvent(eventType: string) {
 }
 
 function getWsUrl(ticket: string) {
-  const base =
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    (process.env.NODE_ENV === "development" ? "http://127.0.0.1:8000" : "");
-  const url = new URL(base);
-  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
-  url.pathname = "/ws/tasks";
-  url.searchParams.set("ticket", ticket);
-  return url.toString();
+  // 浏览器端：基于当前页面 origin 构建 WebSocket URL，自动适配 HTTP/HTTPS
+  const loc = typeof window !== "undefined" ? window.location : undefined;
+  const protocol = loc?.protocol === "https:" ? "wss:" : "ws:";
+  const host = loc?.host || "localhost:8000";
+  return `${protocol}//${host}/ws/tasks?ticket=${encodeURIComponent(ticket)}`;
 }
 
 async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {

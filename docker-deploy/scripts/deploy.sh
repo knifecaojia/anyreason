@@ -34,17 +34,28 @@ source .env
 set +a
 
 # ------------------------------------------------------------------
-# 2. 根据 SSL 证书自动选择 Nginx 配置
+# 2. 根据 SSL 证书自动选择 Nginx 配置（CDN 模式强制 HTTP）
 # ------------------------------------------------------------------
-SSL_CERT_DIR="/etc/letsencrypt/live/${DOMAIN:-localhost}"
 NGINX_CONF_SRC=""
 
-if [ -d "$SSL_CERT_DIR" ] && [ -f "$SSL_CERT_DIR/fullchain.pem" ] && [ -f "$SSL_CERT_DIR/privkey.pem" ]; then
-    echo "[✓] 检测到 SSL 证书 ($SSL_CERT_DIR)，使用 HTTPS 配置"
-    NGINX_CONF_SRC="nginx/anyreason-https.conf"
+if [ "${USE_CDN:-false}" = "true" ]; then
+    # CDN 模式：检查是否有本地 SSL 证书（如 Cloudflare Origin Certificate）
+    if [ -f "ssl/origin.pem" ] && [ -f "ssl/origin-key.pem" ]; then
+        echo "[✓] CDN 模式 + Origin Certificate：使用 HTTPS 配置（Cloudflare Full Strict）"
+        NGINX_CONF_SRC="nginx/anyreason-https.conf"
+    else
+        echo "[✓] CDN 模式（Flexible）：SSL 由 CDN 终止，nginx 使用 HTTP 配置"
+        NGINX_CONF_SRC="nginx/anyreason-http.conf"
+    fi
 else
-    echo "[!] 未检测到 SSL 证书，使用 HTTP 配置"
-    NGINX_CONF_SRC="nginx/anyreason-http.conf"
+    SSL_CERT_DIR="/etc/letsencrypt/live/${DOMAIN:-localhost}"
+    if [ -d "$SSL_CERT_DIR" ] && [ -f "$SSL_CERT_DIR/fullchain.pem" ] && [ -f "$SSL_CERT_DIR/privkey.pem" ]; then
+        echo "[✓] 检测到 SSL 证书 ($SSL_CERT_DIR)，使用 HTTPS 配置"
+        NGINX_CONF_SRC="nginx/anyreason-https.conf"
+    else
+        echo "[!] 未检测到 SSL 证书，使用 HTTP 配置"
+        NGINX_CONF_SRC="nginx/anyreason-http.conf"
+    fi
 fi
 
 # 将选中的配置复制为 Nginx 挂载的默认配置

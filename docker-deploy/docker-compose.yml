@@ -197,8 +197,7 @@ services:
       NGINX_DOMAIN: ${DOMAIN:-localhost}
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-      - /var/www/certbot:/var/www/certbot
+      - ./ssl:/etc/nginx/ssl:ro
     depends_on:
       - frontend
       - minio-init
