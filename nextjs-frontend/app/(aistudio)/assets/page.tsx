@@ -174,11 +174,14 @@ export default function Page() {
   }, [projectId, targetAssetId]);
 
   useEffect(() => {
+    let active = true;
+
     if (studioSelectedProjectId) {
       // Fetch hierarchy
       fetch(`/api/scripts/${studioSelectedProjectId}/hierarchy`)
         .then((res) => res.json())
         .then((json) => {
+          if (!active) return;
           if (json.data?.episodes) setStudioEpisodes(json.data.episodes);
         })
         .catch(console.error);
@@ -187,18 +190,22 @@ export default function Page() {
       fetch(`/api/assets?project_id=${studioSelectedProjectId}`)
         .then((res) => res.json())
         .then((json) => {
+          if (!active) return;
           if (Array.isArray(json.data)) setStudioAssets(mapAssetsFromApi(json.data));
         })
         .catch(console.error);
 
       // Check/Create AI_Generated folder
       vfsListNodes({ project_id: studioSelectedProjectId }).then((nodes) => {
+        if (!active) return;
         const found = nodes.find((n) => n.name === "AI_Generated" && n.is_folder);
         if (found) {
           setAiGeneratedFolderId(found.id);
         } else {
           vfsCreateFolder({ name: "AI_Generated", project_id: studioSelectedProjectId })
-            .then((node) => setAiGeneratedFolderId(node.id))
+            .then((node) => {
+                if (active) setAiGeneratedFolderId(node.id);
+            })
             .catch(console.error);
         }
       });
@@ -207,6 +214,10 @@ export default function Page() {
       setStudioAssets([]);
       setAiGeneratedFolderId(null);
     }
+
+    return () => {
+      active = false;
+    };
   }, [studioSelectedProjectId]);
 
   const [sourceContent, setSourceContent] = useState<string>("");
@@ -342,6 +353,26 @@ export default function Page() {
     const selectedAsset = studioAssets.find(a => a.id === studioSelectedAssetId);
     const uploadProjectId = selectedAsset?.project_id || studioSelectedProjectId;
     
+    if (!uploadProjectId) {
+      toast.error("无法确定项目ID，请刷新页面后重试");
+      setIsUploadingAssetImage(false);
+      return;
+    }
+    
+    let uploadFolderId: string | null = null;
+    try {
+      const nodes = await vfsListNodes({ project_id: uploadProjectId });
+      const found = nodes.find((n) => n.name === "AI_Generated" && n.is_folder);
+      if (found) {
+        uploadFolderId = found.id;
+      } else {
+        const folder = await vfsCreateFolder({ name: "AI_Generated", project_id: uploadProjectId });
+        uploadFolderId = folder.id;
+      }
+    } catch (e) {
+      console.error("Failed to get/create upload folder:", e);
+    }
+    
     try {
       for (const file of Array.from(files)) {
         if (!file.type.startsWith('image/')) {
@@ -351,8 +382,8 @@ export default function Page() {
         
         const formData = new FormData();
         formData.append('file', file);
-        if (aiGeneratedFolderId) {
-          formData.append('parent_id', aiGeneratedFolderId);
+        if (uploadFolderId) {
+          formData.append('parent_id', uploadFolderId);
         }
         if (uploadProjectId) {
           formData.append('project_id', uploadProjectId);

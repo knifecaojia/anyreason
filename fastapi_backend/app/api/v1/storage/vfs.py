@@ -3,7 +3,7 @@ from __future__ import annotations
 from uuid import UUID
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,9 +74,9 @@ async def create_folder(
 @router.post("/files/upload", response_model=ResponseBase[FileNodeRead])
 async def upload_file(
     file: UploadFile = File(...),
-    parent_id: UUID | None = None,
-    workspace_id: UUID | None = None,
-    project_id: UUID | None = None,
+    parent_id: UUID | None = Form(None),
+    workspace_id: UUID | None = Form(None),
+    project_id: UUID | None = Form(None),
     user: User = Depends(current_active_user),
     db: AsyncSession = Depends(get_async_session),
 ):
