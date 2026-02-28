@@ -6,7 +6,7 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
-from app.models import AssetVariant, FileNode, Script, AssetResource
+from app.models import AssetVariant, FileNode, AssetResource
 from app.repositories import asset_repository
 from app.schemas import AssetRead
 
@@ -381,11 +381,6 @@ class AssetService:
                 raise AppError(msg="File node not found", code=404, status_code=404)
             if node.project_id != asset.project_id:
                 raise AppError(msg="File node not in asset project", code=400, status_code=400)
-            script_res = await db.execute(
-                select(Script).where(Script.id == node.project_id, Script.owner_id == user_id, Script.is_deleted.is_(False))
-            )
-            if not script_res.scalars().first():
-                raise AppError(msg="File node not found", code=404, status_code=404)
             is_cover = bool(cover_file_node_id and node.id == cover_file_node_id)
             meta = {
                 "file_node_id": str(node.id),

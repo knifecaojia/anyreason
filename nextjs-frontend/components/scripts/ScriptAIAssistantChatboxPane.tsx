@@ -344,6 +344,7 @@ export function ScriptAIAssistantChatboxPane(props: {
       script_text: scriptText || "",
       messages: payloadMessages,
       context_exclude_types: [],
+      episode_ids: episodeHint?.episode_id ? [episodeHint.episode_id] : [],
     };
     lastPayloadRef.current = { scene: selectedScene, payload };
 

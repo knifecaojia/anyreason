@@ -10,7 +10,8 @@ import {
   List,
   FolderOpen,
   BookOpen,
-  X
+  X,
+  RefreshCw
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ interface ContextSelectorProps {
   onSearchChange: (term: string) => void;
   assetType: AssetTypeFilter;
   onAssetTypeChange: (type: AssetTypeFilter) => void;
+  onRefresh?: () => void;
   
   className?: string;
 }
@@ -60,6 +62,7 @@ export function ContextSelector({
   onSearchChange,
   assetType,
   onAssetTypeChange,
+  onRefresh,
   className
 }: ContextSelectorProps) {
   const [scriptOpen, setScriptOpen] = useState(false);
@@ -244,6 +247,16 @@ export function ContextSelector({
       </div>
 
       <div className="flex-1" />
+
+      {onRefresh && (
+        <button
+          onClick={onRefresh}
+          className="p-2 rounded-lg bg-background border border-border text-textMuted hover:text-textMain hover:bg-surfaceHighlight transition-colors"
+          title="刷新资产"
+        >
+          <RefreshCw size={16} />
+        </button>
+      )}
 
       {/* Search & Filter */}
       <div className="flex items-center gap-2 bg-background border border-border rounded-lg px-2 py-1.5 focus-within:ring-1 focus-within:ring-primary/50 transition-shadow">

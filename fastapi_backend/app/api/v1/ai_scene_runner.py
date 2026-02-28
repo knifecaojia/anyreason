@@ -6,7 +6,7 @@ from uuid import UUID
 import logging
 
 from app.database import User, get_async_session
-from app.models import BuiltinAgent, BuiltinAgentPromptVersion, Scene
+from app.models import BuiltinAgent, BuiltinAgentPromptVersion, Scene, AIChatSessionTask
 from app.schemas_ai_scene_test import AISceneTestAgentSelect, AISceneTestChatMessage, AISceneTestChatRequest
 from app.schemas import TaskCreateRequest, TaskRead
 from app.services.task_service import task_service
@@ -221,6 +221,27 @@ async def ai_scene_chat(
     )
 
     if body.session_id:
+        # Link task to session
+        try:
+            session_task = AIChatSessionTask(
+                session_id=body.session_id,
+                task_id=task.id,
+            )
+            db.add(session_task)
+            # We don't commit here yet, let the next block handle commit or do it explicitly if needed
+            # But the next block (user message) also commits.
+            # To be safe and ensure task link is saved even if user message fails (unlikely),
+            # or to bundle them?
+            # Let's commit here to ensure the link exists before we return.
+            await db.commit()
+        except Exception as e:
+            logger.error("[ai-scene-runner] failed to link task=%s to session=%s: %s", task.id, body.session_id, e)
+            # Rollback only the current transaction part?
+            # If create_task already committed, we are in a new transaction?
+            # If create_task didn't commit, we might rollback the task too?
+            # Assuming create_task commits.
+            pass
+
         # Save user message immediately to session
         msg_content = ""
         if body.messages and body.messages[-1].role == "user":

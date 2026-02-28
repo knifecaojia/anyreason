@@ -56,6 +56,7 @@ class AiSceneTestChatHandler(BaseTaskHandler):
                     db=bg_db,
                     user_id=task.user_id,
                     trace_queue=trace_queue,
+                    task_id=task.id,
                 )
 
         bg = asyncio.create_task(run_in_background())

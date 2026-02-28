@@ -25,6 +25,7 @@ import {
   CheckSquare,
   HelpCircle,
   Download,
+  Upload,
 } from "lucide-react";
 import NextImage from "next/image";
 import type { LucideIcon } from "lucide-react";
@@ -108,8 +109,17 @@ async function vfsCreateFolder(payload: { name: string; parent_id?: string | nul
 }
 
 async function createAssetResource(assetId: string, payload: { file_node_ids: string[]; res_type: string; variant_id?: string }): Promise<any> {
-  const res = await fetch(`/api/assets/${assetId}/resources`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
-  if (!res.ok) throw new Error(await res.text());
+  const res = await fetch(`/api/assets/${encodeURIComponent(assetId)}/resources`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+  if (!res.ok) {
+    const errText = await res.text();
+    let errMsg = errText;
+    try {
+      const errJson = JSON.parse(errText);
+      if (errJson.msg) errMsg = errJson.msg;
+      else if (errJson.detail) errMsg = errJson.detail;
+    } catch {}
+    throw new Error(`${res.status}: ${errMsg}`);
+  }
   return await res.json();
 }
 
@@ -140,7 +150,7 @@ export default function Page() {
   const mode = searchParams.get("mode") || "list";
   const targetAssetId = searchParams.get("assetId");
   const sourceNodeId = searchParams.get("sourceNodeId");
-  const seriesId = searchParams.get("seriesId");
+  const projectId = searchParams.get("projectId") || searchParams.get("seriesId");
 
   const [assets, setAssets] = useState<Asset[]>([]);
   
@@ -150,17 +160,23 @@ export default function Page() {
   const [hierarchyLoading, setHierarchyLoading] = useState(false);
 
   // Studio Mode State
-  const [studioSelectedScriptId, setStudioSelectedScriptId] = useState<string | null>(seriesId || null);
+  const [studioSelectedProjectId, setStudioSelectedProjectId] = useState<string | null>(projectId || null);
   const [studioSelectedEpisodeId, setStudioSelectedEpisodeId] = useState<string | null>(null);
   const [studioSelectedAssetId, setStudioSelectedAssetId] = useState<string | null>(targetAssetId || null);
   const [aiGeneratedFolderId, setAiGeneratedFolderId] = useState<string | null>(null);
   const [studioEpisodes, setStudioEpisodes] = useState<HierarchyEpisode[]>([]);
   const [studioAssets, setStudioAssets] = useState<Asset[]>([]);
 
+  // Sync URL params to Studio state
   useEffect(() => {
-    if (studioSelectedScriptId) {
+    if (projectId) setStudioSelectedProjectId(projectId);
+    if (targetAssetId) setStudioSelectedAssetId(targetAssetId);
+  }, [projectId, targetAssetId]);
+
+  useEffect(() => {
+    if (studioSelectedProjectId) {
       // Fetch hierarchy
-      fetch(`/api/scripts/${studioSelectedScriptId}/hierarchy`)
+      fetch(`/api/scripts/${studioSelectedProjectId}/hierarchy`)
         .then((res) => res.json())
         .then((json) => {
           if (json.data?.episodes) setStudioEpisodes(json.data.episodes);
@@ -168,7 +184,7 @@ export default function Page() {
         .catch(console.error);
       
       // Fetch assets
-      fetch(`/api/assets?project_id=${studioSelectedScriptId}`)
+      fetch(`/api/assets?project_id=${studioSelectedProjectId}`)
         .then((res) => res.json())
         .then((json) => {
           if (Array.isArray(json.data)) setStudioAssets(mapAssetsFromApi(json.data));
@@ -176,12 +192,12 @@ export default function Page() {
         .catch(console.error);
 
       // Check/Create AI_Generated folder
-      vfsListNodes({ project_id: studioSelectedScriptId }).then((nodes) => {
+      vfsListNodes({ project_id: studioSelectedProjectId }).then((nodes) => {
         const found = nodes.find((n) => n.name === "AI_Generated" && n.is_folder);
         if (found) {
           setAiGeneratedFolderId(found.id);
         } else {
-          vfsCreateFolder({ name: "AI_Generated", project_id: studioSelectedScriptId })
+          vfsCreateFolder({ name: "AI_Generated", project_id: studioSelectedProjectId })
             .then((node) => setAiGeneratedFolderId(node.id))
             .catch(console.error);
         }
@@ -191,7 +207,7 @@ export default function Page() {
       setStudioAssets([]);
       setAiGeneratedFolderId(null);
     }
-  }, [studioSelectedScriptId]);
+  }, [studioSelectedProjectId]);
 
   const [sourceContent, setSourceContent] = useState<string>("");
   const [sourceNodeName, setSourceNodeName] = useState<string>("");
@@ -207,6 +223,8 @@ export default function Page() {
   const [studioError, setStudioError] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
+  const [isUploadingAssetImage, setIsUploadingAssetImage] = useState(false);
+  const assetImageUploadRef = useRef<HTMLInputElement | null>(null);
   const [scriptAssetImageNodes, setScriptAssetImageNodes] = useState<VfsNode[]>([]);
   const [scriptAssetImageCache, setScriptAssetImageCache] = useState<Record<string, VfsNode[]>>({});
   const [scriptAssetImageLoading, setScriptAssetImageLoading] = useState(false);
@@ -313,6 +331,101 @@ export default function Page() {
     });
     
     setAttachments(prev => [...prev, ...newAttachments]);
+  };
+
+  const handleUploadAssetImage = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setIsUploadingAssetImage(true);
+    
+    const uploadedNodeIds: string[] = [];
+    
+    const selectedAsset = studioAssets.find(a => a.id === studioSelectedAssetId);
+    const uploadProjectId = selectedAsset?.project_id || studioSelectedProjectId;
+    
+    try {
+      for (const file of Array.from(files)) {
+        if (!file.type.startsWith('image/')) {
+          toast.error(`文件 ${file.name} 不是图片格式`);
+          continue;
+        }
+        
+        const formData = new FormData();
+        formData.append('file', file);
+        if (aiGeneratedFolderId) {
+          formData.append('parent_id', aiGeneratedFolderId);
+        }
+        if (uploadProjectId) {
+          formData.append('project_id', uploadProjectId);
+        }
+        
+        const res = await fetch('/api/vfs/files/upload', {
+          method: 'POST',
+          body: formData,
+        });
+        
+        if (res.ok) {
+          const json = await res.json();
+          if (json.data?.id) {
+            uploadedNodeIds.push(json.data.id);
+            setGenerationHistory(prev => [{
+              id: json.data.id,
+              url: `/api/vfs/nodes/${json.data.id}/download`,
+              prompt: `上传: ${file.name}`,
+              createdAt: Date.now(),
+              nodeId: json.data.id,
+            }, ...prev]);
+          }
+        } else {
+          const errText = await res.text();
+          toast.error(`上传失败: ${errText}`);
+        }
+      }
+
+      if (uploadedNodeIds.length > 0) {
+        toast.success(`成功上传 ${uploadedNodeIds.length} 张图片`);
+        
+        if (studioSelectedAssetId) {
+          try {
+            await createAssetResource(studioSelectedAssetId, {
+              file_node_ids: uploadedNodeIds,
+              res_type: 'image',
+            });
+            toast.success('已自动绑定到资产');
+          } catch (e) {
+            console.error('Auto bind failed', e);
+            const errMsg = e instanceof Error ? e.message : String(e);
+            toast.error(`绑定资产失败: ${errMsg}`);
+          }
+        } else {
+          toast.info('未选中资产，图片未绑定');
+        }
+      }
+    } catch (e) {
+      console.error('Upload error:', e);
+      toast.error('上传失败: ' + (e instanceof Error ? e.message : String(e)));
+    } finally {
+      setIsUploadingAssetImage(false);
+    }
+  };
+
+  const handleDeleteAssetImage = async (img: GeneratedImage) => {
+    const nodeId = img.nodeId || img.id;
+    try {
+      const res = await fetch(`/api/vfs/nodes/${encodeURIComponent(nodeId)}`, {
+        method: 'DELETE',
+      });
+      
+      if (res.ok) {
+        setGenerationHistory(prev => prev.filter(item => (item.nodeId || item.id) !== nodeId));
+        toast.success('图片已删除');
+      } else {
+        const errText = await res.text();
+        toast.error(`删除失败: ${errText}`);
+      }
+    } catch (e) {
+      console.error('Delete error:', e);
+      toast.error('删除失败: ' + (e instanceof Error ? e.message : String(e)));
+    }
   };
 
   const handleRemoveAttachment = (id: string) => {
@@ -422,7 +535,7 @@ export default function Page() {
   const [assetChildren, setAssetChildren] = useState<Record<string, VfsNode[]>>({});
   const [storyboardNodes, setStoryboardNodes] = useState<VfsNode[]>([]);
   
-  const [selectedScriptId, setSelectedScriptId] = useState<string | null>(seriesId || null);
+  const [selectedScriptId, setSelectedScriptId] = useState<string | null>(projectId || null);
   const [selectedEpisodeId, setSelectedEpisodeId] = useState<string | null>(null);
   const [selectorModalOpen, setSelectorModalOpen] = useState(false);
   const [selectorTab, setSelectorTab] = useState<"ASSETS" | "STORYBOARD">("ASSETS");
@@ -591,7 +704,7 @@ export default function Page() {
   }, []);
 
   // Load hierarchy and assets when script selected
-  useEffect(() => {
+  const refreshAssets = () => {
     if (selectedScriptId) {
       setHierarchyLoading(true);
       
@@ -626,6 +739,10 @@ export default function Page() {
       setHierarchyEpisodes([]);
       setAssets([]);
     }
+  };
+
+  useEffect(() => {
+    refreshAssets();
   }, [selectedScriptId]);
 
   // Derived: Unassigned Assets
@@ -636,6 +753,24 @@ export default function Page() {
     });
     return assets.filter(a => !boundAssetIds.has(a.id));
   }, [assets, hierarchyEpisodes]);
+
+  // Derived: Filtered Unassigned Assets
+  const filteredUnassignedAssets = useMemo(() => {
+    let result = unassignedAssets;
+    
+    // Type Filter
+    if (assetTypeFilter !== "ALL") {
+      result = result.filter(a => a.type === assetTypeFilter);
+    }
+    
+    // Search Filter
+    if (searchTerm.trim()) {
+      const lower = searchTerm.toLowerCase();
+      result = result.filter(a => a.name.toLowerCase().includes(lower));
+    }
+    
+    return result;
+  }, [unassignedAssets, assetTypeFilter, searchTerm]);
 
   // Load materials (AI generated images & videos)
   useEffect(() => {
@@ -824,7 +959,7 @@ export default function Page() {
               onScriptChange={(id) => {
                   setSelectedScriptId(id);
                   const sp = new URLSearchParams(searchParams.toString());
-                  sp.set("seriesId", id);
+                  sp.set("projectId", id);
                   router.replace(`${pathname}?${sp.toString()}`);
               }}
               episodes={hierarchyEpisodes}
@@ -834,27 +969,20 @@ export default function Page() {
               onSearchChange={setSearchTerm}
               assetType={assetTypeFilter}
               onAssetTypeChange={setAssetTypeFilter}
+              onRefresh={refreshAssets}
            />
 
            <div className="flex-1 overflow-y-auto space-y-6 pr-2">
              {selectedScriptId ? (
                <div className="space-y-8 pb-10">
-                 {/* All project assets (flat list, not bound to episodes) */}
-                 {filteredAssets.length > 0 && (
-                   <AssetPanel
-                     episodeId="__all__"
-                     episodeLabel={`全部资产`}
-                     assets={filteredAssets}
-                     storyboards={[]}
-                     onAssetClick={() => {}}
-                   />
-                 )}
-
-                 {/* Per-episode breakdown */}
+                 {/* Per-episode breakdown (First Priority) */}
                  {displayEpisodes.map(ep => {
                     const epAssetIds = new Set((ep.assets || []).map(a => a.id));
                     const epAssets = filteredAssets.filter(a => epAssetIds.has(a.id));
-                    if (epAssets.length === 0) return null;
+                    const hasAssets = epAssets.length > 0;
+                    const hasStoryboards = Array.isArray(ep.storyboards) && ep.storyboards.length > 0;
+
+                    if (!hasAssets && !hasStoryboards) return null;
                     
                     return (
                         <AssetPanel
@@ -867,6 +995,17 @@ export default function Page() {
                         />
                     );
                  })}
+
+                 {/* Unassigned Assets (Second Priority) */}
+                 {filteredUnassignedAssets.length > 0 && (
+                   <AssetPanel
+                     episodeId="__unassigned__"
+                     episodeLabel={`未分配资产 (Unassigned)`}
+                     assets={filteredUnassignedAssets}
+                     storyboards={[]}
+                     onAssetClick={() => {}}
+                   />
+                 )}
                   
                   {filteredAssets.length === 0 && !hierarchyLoading && (
                       <div className="text-center py-10 text-textMuted">
@@ -905,8 +1044,8 @@ export default function Page() {
         <div className="flex flex-col h-full gap-4">
           <StudioContextSelector
             scripts={scripts}
-            selectedScriptId={studioSelectedScriptId}
-            onScriptChange={setStudioSelectedScriptId}
+            selectedScriptId={studioSelectedProjectId}
+            onScriptChange={setStudioSelectedProjectId}
             episodes={studioEpisodes}
             selectedEpisodeId={studioSelectedEpisodeId}
             onEpisodeChange={setStudioSelectedEpisodeId}
@@ -986,8 +1125,8 @@ export default function Page() {
                                       prompt: prompt,
                                       negative_prompt: "",
                                       resolution: capParams.resolution || resolution,
-                                      parent_node_id: studioSelectedScriptId ? (aiGeneratedFolderId || null) : null,
-                                      project_id: studioSelectedScriptId || null,
+                                      parent_node_id: studioSelectedProjectId ? (aiGeneratedFolderId || null) : null,
+                                      project_id: studioSelectedProjectId || null,
                                       model_config_id: selectedModelConfigId,
                                       ...(imageDataUrls.length > 0 ? { images: imageDataUrls } : {}),
                                       ...capParams,
@@ -1059,12 +1198,50 @@ export default function Page() {
                  </div>
              </div>
              
-             <div className="lg:col-span-2 bg-surface border border-border rounded-2xl flex flex-col overflow-hidden relative">
+             <div className="lg:col-span-2 bg-surface border border-border rounded-2xl flex flex-col overflow-hidden relative"
+                 onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); }}
+                 onDrop={(e) => {
+                     e.preventDefault();
+                     e.stopPropagation();
+                     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                         handleUploadAssetImage(e.dataTransfer.files);
+                     }
+                 }}
+             >
                  <div className="p-4 border-b border-border bg-surfaceHighlight/10 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <h3 className="text-sm font-bold flex items-center gap-2 text-textMain">
                          <ImageIcon size={16} className="text-primary" /> 生成结果
                       </h3>
+                      <span className="text-xs text-textMuted">{generationHistory.length} 张图片</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        ref={assetImageUploadRef}
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        className="hidden"
+                        onChange={(e) => handleUploadAssetImage(e.target.files)}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => assetImageUploadRef.current?.click()}
+                        disabled={isUploadingAssetImage}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-medium transition-colors disabled:opacity-50"
+                      >
+                        {isUploadingAssetImage ? (
+                          <>
+                            <Loader2 size={14} className="animate-spin" />
+                            上传中...
+                          </>
+                        ) : (
+                          <>
+                            <Upload size={14} />
+                            上传图片
+                          </>
+                        )}
+                      </button>
                     </div>
                  </div>
                  <div className="flex-1 overflow-y-auto p-4 bg-background/50">
@@ -1094,19 +1271,32 @@ export default function Page() {
                                      onClick={() => setLightboxUrl(img.url)}
                                 >
                                     <NextImage 
-                                        src={img.url}
+                                        src={`/api/vfs/nodes/${img.nodeId || img.id}/thumbnail`}
                                         alt={img.prompt} 
                                         className="w-full h-full object-cover transition-transform group-hover:scale-105"
                                         unoptimized
                                         width={300}
                                         height={300}
+                                        loading="lazy"
                                     />
                                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                                         <button className="p-2 bg-white/10 rounded-full hover:bg-white/20 text-white backdrop-blur-sm"
                                                 onClick={(e) => { e.stopPropagation(); setLightboxUrl(img.url); }}>
                                             <Search size={16} />
                                         </button>
+                                        <button 
+                                            className="p-2 bg-red-500/80 rounded-full hover:bg-red-600 text-white backdrop-blur-sm"
+                                            onClick={(e) => { e.stopPropagation(); handleDeleteAssetImage(img); }}
+                                            title="删除图片"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
                                     </div>
+                                    {img.prompt.startsWith('上传:') && (
+                                        <div className="absolute top-2 left-2 px-2 py-0.5 bg-blue-500/80 rounded text-[10px] text-white font-medium">
+                                            上传
+                                        </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -1116,6 +1306,7 @@ export default function Page() {
                               <Wand2 size={32} />
                            </div>
                            <div className="text-sm">暂无生成记录，配置参数并点击生成开始创作</div>
+                           <div className="text-xs text-textMuted/60">或拖拽图片到此处上传</div>
                         </div>
                     )}
                  </div>

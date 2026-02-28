@@ -21,7 +21,7 @@ Get-NetTCPConnection -LocalPort $frontendPort -ErrorAction SilentlyContinue |
     ForEach-Object { Write-Host "  Killing PID $_ (port $frontendPort)" -ForegroundColor DarkGray; Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }
 
 Get-CimInstance Win32_Process -Filter "Name='python.exe'" -ErrorAction SilentlyContinue | Where-Object {
-    $_.CommandLine -like "*app.tasks.worker*" -or $_.CommandLine -like "*watcher.py*"
+    $_.CommandLine -like "*app.tasks.worker*"
 } | ForEach-Object {
     Write-Host "  Killing PID $($_.ProcessId) ($($_.CommandLine.Substring(0, [Math]::Min(60, $_.CommandLine.Length)))...)" -ForegroundColor DarkGray
     Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue
@@ -34,16 +34,13 @@ Write-Host ""
 # ── Launch four terminals ──
 $backend  = "cd '$backendDir'; uv run fastapi dev app/main.py --host $backendHost --port $backendPort --reload"
 $worker   = "cd '$backendDir'; uv run python -m app.tasks.worker --reload"
-$watcher  = "cd '$backendDir'; uv run python watcher.py"
 $frontend = "cd '$frontendDir'; pnpm dev --hostname $frontendHost --port $frontendPort"
 
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $backend  -WindowStyle Normal
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $worker   -WindowStyle Normal
-Start-Process powershell -ArgumentList "-NoExit", "-Command", $watcher  -WindowStyle Normal
 Start-Process powershell -ArgumentList "-NoExit", "-Command", $frontend -WindowStyle Normal
 
-Write-Host "All 4 services launched in separate terminals:" -ForegroundColor Green
+Write-Host "All 3 services launched in separate terminals:" -ForegroundColor Green
 Write-Host "  backend:  http://localhost:$backendPort" -ForegroundColor Cyan
 Write-Host "  worker:   task worker (redis)" -ForegroundColor Yellow
-Write-Host "  watcher:  file watcher" -ForegroundColor Magenta
 Write-Host "  frontend: http://localhost:$frontendPort" -ForegroundColor Green

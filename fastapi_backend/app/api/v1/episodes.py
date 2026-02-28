@@ -37,13 +37,24 @@ async def _ensure_script_project(*, db: AsyncSession, user_id: UUID, script_id: 
     if not script:
         raise AppError(msg="Script not found or not authorized", code=404, status_code=404)
 
+    if script.project_id:
+        project = await db.get(Project, script.project_id)
+        if project:
+            return project
+
     project = await db.get(Project, script_id)
     if project:
+        if not script.project_id:
+            script.project_id = project.id
+            await db.flush()
         return project
 
     project = Project(id=script_id, owner_id=user_id, name=script.title)
     db.add(project)
     await db.flush()
+    if not script.project_id:
+        script.project_id = project.id
+        await db.flush()
     return project
 
 

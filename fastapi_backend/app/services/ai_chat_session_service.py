@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, select, update, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -96,12 +96,28 @@ class AIChatSessionService:
         user_id: UUID,
         session_id: UUID,
     ) -> bool:
-        session = await self.get_session(db=db, user_id=user_id, session_id=session_id)
-        if not session:
-            return False
-        await db.delete(session)
+        stmt = delete(AIChatSession).where(
+            AIChatSession.id == session_id,
+            AIChatSession.user_id == user_id
+        )
+        result = await db.execute(stmt)
         await db.flush()
-        return True
+        return result.rowcount > 0
+
+    async def delete_all_sessions(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        project_id: UUID | None = None,
+    ) -> int:
+        stmt = delete(AIChatSession).where(AIChatSession.user_id == user_id)
+        if project_id:
+            stmt = stmt.where(AIChatSession.project_id == project_id)
+        
+        result = await db.execute(stmt)
+        await db.flush()
+        return result.rowcount
 
     async def touch_session(
         self,

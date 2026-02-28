@@ -12,6 +12,7 @@ interface ChatSessionListProps {
   onSelectSession: (id: string) => void;
   onNewSession: () => void;
   onDeleteSession: (id: string) => void;
+  onDeleteAllSessions?: () => void;
   isLoading?: boolean;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
@@ -39,6 +40,7 @@ export function ChatSessionList({
   onSelectSession,
   onNewSession,
   onDeleteSession,
+  onDeleteAllSessions,
   isLoading,
   collapsed = false,
   onToggleCollapse,
@@ -101,6 +103,19 @@ export function ChatSessionList({
           >
             <Plus size={16} />
           </button>
+          {onDeleteAllSessions && sessions.length > 0 && (
+            <button
+              onClick={() => {
+                if (window.confirm("确定要删除所有会话吗？此操作不可恢复。")) {
+                  onDeleteAllSessions();
+                }
+              }}
+              className="p-1.5 hover:bg-red-500/20 rounded-lg transition-colors text-textMuted hover:text-red-500"
+              title="清空所有会话"
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
           <button
             onClick={onToggleCollapse}
             className="p-1.5 hover:bg-surfaceHighlight/30 rounded-lg transition-colors text-textMuted hover:text-text"

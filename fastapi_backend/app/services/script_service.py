@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
-from app.models import Script
+from app.models import Project, Script
 from app.repositories import script_repository
 from app.storage import get_minio_client
 from app.storage.image_thumbs import generate_thumbnail, should_generate_thumbnail
@@ -120,6 +120,7 @@ class ScriptService:
         script = Script(
             id=script_id,
             owner_id=user_id,
+            project_id=script_id,  # Project shares the same ID with Script
             title=title,
             description=description,
             aspect_ratio=aspect_ratio,
@@ -139,8 +140,15 @@ class ScriptService:
             panorama_thumb_content_type=panorama_thumb_content_type if panorama_thumb_key else None,
             panorama_thumb_size_bytes=panorama_thumb_size_bytes,
         )
+        
+        project = Project(
+            id=script_id,
+            owner_id=user_id,
+            name=title,
+        )
 
         try:
+            db.add(project)
             return await script_repository.create_script(db=db, script=script)
         except Exception:
             await _remove_object(bucket=bucket, key=key)

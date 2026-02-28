@@ -34,6 +34,36 @@ export async function GET(request: Request) {
   return NextResponse.json(data, { status: upstream.status });
 }
 
+export async function DELETE(request: Request) {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get("accessToken")?.value;
+    if (!token) {
+      return NextResponse.json({ error: "unauthorized" }, { status: 401 });
+    }
+
+    const { searchParams } = new URL(request.url);
+    const project_id = searchParams.get("project_id");
+    
+    const params = new URLSearchParams();
+    if (project_id) params.set("project_id", project_id);
+
+    const upstream = await fetch(`${getApiBaseUrl()}/api/v1/ai/chat/sessions?${params}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+
+    const data = await upstream.json();
+    return NextResponse.json(data, { status: upstream.status });
+  } catch (err) {
+    console.error("DELETE /api/ai/chat/sessions error:", err);
+    return NextResponse.json(
+      { code: 500, msg: String(err), data: null },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const cookieStore = await cookies();

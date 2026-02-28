@@ -141,14 +141,14 @@ def _parse_markdown_card(card_md: str, *, default_episode: int | None = None, ke
             keywords = _parse_keywords(m.group(1))
 
     first_ep: int | None = None
-    m = re.search(r"(?im)^\s*[-*]?\s*FirstAppearanceEpisode\s*[:：]\s*(\\d{1,4})\s*$", md)
+    m = re.search(r"(?im)^\s*[-*]?\s*FirstAppearanceEpisode\s*[:：]\s*(\d{1,4})\s*$", md)
     if m:
         try:
             first_ep = int(m.group(1))
         except Exception:
             first_ep = None
     if first_ep is None:
-        m = re.search(r"(?im)^\s*[-*]?\s*首次出场集数?\s*[:：]\s*(\\d{1,4})\s*$", md)
+        m = re.search(r"(?im)^\s*[-*]?\s*首次出场集数?\s*[:：]\s*(\d{1,4})\s*$", md)
         if m:
             try:
                 first_ep = int(m.group(1))
@@ -176,13 +176,12 @@ async def _run_structured_agent(
     extra_instructions: str,
 ) -> BaseModel:
     debug_logger = None
-    if is_pydanticai_debug_enabled():
-        run_id = str(getattr(ctx.deps, "run_id", None) or "tool")
-        p = getattr(ctx.deps, "debug_log_path", None)
-        if p:
-            debug_logger = create_pydanticai_debug_logger_for_path(run_id=run_id, file_path=Path(str(p)))
-        else:
-            debug_logger = create_pydanticai_debug_logger(run_id=run_id, tag="scene_test_structured_agent")
+    run_id = str(getattr(ctx.deps, "run_id", None) or "tool")
+    p = getattr(ctx.deps, "debug_log_path", None)
+    if p:
+        debug_logger = create_pydanticai_debug_logger_for_path(run_id=run_id, file_path=Path(str(p)), force_enable=True)
+    elif is_pydanticai_debug_enabled():
+        debug_logger = create_pydanticai_debug_logger(run_id=run_id, tag="scene_test_structured_agent")
 
     await _emit(
         ctx,
@@ -236,10 +235,26 @@ async def _run_structured_agent(
         )
         ctx.deps.context_snapshot_md = bundle.context_md
         ctx.deps.context_refs = list(bundle.refs or [])
+        
+        # Inject available episodes info if multiple episodes selected
+        ep_context_str = ""
+        if ctx.deps.episode_ids and len(ctx.deps.episode_ids) > 0:
+            try:
+                # Query episode numbers for the selected IDs
+                selected_eps = (await ctx.deps.db.execute(
+                    select(Episode.episode_number).where(Episode.id.in_(ctx.deps.episode_ids))
+                )).scalars().all()
+                if selected_eps:
+                    ep_list_str = ", ".join([f"EP{int(n):03d}" for n in sorted(selected_eps)])
+                    ep_context_str = f"当前选中的生效剧集范围：{ep_list_str}\n（如果涉及特定集数的操作，请在工具调用中明确指定 episode_id，例如 'EP001'）\n\n"
+            except Exception:
+                pass
+
         input_text = "\n\n".join(
             [
                 "上下文（资产库）：",
                 bundle.context_md,
+                ep_context_str, # Add episode context here
                 "用户输入：",
                 user_text,
             ]
@@ -257,30 +272,41 @@ async def _run_structured_agent(
                 "context_exclude_types": sorted(list(ctx.deps.context_exclude_types or set())),
             },
         )
-    result = await agent.run(input_text)
-    if debug_logger:
-        out_payload: Any
-        try:
-            out_payload = result.output.model_dump(mode="json")  # type: ignore[attr-defined]
-        except Exception:
-            out_payload = str(result.output)
-        await debug_logger.log(
-            "tool_agent_run_done",
+    try:
+        result = await agent.run(input_text)
+        if debug_logger:
+            out_payload: Any
+            try:
+                out_payload = result.output.model_dump(mode="json")  # type: ignore[attr-defined]
+            except Exception:
+                out_payload = str(result.output)
+            await debug_logger.log(
+                "tool_agent_run_done",
+                {
+                    "agent": {"agent_code": resolved_agent.agent_code, "version": resolved_agent.version},
+                    "output": out_payload,
+                },
+            )
+        await _emit(
+            ctx,
             {
-                "agent": {"agent_code": resolved_agent.agent_code, "version": resolved_agent.version},
-                "output": out_payload,
+                "type": "agent_run_done",
+                "agent_code": agent_code,
+                "version": int(version),
+                "output_type": getattr(output_type, "__name__", "unknown"),
             },
         )
-    await _emit(
-        ctx,
-        {
-            "type": "agent_run_done",
-            "agent_code": agent_code,
-            "version": int(version),
-            "output_type": getattr(output_type, "__name__", "unknown"),
-        },
-    )
-    return result.output
+        return result.output
+    except Exception as e:
+        if debug_logger:
+            await debug_logger.log(
+                "tool_agent_run_error",
+                {
+                    "agent": {"agent_code": resolved_agent.agent_code, "version": resolved_agent.version},
+                    "error": str(e),
+                },
+            )
+        raise e
 
 
 async def _run_markdown_agent(
@@ -292,13 +318,12 @@ async def _run_markdown_agent(
     extra_instructions: str,
 ) -> str:
     debug_logger = None
-    if is_pydanticai_debug_enabled():
-        run_id = str(getattr(ctx.deps, "run_id", None) or "tool")
-        p = getattr(ctx.deps, "debug_log_path", None)
-        if p:
-            debug_logger = create_pydanticai_debug_logger_for_path(run_id=run_id, file_path=Path(str(p)))
-        else:
-            debug_logger = create_pydanticai_debug_logger(run_id=run_id, tag="scene_test_markdown_agent")
+    run_id = str(getattr(ctx.deps, "run_id", None) or "tool")
+    p = getattr(ctx.deps, "debug_log_path", None)
+    if p:
+        debug_logger = create_pydanticai_debug_logger_for_path(run_id=run_id, file_path=Path(str(p)), force_enable=True)
+    elif is_pydanticai_debug_enabled():
+        debug_logger = create_pydanticai_debug_logger(run_id=run_id, tag="scene_test_markdown_agent")
 
     await _emit(
         ctx,
@@ -339,7 +364,30 @@ async def _run_markdown_agent(
         )
         ctx.deps.context_snapshot_md = bundle.context_md
         ctx.deps.context_refs = list(bundle.refs or [])
-        input_text = "\n\n".join(["上下文（资产库）：", bundle.context_md, "用户输入：", user_text]).strip()
+        
+        # Inject available episodes info if multiple episodes selected
+        ep_context_str = ""
+        if ctx.deps.episode_ids and len(ctx.deps.episode_ids) > 0:
+            try:
+                # Query episode numbers for the selected IDs
+                selected_eps = (await ctx.deps.db.execute(
+                    select(Episode.episode_number).where(Episode.id.in_(ctx.deps.episode_ids))
+                )).scalars().all()
+                if selected_eps:
+                    ep_list_str = ", ".join([f"EP{int(n):03d}" for n in sorted(selected_eps)])
+                    ep_context_str = f"当前选中的生效剧集范围：{ep_list_str}\n（如果涉及特定集数的操作，请在工具调用中明确指定 episode_id，例如 'EP001'）\n\n"
+            except Exception:
+                pass
+
+        input_text = "\n\n".join(
+            [
+                "上下文（资产库）：",
+                bundle.context_md,
+                ep_context_str,
+                "用户输入：",
+                user_text,
+            ]
+        ).strip()
 
     if debug_logger:
         await debug_logger.log(
@@ -355,19 +403,30 @@ async def _run_markdown_agent(
             },
         )
 
-    result = await agent.run(input_text)
-    raw_text = str(getattr(result, "output", "") or "")
+    try:
+        result = await agent.run(input_text)
+        raw_text = str(getattr(result, "output", "") or "")
 
-    if debug_logger:
-        await debug_logger.log(
-            "tool_agent_run_done",
-            {
-                "agent": {"agent_code": resolved_agent.agent_code, "version": resolved_agent.version},
-                "output": raw_text,
-            },
-        )
-    await _emit(ctx, {"type": "agent_run_done", "agent_code": agent_code, "version": int(version), "output_type": "markdown_text"})
-    return raw_text
+        if debug_logger:
+            await debug_logger.log(
+                "tool_agent_run_done",
+                {
+                    "agent": {"agent_code": resolved_agent.agent_code, "version": resolved_agent.version},
+                    "output": raw_text,
+                },
+            )
+        await _emit(ctx, {"type": "agent_run_done", "agent_code": agent_code, "version": int(version), "output_type": "markdown_text"})
+        return raw_text
+    except Exception as e:
+        if debug_logger:
+            await debug_logger.log(
+                "tool_agent_run_error",
+                {
+                    "agent": {"agent_code": resolved_agent.agent_code, "version": resolved_agent.version},
+                    "error": str(e),
+                },
+            )
+        raise e
 
 
 def _pick_version(ctx: RunContext[SceneTestDeps], agent_code: str, default_version: int = 1) -> int:
@@ -475,12 +534,48 @@ async def _preview_asset_extraction(
             "agent_code": agent_code,
             "version": int(_pick_version(ctx, agent_code, 1)),
             "script_len": len((ctx.deps.script_text or "").strip()),
+            "selected_episode_ids": [str(eid) for eid in (ctx.deps.episode_ids or [])],
         },
     )
     source_text = (ctx.deps.script_text or "").strip()
     if not source_text:
         await _emit(ctx, {"type": "tool_error", "tool_id": f"preview_extract_{asset_type}", "message": "empty_script"})
         return ApplyPlan(kind="asset_create", tool_id=f"preview_extract_{asset_type}", inputs={}, preview={"error": "empty_script"})
+
+    # 强制要求前端下拉选择剧集，不使用任何回退策略
+    if not ctx.deps.episode_ids or len(ctx.deps.episode_ids) == 0:
+        await _emit(ctx, {"type": "tool_error", "tool_id": f"preview_extract_{asset_type}", "message": "episode_not_selected"})
+        return ApplyPlan(
+            kind="asset_create", 
+            tool_id=f"preview_extract_{asset_type}", 
+            inputs={}, 
+            preview={"error": "episode_not_selected", "error_message": "请先在下拉菜单中选择要绑定的剧集"}
+        )
+
+    # 只使用前端下拉菜单选择的剧集
+    resolved_episode_id = str(ctx.deps.episode_ids[0])
+
+    # 解析剧集信息
+    default_episode: int | None = None
+    episode_obj: Episode | None = None
+    
+    try:
+        ep_uuid = UUID(str(resolved_episode_id))
+        episode_obj = (await ctx.deps.db.execute(select(Episode).where(Episode.id == ep_uuid))).scalar_one_or_none()
+        if episode_obj:
+            default_episode = int(episode_obj.episode_number)
+            resolved_episode_id = str(episode_obj.id)
+    except Exception:
+        pass
+
+    # Fallback to regex if no explicit episode found
+    if default_episode is None:
+        m2 = re.search(r"剧本剧集：\\s*EP(\\d{1,4})", source_text)
+        if m2:
+            try:
+                default_episode = int(m2.group(1))
+            except Exception:
+                default_episode = None
 
     version = _pick_version(ctx, agent_code, 1)
     must_cover: list[str] = []
@@ -511,14 +606,6 @@ async def _preview_asset_extraction(
         + (f"6) 必须覆盖出场人物行中列出的名字：{', '.join(must_cover)}\n" if must_cover else "")
     )
     raw_output_text = await _run_markdown_agent(ctx=ctx, agent_code=agent_code, version=version, user_text=source_text, extra_instructions=extra)
-
-    default_episode: int | None = None
-    m2 = re.search(r"剧本剧集：\\s*EP(\\d{1,4})", source_text)
-    if m2:
-        try:
-            default_episode = int(m2.group(1))
-        except Exception:
-            default_episode = None
 
     cards = [_parse_markdown_card(c, default_episode=default_episode, keep_call_name_suffix=(asset_type == "location")) for c in _split_markdown_cards(raw_output_text)]
     normalized_cards: list[dict[str, Any]] = []
@@ -573,8 +660,18 @@ async def _preview_asset_extraction(
     plan = ApplyPlan(
         kind="asset_create",
         tool_id=f"preview_extract_{asset_type}",
-        inputs={"asset_type": asset_type, "assets": [d.model_dump() for d in docs_v2]},
-        preview={"count": len(docs), "files": planned_files, "raw_output_text": raw_output_text},
+        inputs={
+            "asset_type": asset_type, 
+            "assets": [d.model_dump() for d in docs_v2],
+            "episode_id": resolved_episode_id,
+            "project_id": str(ctx.deps.project_id) if ctx.deps.project_id else None,
+        },
+        preview={
+            "count": len(docs), 
+            "files": planned_files, 
+            "raw_output_text": raw_output_text,
+            "episode_number": default_episode,
+        },
     )
     ctx.deps.plans.append(plan)
     await _emit(
@@ -606,12 +703,52 @@ async def preview_extract_vfx(ctx: RunContext[SceneTestDeps]) -> ApplyPlan:
 
 
 class _StoryboardShotsOutput(BaseModel):
-    shots: list[AIShotDraft] = Field(default_factory=list)
+    shots: list[AIShotDraft] = Field(
+        default_factory=list,
+        description="List of shot objects containing visual details. Each item MUST be an object, NOT an integer/index.",
+    )
+
+    @field_validator("shots", mode="before")
+    @classmethod
+    def _coerce_shots(cls, v: Any) -> Any:
+        if v is None:
+            return []
+        if isinstance(v, str):
+            # Try to parse the whole list string if LLM returned a string representation of a list
+            try:
+                v = json.loads(v)
+            except Exception:
+                try:
+                    v = ast.literal_eval(v)
+                except Exception:
+                    pass
+
+        if not isinstance(v, list):
+            return v
+
+        out: list[Any] = []
+        for item in v:
+            if isinstance(item, str):
+                s = item.strip()
+                # Handle Python-style dict string or JSON string
+                if (s.startswith("{") and s.endswith("}")):
+                    try:
+                        out.append(json.loads(s))
+                        continue
+                    except Exception:
+                        try:
+                            out.append(ast.literal_eval(s))
+                            continue
+                        except Exception:
+                            pass
+            out.append(item)
+        return out
 
 
 async def preview_storyboard_apply(
     ctx: RunContext[SceneTestDeps],
-    storyboard_id: str | None = None,
+    storyboard_id: str = Field(default="", description="Target storyboard ID. Leave empty to generate from script text."),
+    episode_id: str = Field(default="", description="Target Episode ID. Required if storyboard_id is empty."),
     mode: Literal["replace", "append"] = "replace",
 ) -> ApplyPlan:
     await _emit(
@@ -621,6 +758,7 @@ async def preview_storyboard_apply(
             "tool_id": "preview_storyboard_apply",
             "label": "分镜创建预览",
             "storyboard_id": storyboard_id,
+            "episode_id": episode_id,
             "mode": mode,
         },
     )
@@ -637,6 +775,8 @@ async def preview_storyboard_apply(
 
     storyboard: Storyboard | None = None
     episode: Episode | None = None
+    
+    # Logic 1: If storyboard_id provided, fetch existing context
     if sb_uuid:
         row = (
             await ctx.deps.db.execute(
@@ -651,21 +791,61 @@ async def preview_storyboard_apply(
             storyboard = None
             episode = None
             sb_uuid = None
+    
+    if not episode_id:
+        # 尝试从 deps 中的 episode_ids 获取默认值（如果只选了一个剧集）
+        if ctx.deps.episode_ids and len(ctx.deps.episode_ids) == 1:
+            episode_id = str(ctx.deps.episode_ids[0])
 
-    scene_script = ""
+    if episode_id:
+        # Resolve episode context
+        try:
+            # 兼容前端可能传来的 "EP001" 格式
+            ep_uuid: UUID | None = None
+            if len(episode_id) <= 10 and (episode_id.upper().startswith("EP") or episode_id.isdigit()):
+                m = re.search(r"(\d+)", episode_id)
+                if m:
+                    target_ep_num = int(m.group(1))
+                    ep_row = (await ctx.deps.db.execute(
+                        select(Episode).where(Episode.project_id == ctx.deps.project_id, Episode.episode_number == target_ep_num)
+                    )).scalar_one_or_none()
+                    if ep_row:
+                        ep_uuid = ep_row.id
+                        target_episode_number = int(ep_row.episode_number)
+            else:
+                ep_uuid = UUID(str(episode_id))
+            
+            if ep_uuid:
+                episode_id = str(ep_uuid) # Normalize to UUID
+                if not target_episode_number:
+                    ep_obj = (await ctx.deps.db.execute(select(Episode).where(Episode.id == ep_uuid))).scalar_one_or_none()
+                    if ep_obj:
+                        target_episode_number = int(ep_obj.episode_number)
+        except Exception:
+            pass
+
+    # Logic 2: If no storyboard found/provided, try to resolve context from global script
     scene_code = ""
     scene_number = 0
     location = ""
     time_of_day = ""
+    
+    target_episode_number = 0
+    
     if storyboard is not None:
+        # Case A: Modify existing storyboard
         scene_script = (storyboard.description or "").strip()
         scene_code = storyboard.scene_code or ""
         scene_number = int(storyboard.scene_number or 0)
         location = storyboard.location or ""
         time_of_day = storyboard.time_of_day or ""
+        target_episode_number = int(getattr(episode, "episode_number", 0) or 0)
     else:
+        # Case B: Create new storyboard from script text
         scene_script = (ctx.deps.script_text or "").strip()
-
+        # If episode_id provided, we might want to fetch episode info for preview accuracy, but it's optional
+        # We rely on the frontend or backend apply handler to use the episode_id correctly.
+    
     if not scene_script:
         await _emit(ctx, {"type": "tool_error", "tool_id": "preview_storyboard_apply", "message": "empty_script"})
         return ApplyPlan(kind="storyboard_apply", tool_id="preview_storyboard_apply", inputs={}, preview={"error": "empty_script"})
@@ -694,7 +874,9 @@ async def preview_storyboard_apply(
         user_text=scene_info,
         extra_instructions=(
             "请将分场剧本拆解成镜头列表。\n"
-            "要求：shots 至少 1 条；description 必须具体可拍；active_assets 尽量列出出镜资产名称或关键词。\n"
+            "要求：\n"
+            "1. shots 必须是对象列表（包含 description, shot_type 等），严禁只返回镜头序号或整数！\n"
+            "2. description 必须具体可拍；active_assets 尽量列出出镜资产名称或关键词。\n"
             "字段不确定用 null；不要输出解释文本。"
         ),
     )
@@ -703,21 +885,32 @@ async def preview_storyboard_apply(
     if not shots:
         shots = [AIShotDraft(description=(scene_script or "").strip() or None)]
 
+    # Render Markdown preview for each shot
+    from app.api.v1.apply_plans import _render_shot_md
+    shots_preview_md = []
+    for idx, s in enumerate(shots):
+        # Generate a temporary shot code for preview
+        temp_code = f"EP{target_episode_number:03d}_SC{int(scene_number or 0):02d}_SH{idx+1:02d}"
+        shots_preview_md.append(_render_shot_md(temp_code, s))
+    
+    full_preview_md = "\n".join(shots_preview_md)
+
     plan = ApplyPlan(
         kind="storyboard_apply",
         tool_id="preview_storyboard_apply",
         inputs={
             "project_id": str(ctx.deps.project_id),
-            "storyboard_id": str(sb_uuid or ""),
+            "storyboard_id": str(sb_uuid) if sb_uuid else None,
+            "episode_id": episode_id,
             "mode": mode,
             "shots": [s.model_dump() for s in shots],
         },
         preview={
             "count": len(shots),
-            "episode_number": int(getattr(episode, "episode_number", 0) or 0),
+            "episode_number": target_episode_number,
             "scene_number": int(scene_number or 0),
             "virtual": sb_uuid is None,
-            "warning": "storyboard_id_required_for_apply" if sb_uuid is None else None,
+            "markdown_preview": full_preview_md, # Add markdown preview
         },
     )
     ctx.deps.plans.append(plan)

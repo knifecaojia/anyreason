@@ -105,6 +105,7 @@ export function mapAssetsFromApi(items: any[]): Asset[] {
 
     return {
       id: item.id,
+      project_id: item.project_id,
       assetId: item.asset_id,
       name: item.name,
       type: typeMap[item.type?.toLowerCase()] || "CHARACTER",
@@ -114,7 +115,8 @@ export function mapAssetsFromApi(items: any[]): Asset[] {
       source: item.source,
       variants: variants,
       resources: resources,
-      doc_content: item.doc_content
+      doc_content: item.doc_content,
+      doc_node_id: item.doc_node_id
     };
   });
 }

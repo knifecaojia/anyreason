@@ -6,7 +6,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Depends, File, Form, Query, UploadFile
 from fastapi.responses import StreamingResponse
 from fastapi_pagination import Page, Params
-from sqlalchemy import func, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
@@ -250,9 +250,10 @@ async def get_script_panorama_thumbnail(
     )
 
 
-async def _build_script_hierarchy(*, db: AsyncSession, script_id: UUID) -> ScriptHierarchyRead:
+async def _build_script_hierarchy(*, db: AsyncSession, script: Script) -> ScriptHierarchyRead:
+    project_id = script.project_id or script.id
     ep_res = await db.execute(
-        select(Episode).where(Episode.project_id == script_id).order_by(Episode.episode_number.asc())
+        select(Episode).where(Episode.project_id == project_id).order_by(Episode.episode_number.asc())
     )
     episodes = list(ep_res.scalars().all())
 
@@ -263,7 +264,16 @@ async def _build_script_hierarchy(*, db: AsyncSession, script_id: UUID) -> Scrip
             .where(Storyboard.episode_id == ep.id)
             .order_by(Storyboard.scene_number.asc(), Storyboard.shot_number.asc())
         )
-        storyboards = [StoryboardRead.model_validate(sb) for sb in sb_res.scalars().all()]
+        sb_rows = list(sb_res.scalars().all())
+        
+        # Hydrate full details for storyboards
+        storyboards = []
+        for sb in sb_rows:
+            sb_read = StoryboardRead.model_validate(sb)
+            # If description is missing or short, try to load from markdown file if shot_code exists
+            # Actually, the model Storyboard has 'description', 'dialogue', etc.
+            # We ensure these fields are populated.
+            storyboards.append(sb_read)
 
         asset_res = await db.execute(
             select(Asset)
@@ -303,7 +313,7 @@ async def _build_script_hierarchy(*, db: AsyncSession, script_id: UUID) -> Scrip
             )
         )
 
-    return ScriptHierarchyRead(script_id=script_id, episodes=out_eps)
+    return ScriptHierarchyRead(script_id=script.id, episodes=out_eps)
 
 
 @router.get("/{script_id}/hierarchy", response_model=ResponseBase[ScriptHierarchyRead])
@@ -315,7 +325,7 @@ async def get_script_hierarchy(
     script = await script_service.get_user_script(db=db, user_id=user.id, script_id=script_id)
     if not script:
         raise AppError(msg="Script not found or not authorized", code=404, status_code=404)
-    data = await _build_script_hierarchy(db=db, script_id=script_id)
+    data = await _build_script_hierarchy(db=db, script=script)
     return ResponseBase(code=200, msg="OK", data=data)
 
 
@@ -329,12 +339,13 @@ async def get_script_stats(
     if not script:
         raise AppError(msg="Script not found or not authorized", code=404, status_code=404)
 
-    ep_ids_subq = select(Episode.id).where(Episode.project_id == script_id).subquery()
+    project_id = script.project_id or script_id
+    ep_ids_subq = select(Episode.id).where(Episode.project_id == project_id).subquery()
 
     episodes_count = int(
         (
             await db.execute(
-                select(func.count()).select_from(Episode).where(Episode.project_id == script_id)
+                select(func.count()).select_from(Episode).where(Episode.project_id == project_id)
             )
         ).scalar_one()
         or 0
@@ -343,7 +354,7 @@ async def get_script_stats(
     word_count = 0
     ep_text_rows = (
         await db.execute(
-            select(Episode.script_full_text).where(Episode.project_id == script_id)
+            select(Episode.script_full_text).where(Episode.project_id == project_id)
         )
     ).all()
     for (txt,) in ep_text_rows:
@@ -351,12 +362,19 @@ async def get_script_stats(
             continue
         word_count += len("".join(str(txt).split()))
 
+    bound_asset_ids = (
+        select(AssetBinding.asset_entity_id)
+        .where(AssetBinding.episode_id.in_(select(ep_ids_subq.c.id)))
+    )
     asset_counts_rows = (
         await db.execute(
             select(Asset.type, func.count(func.distinct(Asset.id)))
-            .select_from(Asset)
-            .join(AssetBinding, AssetBinding.asset_entity_id == Asset.id)
-            .where(AssetBinding.episode_id.in_(select(ep_ids_subq.c.id)))
+            .where(
+                or_(
+                    Asset.project_id == project_id,
+                    Asset.id.in_(bound_asset_ids),
+                )
+            )
             .group_by(Asset.type)
         )
     ).all()
@@ -383,7 +401,7 @@ async def get_script_stats(
             await db.execute(
                 select(func.count())
                 .select_from(FileNode)
-                .where(FileNode.project_id == script_id)
+                .where(FileNode.project_id == project_id)
                 .where(FileNode.is_folder.is_(False))
                 .where(FileNode.content_type.ilike("image/%"))
             )
@@ -395,7 +413,7 @@ async def get_script_stats(
             await db.execute(
                 select(func.count())
                 .select_from(FileNode)
-                .where(FileNode.project_id == script_id)
+                .where(FileNode.project_id == project_id)
                 .where(FileNode.is_folder.is_(False))
                 .where(FileNode.content_type.ilike("video/%"))
             )
@@ -430,19 +448,24 @@ async def structure_script(
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ):
+    script = await script_service.get_user_script(db=db, user_id=user.id, script_id=script_id)
+    if not script:
+        raise AppError(msg="Script not found or not authorized", code=404, status_code=404)
+    
+    project_id = script.project_id or script_id
     if not force:
         episodes_count = int(
             (
                 await db.execute(
-                    select(func.count()).select_from(Episode).where(Episode.project_id == script_id)
+                    select(func.count()).select_from(Episode).where(Episode.project_id == project_id)
                 )
             ).scalar_one()
             or 0
         )
         if episodes_count > 0:
-            data = await _build_script_hierarchy(db=db, script_id=script_id)
+            data = await _build_script_hierarchy(db=db, script=script)
             return ResponseBase(code=200, msg="OK", data=data)
 
     await script_structure_service.structure_script(db=db, user_id=user.id, script_id=script_id)
-    data = await _build_script_hierarchy(db=db, script_id=script_id)
+    data = await _build_script_hierarchy(db=db, script=script)
     return ResponseBase(code=200, msg="OK", data=data)

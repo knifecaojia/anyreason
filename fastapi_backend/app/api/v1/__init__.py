@@ -11,6 +11,7 @@ from app.api.v1.ai_text import router as ai_text_router
 from app.api.v1.ai_video import router as ai_video_router
 from app.api.v1.ai_prompt_presets import router as ai_prompt_presets_router
 from app.api.v1.ai_model_configs import router as ai_model_configs_router
+from app.api.v1.ai_model_import_export import router as ai_model_import_export_router
 from app.api.v1.ai_model_test_sessions import router as ai_model_test_sessions_router
 from app.api.v1.ai_generate_sessions import router as ai_generate_sessions_router
 from app.api.v1.ai_scenes import router as ai_scenes_router
@@ -51,6 +52,7 @@ v1_router.include_router(ai_text_router, tags=["ai"])
 v1_router.include_router(ai_video_router, tags=["ai"])
 v1_router.include_router(ai_prompt_presets_router, tags=["ai"])
 v1_router.include_router(ai_model_configs_router, tags=["ai"])
+v1_router.include_router(ai_model_import_export_router, tags=["ai"])
 v1_router.include_router(ai_model_test_sessions_router, tags=["ai"])
 v1_router.include_router(ai_generate_sessions_router, tags=["ai"])
 v1_router.include_router(ai_catalog_router, tags=["ai"])

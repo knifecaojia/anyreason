@@ -16,7 +16,7 @@ from app.ai_scene_test.runner import run_scene_test_chat
 from app.ai_scene_test.tool_registry import TOOL_REGISTRY
 from app.core.exceptions import AppError
 from app.database import User, get_async_session
-from app.models import BuiltinAgent, BuiltinAgentPromptVersion, Episode, Scene
+from app.models import BuiltinAgent, BuiltinAgentPromptVersion, Episode, Scene, AIChatSessionTask, Task
 from app.schemas_ai_chat import (
     AIChatMessageCreate,
     AIChatMessageRead,
@@ -28,6 +28,7 @@ from app.schemas_ai_chat import (
 )
 from app.schemas_ai_scene_test import AISceneTestAgentSelect, AISceneTestChatMessage, AISceneTestChatRequest
 from app.schemas_response import ResponseBase
+from app.schemas import TaskRead
 from app.services.ai_chat_session_service import ai_chat_session_service
 from app.users import current_active_user
 
@@ -169,6 +170,21 @@ async def update_session(
     )
 
 
+@router.delete("/ai/chat/sessions", response_model=ResponseBase[dict])
+async def delete_all_sessions(
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+    project_id: UUID | None = Query(default=None),
+) -> ResponseBase[dict]:
+    count = await ai_chat_session_service.delete_all_sessions(
+        db=db,
+        user_id=user.id,
+        project_id=project_id,
+    )
+    await db.commit()
+    return ResponseBase(code=200, msg="OK", data={"deleted_count": count})
+
+
 @router.delete("/ai/chat/sessions/{session_id}")
 async def delete_session(
     session_id: UUID,
@@ -184,6 +200,37 @@ async def delete_session(
         raise HTTPException(status_code=404, detail="session_not_found")
     await db.commit()
     return ResponseBase(code=200, msg="OK", data={"deleted": True})
+
+
+@router.get("/ai/chat/sessions/{session_id}/tasks", response_model=ResponseBase[list[TaskRead]])
+async def list_session_tasks(
+    session_id: UUID,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+) -> ResponseBase[list[TaskRead]]:
+    # Verify session access
+    session = await ai_chat_session_service.get_session(
+        db=db,
+        user_id=user.id,
+        session_id=session_id,
+    )
+    if not session:
+        raise HTTPException(status_code=404, detail="session_not_found")
+
+    stmt = (
+        select(Task)
+        .join(AIChatSessionTask, AIChatSessionTask.task_id == Task.id)
+        .where(AIChatSessionTask.session_id == session_id)
+        .order_by(Task.created_at.desc())
+    )
+    result = await db.execute(stmt)
+    tasks = result.scalars().all()
+    
+    return ResponseBase(
+        code=200,
+        msg="OK",
+        data=[TaskRead.model_validate(t) for t in tasks],
+    )
 
 
 @router.post("/ai/chat/sessions/{session_id}/messages")

@@ -190,6 +190,7 @@ export function PlansCard({ plans, onExecute, isExecuting, defaultExpanded = fal
               const storyboardCount = typeof (preview as any)?.count === "number" ? Number((preview as any).count) : shots.length;
               const storyboardWarning = typeof (preview as any)?.warning === "string" ? String((preview as any).warning) : "";
               const storyboardVirtual = Boolean((preview as any)?.virtual);
+              const mdPreview = typeof (preview as any)?.markdown_preview === "string" ? (preview as any).markdown_preview : "";
               const createdList = Array.isArray(applyResult?.data?.created) ? (applyResult.data.created as any[]) : [];
               const createdShotCodes = createdList
                 .map((x) => (x && typeof x === "object" && typeof (x as any).shot_code === "string" ? String((x as any).shot_code) : ""))
@@ -334,11 +335,44 @@ export function PlansCard({ plans, onExecute, isExecuting, defaultExpanded = fal
                       )}
 
                       {plan.kind === "storyboard_apply" && (
+                        <>
+                        <details className="mt-2 px-3 py-2 rounded-md bg-background border border-border">
+                            <summary className="cursor-pointer text-xs font-bold text-textMain">DEBUG: Raw Data</summary>
+                            <pre className="mt-2 w-full max-h-[150px] overflow-auto text-[10px] text-textMuted whitespace-pre-wrap">
+                            Preview: {JSON.stringify(preview, null, 2)}
+                            Inputs: {JSON.stringify(plan.inputs, null, 2)}
+                            </pre>
+                        </details>
                         <div className="mt-2 text-xs text-textMuted">
                           镜头 {storyboardCount}
                           {storyboardVirtual ? " · virtual" : ""}
                           {storyboardWarning ? ` · ${storyboardWarning}` : ""}
                         </div>
+
+                        {mdPreview && (
+                          <details
+                            className="mt-2 px-3 py-2 rounded-md bg-background/30 border border-border"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <summary className="cursor-pointer text-xs font-bold text-textMain">查看 Markdown 预览</summary>
+                            <div className="mt-2 space-y-2">
+                              <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    void copyText(mdPreview);
+                                  }}
+                                  className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+                                >
+                                  复制 Markdown
+                              </button>
+                              <pre className="w-full max-h-[220px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs whitespace-pre-wrap">
+                                {mdPreview}
+                              </pre>
+                            </div>
+                          </details>
+                        )}
+                        </>
                       )}
 
                       {plan.kind === "storyboard_apply" && shots.length > 0 && (

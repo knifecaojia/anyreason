@@ -109,6 +109,7 @@ export interface AssetVariant {
 
 export interface Asset {
   id: string;
+  project_id?: string;
   assetId: string;
   name: string;
   type: AssetType;
@@ -120,6 +121,7 @@ export interface Asset {
   variants?: AssetVariant[];
   resources?: AssetResource[];
   doc_content?: string;
+  doc_node_id?: string;
 }
 
 export interface User {

@@ -295,6 +295,11 @@ class Script(Base):
         ForeignKey("user.id", ondelete="CASCADE"),
         nullable=False,
     )
+    project_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("projects.id", ondelete="SET NULL"),
+        nullable=True,
+    )
 
     title = Column(String(255), nullable=False)
     description = Column(Text, nullable=True)
@@ -321,11 +326,13 @@ class Script(Base):
     deleted_at = Column(DateTime(timezone=True), nullable=True)
 
     owner = relationship("User", back_populates="scripts")
+    project = relationship("Project")
 
     __table_args__ = (
         Index("idx_scripts_owner", "owner_id"),
         Index("idx_scripts_owner_created_at", "owner_id", "created_at"),
         Index("idx_scripts_owner_is_deleted_created_at", "owner_id", "is_deleted", "created_at"),
+        Index("idx_scripts_project", "project_id"),
     )
 
 
@@ -1281,6 +1288,25 @@ class AIChatMessage(Base):
         CheckConstraint("role IN ('user', 'assistant', 'system')", name="ck_ai_chat_messages_role"),
         Index("idx_ai_chat_messages_session", "session_id"),
         Index("idx_ai_chat_messages_session_created", "session_id", "created_at"),
+    )
+
+
+class AIChatSessionTask(Base):
+    __tablename__ = "ai_chat_session_tasks"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    session_id = Column(UUID(as_uuid=True), ForeignKey("ai_chat_sessions.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="CASCADE"), nullable=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    session = relationship("AIChatSession")
+    task = relationship("Task")
+
+    __table_args__ = (
+        UniqueConstraint("session_id", "task_id", name="uq_ai_chat_session_tasks_session_task"),
+        Index("idx_ai_chat_session_tasks_session", "session_id"),
+        Index("idx_ai_chat_session_tasks_task", "task_id"),
+        Index("idx_ai_chat_session_tasks_created_at", "created_at"),
     )
 
 

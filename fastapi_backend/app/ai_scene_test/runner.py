@@ -23,9 +23,13 @@ async def run_scene_test_chat(
     db: AsyncSession,
     user_id: UUID,
     trace_queue: Any | None = None,
+    task_id: UUID | None = None,
 ) -> tuple[str, list, list[dict[str, Any]], dict[str, Any] | None]:
-    run_id = uuid4().hex
-    debug_logger = create_pydanticai_debug_logger(run_id=run_id, tag="scene_test_chat")
+    run_id = str(task_id) if task_id else uuid4().hex
+    # If task_id is provided, we force enable debug logging to capture execution details for this task
+    force_debug = bool(task_id)
+    debug_logger = create_pydanticai_debug_logger(run_id=run_id, tag="scene_test_chat", force_enable=force_debug)
+    
     main = await resolve_builtin_agent_version(
         db=db,
         agent_code=body.main_agent.agent_code,
@@ -60,50 +64,51 @@ async def run_scene_test_chat(
         trace_queue=trace_queue,
         meta={"model": getattr(resolved_model, "model_name", None), "scene_code": body.scene_code},
         run_id=run_id,
-        debug_log_path=str(debug_logger.file_path) if is_pydanticai_debug_enabled() else None,
+        debug_log_path=str(debug_logger.file_path) if (is_pydanticai_debug_enabled() or force_debug) else None,
+        episode_ids=body.episode_ids,
     )
 
     tool_ids = list(body.tool_ids or [])
     tools = []
     for tid in tool_ids:
-        reg = TOOL_REGISTRY.get(tid)
-        if reg is None:
+        entry = TOOL_REGISTRY.get(tid)
+        if entry is None:
             continue
-        tool_fn = reg[0]
-
-        def _wrap_tool(_tool_id: str, _tool_fn: Any):
-            @functools.wraps(_tool_fn)
+        # Use a closure to capture the specific tool function and ID
+        def make_logged_tool(tool_id: str, tool_fn: Any):
+            @functools.wraps(tool_fn)
             async def _logged_tool(ctx: RunContext[SceneTestDeps], *args: Any, **kwargs: Any):
-                await debug_logger.log(
-                    "tool_call_start",
-                    {
-                        "tool_id": _tool_id,
-                        "tool_name": getattr(_tool_fn, "__name__", ""),
-                        "args": list(args),
-                        "kwargs": kwargs,
-                        "agent_versions": dict(getattr(ctx.deps, "agent_versions", {}) or {}),
-                        "project_id": str(getattr(ctx.deps, "project_id", "") or ""),
-                    },
-                )
-                out = await _tool_fn(ctx, *args, **kwargs)
-                payload: Any
-                try:
-                    payload = out.model_dump(mode="json")  # type: ignore[attr-defined]
-                except Exception:
-                    payload = str(out)
-                await debug_logger.log(
-                    "tool_call_done",
-                    {
-                        "tool_id": _tool_id,
-                        "tool_name": getattr(_tool_fn, "__name__", ""),
-                        "output": payload,
-                    },
-                )
+                if debug_logger:
+                    await debug_logger.log(
+                        "tool_call_start",
+                        {
+                            "tool_id": tool_id,
+                            "tool_name": getattr(tool_fn, "__name__", ""),
+                            "args": list(args),
+                            "kwargs": kwargs,
+                            "agent_versions": dict(getattr(ctx.deps, "agent_versions", {}) or {}),
+                            "project_id": str(getattr(ctx.deps, "project_id", "") or ""),
+                        },
+                    )
+                out = await tool_fn(ctx, *args, **kwargs)
+                if debug_logger:
+                    payload: Any
+                    try:
+                        payload = out.model_dump(mode="json")  # type: ignore[attr-defined]
+                    except Exception:
+                        payload = str(out)
+                    await debug_logger.log(
+                        "tool_call_done",
+                        {
+                            "tool_id": tool_id,
+                            "tool_name": getattr(tool_fn, "__name__", ""),
+                            "output": payload,
+                        },
+                    )
                 return out
-
             return _logged_tool
-
-        tools.append(_wrap_tool(tid, tool_fn))
+        
+        tools.append(make_logged_tool(tid, entry[0]))
 
     instructions = main.system_prompt
     agent = Agent(model=model, instructions=instructions, tools=tools, model_settings=main.model_settings)

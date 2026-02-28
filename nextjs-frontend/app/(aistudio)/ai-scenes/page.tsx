@@ -135,6 +135,71 @@ function emptySceneDraft(): SceneDraft {
   };
 }
 
+function mapResultPlans(raw: unknown): ApplyPlan[] | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const mapped: ApplyPlan[] = [];
+  for (let i = 0; i < raw.length; i++) {
+    const item = raw[i];
+    if (typeof item !== "object" || item === null) continue;
+    const obj = item as Record<string, unknown>;
+    
+    const id = typeof obj.id === "string" ? obj.id : String(i);
+    const kind = typeof obj.kind === "string" ? obj.kind : "unknown";
+    const tool_id = typeof obj.tool_id === "string" ? obj.tool_id : "";
+    
+    let inputs = (typeof obj.inputs === "object" && obj.inputs !== null ? obj.inputs : {}) as Record<string, unknown>;
+    
+    // Handle case where inputs might be a JSON string
+     if (typeof obj.inputs === "string") {
+         try {
+             let jsonStr = obj.inputs.trim();
+             inputs = JSON.parse(jsonStr);
+         } catch (e) {
+             try {
+                 const fixed = (obj.inputs as string)
+                    .replace(/'/g, '"')
+                    .replace(/None/g, 'null')
+                    .replace(/True/g, 'true')
+                    .replace(/False/g, 'false');
+                 inputs = JSON.parse(fixed);
+             } catch (e2) {
+                 console.warn("mapResultPlans: failed to parse inputs string", e2);
+             }
+         }
+     }
+
+    const preview = (typeof obj.preview === "object" && obj.preview !== null ? obj.preview : undefined) as Record<string, unknown> | undefined;
+    
+    // Parse JSON strings in inputs if they are stringified
+    if (typeof inputs.shots === "string") {
+      try {
+        inputs.shots = JSON.parse(inputs.shots as string);
+      } catch (e) {
+        const raw = (inputs.shots as string).trim();
+        if (raw.startsWith("[") && raw.includes("'")) {
+             try {
+                 const fixed = raw
+                    .replace(/'/g, '"')
+                    .replace(/None/g, 'null')
+                    .replace(/True/g, 'true')
+                    .replace(/False/g, 'false');
+                 inputs.shots = JSON.parse(fixed);
+             } catch {}
+        }
+      }
+    }
+
+    mapped.push({
+      id,
+      kind,
+      tool_id,
+      inputs,
+      preview,
+    } as ApplyPlan);
+  }
+  return mapped.length > 0 ? mapped : null;
+}
+
 function planSummary(plan: ApplyPlan) {
   const preview = plan.preview as any;
   const n =
@@ -154,6 +219,7 @@ function PlanCard(props: { plan: ApplyPlan }) {
   const { plan } = props;
   const preview = (plan.preview || {}) as any;
   const inputs = (plan.inputs || {}) as any;
+  const mdPreview = typeof preview?.markdown_preview === "string" ? preview.markdown_preview : "";
 
   const copyText = async (text: string) => {
     try {
@@ -415,6 +481,15 @@ function PlanCard(props: { plan: ApplyPlan }) {
           镜头 {count} {virtual ? "· virtual" : ""} {warning ? `· ${warning}` : ""}
         </div>
         <div className="flex items-center gap-2">
+          {mdPreview && (
+            <button
+              type="button"
+              onClick={() => copyText(mdPreview)}
+              className="px-2 py-1 rounded-md bg-surfaceHighlight border border-border text-xs hover:bg-surface"
+            >
+              复制 Markdown
+            </button>
+          )}
           <button
             type="button"
             onClick={() => copyText(prettyJson(shots))}
@@ -430,6 +505,23 @@ function PlanCard(props: { plan: ApplyPlan }) {
             复制输入对象
           </button>
         </div>
+
+          <details className="px-3 py-2 rounded-md bg-background border border-border">
+            <summary className="cursor-pointer text-sm font-bold text-textMain">DEBUG: Raw Preview Data</summary>
+            <pre className="mt-2 w-full max-h-[200px] overflow-auto text-[10px] text-textMuted whitespace-pre-wrap">
+              {JSON.stringify(preview, null, 2)}
+            </pre>
+          </details>
+
+        {mdPreview && (
+          <details open className="px-3 py-2 rounded-md bg-background border border-border">
+            <summary className="cursor-pointer text-sm font-bold text-textMain">Markdown 预览</summary>
+            <pre className="mt-2 w-full max-h-[320px] overflow-auto px-3 py-2 rounded-md bg-background border border-border text-xs whitespace-pre-wrap">
+              {mdPreview}
+            </pre>
+          </details>
+        )}
+
         {shots.length === 0 && <div className="text-sm text-textMuted">没有 shots 输入。</div>}
         {shots.length > 0 && (
           <div className="space-y-2">
@@ -502,7 +594,9 @@ function PlanCard(props: { plan: ApplyPlan }) {
         ? renderAssetCreate()
         : plan.kind === "asset_doc_upsert"
           ? renderAssetDocUpsert()
-          : renderAssetBind();
+          : plan.kind === "storyboard_apply"
+            ? renderStoryboardApply()
+            : renderAssetBind();
 
   return (
     <details className="px-3 py-2 rounded-md bg-surfaceHighlight/40 border border-border">
@@ -1422,7 +1516,7 @@ export default function AIScenesPage() {
           if (t.status === "succeeded") {
             const r = (t.result_json || {}) as any;
             const out = String(r.output_text || "");
-            const plans = Array.isArray(r.plans) ? (r.plans as ApplyPlan[]) : [];
+            const plans = mapResultPlans(r.plans) || [];
             const traces = Array.isArray(r.trace_events) ? (r.trace_events as Array<Record<string, unknown>>) : [];
             const archive = r.archive ?? null;
             setChatPlans(plans);
@@ -1514,7 +1608,7 @@ export default function AIScenesPage() {
           if (t.status === "succeeded") {
             const r = (t.result_json || {}) as any;
             const out = String(r.output_text || "");
-            const plans = Array.isArray(r.plans) ? (r.plans as ApplyPlan[]) : [];
+            const plans = mapResultPlans(r.plans) || [];
             const traces = Array.isArray(r.trace_events) ? (r.trace_events as Array<Record<string, unknown>>) : [];
             const archive = r.archive ?? null;
             setChatPlans(plans);
@@ -1727,6 +1821,7 @@ export default function AIScenesPage() {
             messages: sendMessages,
             project_id: selectedScriptId || null,
             context_exclude_types: contextExcludeTypes,
+            episode_ids: selectedEpisodeIds, // Pass selected episode IDs
           },
         }),
       });

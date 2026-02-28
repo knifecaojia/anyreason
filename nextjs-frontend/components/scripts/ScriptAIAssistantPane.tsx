@@ -97,6 +97,7 @@ export function ScriptAIAssistantPane(props: {
       script_text: scriptText || "",
       messages: [{ role: "user", content: message }],
       context_exclude_types: [],
+      episode_ids: episodeHint?.episode_id ? [episodeHint.episode_id] : [],
     };
 
     const controller = new AbortController();

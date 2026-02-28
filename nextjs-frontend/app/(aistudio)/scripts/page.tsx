@@ -272,6 +272,14 @@ function AssetPreviewOverlay({ open, asset, onClose }: { open: boolean; asset: A
   );
 }
 
+const ASSET_TYPE_ORDER = ["scene", "character", "prop", "vfx"];
+const ASSET_TYPE_LABELS: Record<string, string> = {
+  scene: "场景",
+  character: "角色",
+  prop: "道具",
+  vfx: "特效",
+};
+
 type AssetEntity = {
   id: string;
   name: string;
@@ -283,7 +291,7 @@ type AssetEntity = {
 };
 
 async function listScriptAssets(scriptId: string): Promise<AssetEntity[]> {
-  const res = await fetch(`/api/assets?script_id=${encodeURIComponent(scriptId)}`, { cache: "no-store" });
+  const res = await fetch(`/api/assets?project_id=${encodeURIComponent(scriptId)}`, { cache: "no-store" });
   if (!res.ok) return [];
   const json = await res.json();
   const list = Array.isArray(json.data) ? json.data : [];
@@ -396,7 +404,7 @@ function AssetEntityCard({ asset, onClick, onOpenDoc, onDelete, onGenerate }: { 
       <div className="p-3 border-t border-border/50 bg-surface/60 backdrop-blur-sm flex flex-col gap-1.5 flex-shrink-0">
         <div className="flex items-center justify-between gap-2">
           <div className="font-bold text-sm text-textMain truncate" title={asset.name}>
-            {asset.name}
+            【{ASSET_TYPE_LABELS[asset.type] || asset.type}】{asset.name}
           </div>
           <div className="flex items-center gap-1">
             {onGenerate && (
@@ -1926,6 +1934,7 @@ export default function Page() {
                 ))}
               </div>
 
+              {/* 导演清单已隐藏
               <div className="rounded-2xl border border-border bg-surface overflow-hidden">
                 <div className="px-5 py-4 border-b border-border bg-surfaceHighlight/30 flex items-center justify-between gap-3">
                   <div className="font-bold text-sm">导演清单</div>
@@ -2028,6 +2037,7 @@ export default function Page() {
                   </div>
                 </div>
               </div>
+              */}
             </>
           )}
 
@@ -2370,12 +2380,19 @@ export default function Page() {
                                       return acc;
                                     }, {} as Record<string, AssetEntity[]>)
                                   )
-                                  .sort((a, b) => a[0].localeCompare(b[0]))
+                                  .sort((a, b) => {
+                                    const ia = ASSET_TYPE_ORDER.indexOf(a[0]);
+                                    const ib = ASSET_TYPE_ORDER.indexOf(b[0]);
+                                    if (ia !== -1 && ib !== -1) return ia - ib;
+                                    if (ia !== -1) return -1;
+                                    if (ib !== -1) return 1;
+                                    return a[0].localeCompare(b[0]);
+                                  })
                                   .map(([type, entities]) => (
                                     <div key={type} className="space-y-4">
                                       <div className="flex items-center gap-3 px-1">
                                         <div className="h-5 w-1.5 bg-primary rounded-full shadow-[0_0_10px_rgba(var(--primary),0.5)]" />
-                                        <h3 className="font-bold text-base text-textMain capitalize tracking-wide">{type}</h3>
+                                        <h3 className="font-bold text-base text-textMain capitalize tracking-wide">{ASSET_TYPE_LABELS[type] || type}</h3>
                                         <span className="px-2 py-0.5 rounded-full bg-surfaceHighlight text-xs font-mono text-textMuted">{entities.length}</span>
                                       </div>
                                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">

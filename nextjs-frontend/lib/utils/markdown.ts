@@ -10,21 +10,11 @@ export function stripMarkdownMetadata(raw: string): string {
     const endIndex = lines.slice(firstNonEmpty + 1).findIndex((line) => line.trim() === "---");
     lines = endIndex === -1 ? lines.slice(firstNonEmpty + 1) : lines.slice(firstNonEmpty + endIndex + 2);
   }
-  const isMarkdownLine = (line: string) => {
-    const trimmed = line.trim();
-    if (!trimmed) return false;
-    return /^(#{1,6}\s|[-*+]\s+|\d+\.\s+|>\s+|```|`{3}|!\[|\[.+\]\(.+\))/.test(trimmed);
-  };
-  const isMetadataLine = (line: string) => /^[a-z_][a-z0-9_]*\s*:\s*/.test(line.trim());
-  let start = 0;
-  for (; start < lines.length; start += 1) {
-    const line = lines[start];
-    if (isMarkdownLine(line)) break;
-    if (!line.trim()) continue;
-    if (isMetadataLine(line)) continue;
-    break;
-  }
-  return lines.slice(start).join("\n").trim();
+  
+  // Only strip implicit metadata if it looks very much like system metadata (e.g. starts with "type:", "id:")
+  // Otherwise, treat it as content.
+  // Actually, for safety, let's just return the rest.
+  return lines.join("\n").trim();
 }
 
 export function buildAssetCreateHref(sourceNodeId: string, seriesId: string, assetId?: string): string {

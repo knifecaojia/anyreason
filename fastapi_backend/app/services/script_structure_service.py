@@ -281,11 +281,17 @@ class ScriptStructureService:
         text = await _read_script_text_from_minio(script)
         parsed = parse_script_to_episodes(text)
 
-        project = await db.get(Project, script_id)
+        if script.project_id:
+            project = await db.get(Project, script.project_id)
+        else:
+            project = await db.get(Project, script_id)
+        
         if not project:
             project = Project(id=script_id, owner_id=user_id, name=script.title)
             db.add(project)
             await db.flush()
+            if not script.project_id:
+                script.project_id = project.id
 
         existing_result = await db.execute(select(Episode).where(Episode.project_id == project.id))
         existing = list(existing_result.scalars().all())
@@ -359,11 +365,17 @@ class ScriptStructureService:
         text = await _read_script_text_from_minio(script)
         parsed = parse_script_to_episodes(text)
 
-        project = await db.get(Project, script_id)
+        if script.project_id:
+            project = await db.get(Project, script.project_id)
+        else:
+            project = await db.get(Project, script_id)
+        
         if not project:
             project = Project(id=script_id, owner_id=user_id, name=script.title)
             db.add(project)
             await db.flush()
+            if not script.project_id:
+                script.project_id = project.id
 
         existing_result = await db.execute(
             select(Episode).where(Episode.project_id == project.id, Episode.episode_code != UNASSIGNED_EPISODE_CODE)

@@ -1,10 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { X, Star, Check, Download, ZoomIn } from "lucide-react";
+import { useState, useEffect } from "react";
+import { X, Star, Check, Download, ZoomIn, Loader2 } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Asset, AssetResource } from "@/lib/aistudio/types";
+import { stripMarkdownMetadata } from "@/lib/utils/markdown";
 
 type AssetPreviewModalProps = {
   asset: Asset;
@@ -20,6 +21,36 @@ export function AssetPreviewModal({
   onToggleSelect,
 }: AssetPreviewModalProps) {
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+  const [docContent, setDocContent] = useState<string>(asset.doc_content || "");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (asset.doc_content) {
+      setDocContent(asset.doc_content);
+      return;
+    }
+    if (!asset.doc_node_id) {
+      setDocContent("");
+      return;
+    }
+    
+    let cancelled = false;
+    setLoading(true);
+    (async () => {
+      try {
+        const res = await fetch(`/api/vfs/nodes/${asset.doc_node_id}/download`, { cache: "no-store" });
+        if (res.ok) {
+          const text = await res.text();
+          if (!cancelled) setDocContent(stripMarkdownMetadata(text));
+        }
+      } catch (e) {
+        console.error("Failed to load asset doc", e);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [asset.doc_content, asset.doc_node_id]);
 
   // Collect all resources from all variants + asset itself
   const allResources: AssetResource[] = [];
@@ -32,8 +63,6 @@ export function AssetPreviewModal({
 
   // Deduplicate by ID
   const uniqueResources = Array.from(new Map(allResources.map(r => [r.id, r])).values());
-
-  const docContent = asset.doc_content || "";
 
   const isImage = (res: AssetResource) => {
     // Basic check: if it has a thumbnail or type says image
@@ -72,20 +101,27 @@ export function AssetPreviewModal({
         </div>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto bg-slate-900">
+        <div className="flex-1 overflow-y-auto bg-surface">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 p-6 h-full">
             {/* Markdown Preview */}
-            <div className="bg-slate-800/30 rounded-lg p-4 border border-slate-700/50 flex flex-col h-full overflow-hidden">
-              <h3 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
+            <div className="bg-surfaceHighlight/5 rounded-lg p-4 border border-border flex flex-col h-full overflow-hidden">
+              <h3 className="text-sm font-bold text-textMain mb-3 flex items-center gap-2">
                 <span className="w-1 h-4 bg-primary rounded-full"></span>
                 文档预览
               </h3>
               <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar">
-                <div className="prose prose-invert prose-sm max-w-none">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {docContent || "*暂无文档内容*"}
-                  </ReactMarkdown>
-                </div>
+                {loading ? (
+                   <div className="flex items-center justify-center h-full text-textMuted gap-2">
+                     <Loader2 className="animate-spin w-5 h-5" />
+                     <span>加载文档...</span>
+                   </div>
+                ) : (
+                   <div className="prose prose-invert prose-sm max-w-none text-textMain [&_p]:text-textMuted [&_strong]:text-white [&_h1]:text-white [&_h2]:text-white [&_h3]:text-white [&_li]:text-textMuted">
+                     <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                       {docContent || "*暂无文档内容*"}
+                     </ReactMarkdown>
+                   </div>
+                )}
               </div>
             </div>
 

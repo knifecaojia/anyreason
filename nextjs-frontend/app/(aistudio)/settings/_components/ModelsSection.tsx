@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import Link from "next/link";
-import { Check, Eye, EyeOff, Filter, MessageSquare, Plus, RefreshCw, Search, Settings as SettingsIcon, X, Trash2, Edit } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { Check, Eye, EyeOff, Filter, MessageSquare, Plus, RefreshCw, Search, Settings as SettingsIcon, X, Trash2, Edit, Download, Upload } from "lucide-react";
 import type { AICategory, AIModelConfig, AIModelBinding } from "@/components/actions/ai-model-actions";
 
 import { ModelTestModal } from "./ModelTestModal";
@@ -160,6 +161,69 @@ export function ModelsSection(props: {
     saveCatalogConfig,
   } = props;
 
+  const router = useRouter();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importing, setImporting] = useState(false);
+
+  const handleExport = async () => {
+    try {
+      const res = await fetch("/api/v1/ai/models/export");
+      if (!res.ok) throw new Error("Export failed");
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `ai_models_export_${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(a);
+    } catch (e) {
+      alert("导出失败: " + String(e));
+    }
+  };
+
+  const handleImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!confirm("导入将覆盖现有的同名配置，且 API Key 会重新加密。确定要继续吗？")) {
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      return;
+    }
+
+    setImporting(true);
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await fetch("/api/v1/ai/models/import", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text);
+      }
+
+      const json = await res.json();
+      const stats = json.data;
+      alert(
+        `导入成功！\n` +
+          `厂商: +${stats.manufacturers.created} / ↻${stats.manufacturers.updated}\n` +
+          `模型: +${stats.models.created} / ↻${stats.models.updated}\n` +
+          `配置: +${stats.configs.created} / ↻${stats.configs.updated}\n` +
+          `绑定: +${stats.bindings.created} / ↻${stats.bindings.updated}`
+      );
+      window.location.reload();
+    } catch (e) {
+      alert("导入失败: " + String(e));
+    } finally {
+      setImporting(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const toggleSelect = (id: string) => {
@@ -238,12 +302,36 @@ export function ModelsSection(props: {
             <h3 className="text-lg font-bold text-textMain">厂商与模型管理</h3>
             <p className="text-sm text-textMuted mt-1">管理 AI 厂商和模型定义，新增厂商或模型后可在下方配置中使用。</p>
           </div>
-          <Link
-            href="/settings/catalog"
-            className="flex items-center gap-2 text-sm font-bold bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-all"
-          >
-            <SettingsIcon size={16} /> 进入管理
-          </Link>
+          <div className="flex items-center gap-2">
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
+              ref={fileInputRef}
+              onChange={handleImport}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 text-sm font-bold bg-surfaceHighlight border border-border hover:bg-surfaceHighlight/80 text-textMain px-4 py-2 rounded-lg transition-all"
+              type="button"
+              disabled={importing}
+            >
+              {importing ? <RefreshCw size={16} className="animate-spin" /> : <Upload size={16} />} 导入
+            </button>
+            <button
+              onClick={handleExport}
+              className="flex items-center gap-2 text-sm font-bold bg-surfaceHighlight border border-border hover:bg-surfaceHighlight/80 text-textMain px-4 py-2 rounded-lg transition-all"
+              type="button"
+            >
+              <Download size={16} /> 导出
+            </button>
+            <Link
+              href="/settings/catalog"
+              className="flex items-center gap-2 text-sm font-bold bg-primary hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-all"
+            >
+              <SettingsIcon size={16} /> 进入管理
+            </Link>
+          </div>
         </div>
       </div>
 

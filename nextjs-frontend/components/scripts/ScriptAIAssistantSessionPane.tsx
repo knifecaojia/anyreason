@@ -86,12 +86,58 @@ export function mapResultPlans(raw: unknown): PlanData[] | null {
     const id = typeof obj.id === "string" ? obj.id : (console.warn(`mapResultPlans: plan[${i}] missing/invalid 'id', defaulting`), String(i));
     const kind = typeof obj.kind === "string" ? obj.kind : (console.warn(`mapResultPlans: plan[${i}] missing/invalid 'kind', defaulting`), "unknown");
     const tool_id = typeof obj.tool_id === "string" ? obj.tool_id : (console.warn(`mapResultPlans: plan[${i}] missing/invalid 'tool_id', defaulting`), "");
+    
+    let inputs = (typeof obj.inputs === "object" && obj.inputs !== null ? obj.inputs : {}) as Record<string, unknown>;
+    // Handle case where inputs might be a JSON string (sometimes happens with LLM outputs)
+     if (typeof obj.inputs === "string") {
+         try {
+             let jsonStr = obj.inputs.trim();
+             // Try standard JSON parse first
+             inputs = JSON.parse(jsonStr);
+         } catch (e) {
+             // Fallback: Try to parse Python-style dict string
+             try {
+                 const fixed = (obj.inputs as string)
+                    .replace(/'/g, '"')
+                    .replace(/None/g, 'null')
+                    .replace(/True/g, 'true')
+                    .replace(/False/g, 'false');
+                 inputs = JSON.parse(fixed);
+             } catch (e2) {
+                 console.warn("mapResultPlans: failed to parse inputs string (JSON and Python-style)", e, e2);
+             }
+         }
+     }
+
+    const preview = (typeof obj.preview === "object" && obj.preview !== null ? obj.preview : undefined) as PlanData["preview"];
+    
+    // Parse JSON strings in inputs if they are stringified
+    if (typeof inputs.shots === "string") {
+      try {
+        inputs.shots = JSON.parse(inputs.shots as string);
+      } catch (e) {
+        // Try Python-style list string parsing heuristic
+        const raw = (inputs.shots as string).trim();
+        if (raw.startsWith("[") && raw.includes("'")) {
+             try {
+                 // Dangerous heuristic: convert Python repr to JSON
+                 const fixed = raw
+                    .replace(/'/g, '"')
+                    .replace(/None/g, 'null')
+                    .replace(/True/g, 'true')
+                    .replace(/False/g, 'false');
+                 inputs.shots = JSON.parse(fixed);
+             } catch {}
+        }
+      }
+    }
+
     mapped.push({
       id,
       kind,
       tool_id,
-      inputs: (typeof obj.inputs === "object" && obj.inputs !== null ? obj.inputs : {}) as Record<string, unknown>,
-      preview: (typeof obj.preview === "object" && obj.preview !== null ? obj.preview : undefined) as PlanData["preview"],
+      inputs,
+      preview,
     });
   }
   return mapped.length > 0 ? mapped : null;
@@ -267,31 +313,51 @@ export function ScriptAIAssistantSessionPane({
                 // Check if we need to recover messages from task results.
                 // Case 1: session has no messages at all (backend save may have failed)
                 // Case 2: session has assistant messages but plans are missing/null
-                const hasAssistantWithPlans = validatedMessages.some(
-                  (m: AIChatMessage) => m.role === "assistant" && m.plans && m.plans.length > 0
-                );
                 const hasAssistantWithoutPlans = validatedMessages.some(
                   (m: AIChatMessage) => m.role === "assistant" && (!m.plans || m.plans.length === 0)
                 );
-                const needsRecovery = rawMessages.length === 0 || (hasAssistantWithoutPlans && !hasAssistantWithPlans);
+                
+                // Relaxed recovery condition: recover if ANY assistant message is missing plans, or no messages at all.
+                // Previously we skipped recovery if *any* message had plans, which caused the latest message to be ignored if missing plans.
+                const needsRecovery = rawMessages.length === 0 || hasAssistantWithoutPlans;
                 
                 if (needsRecovery) {
                   try {
-                    // Fetch more tasks and filter by type to avoid apply_plan_execute crowding out results
-                    const succeededRes = await fetch(`/api/tasks?status=succeeded&type=ai_assistant_chat&size=50`);
-                    const succeededData = await succeededRes.json();
-                    const succeededTasks = succeededData?.data?.items || [];
-                    // Match by session_id in input_json (compare as strings, normalize UUID format)
-                    const normalizeId = (id: unknown) => String(id || "").toLowerCase().trim();
-                    const targetSid = normalizeId(sessionId);
-                    const matchedSucceeded = succeededTasks.filter(
-                      (t: any) => normalizeId(t.input_json?.session_id) === targetSid
-                    );
+                    // Fetch tasks explicitly linked to this session (new API)
+                     // This avoids fetching unrelated tasks and reduces payload size (4MB -> relevant only)
+                     const sessionTasksRes = await fetch(`/api/ai/chat/sessions/${sessionId}/tasks`);
+                     let matchedSucceeded: any[] = [];
+                     
+                     if (sessionTasksRes.ok) {
+                          const sessionTasksData = await sessionTasksRes.json();
+                          matchedSucceeded = sessionTasksData?.data || [];
+                     } 
+                     
+                     // If new API returns nothing (e.g. old session without links), try fallback
+                     if (matchedSucceeded.length === 0) {
+                          // Fallback for old sessions or if API fails: try the old heuristic (but with smaller size)
+                          // We keep this for backward compatibility or if the backend migration isn't applied yet
+                          console.warn("[loadSession] No linked tasks found, falling back to heuristic search");
+                          const succeededRes = await fetch(`/api/tasks?status=succeeded&type=ai_assistant_chat&size=20`);
+                          const succeededData = await succeededRes.json();
+                          const succeededTasks = succeededData?.data?.items || [];
+                          const normalizeId = (id: unknown) => String(id || "").toLowerCase().trim();
+                          const targetSid = normalizeId(sessionId);
+                          matchedSucceeded = succeededTasks.filter(
+                            (t: any) => normalizeId(t.input_json?.session_id) === targetSid
+                          );
+                     }
+
                     if (matchedSucceeded.length > 0) {
                       if (rawMessages.length === 0) {
                         // Full reconstruction: no messages at all
                         const reconstructed: AIChatMessage[] = [];
-                        for (const t of matchedSucceeded.reverse()) {
+                        // Sort by created_at asc for reconstruction
+                        const sortedTasks = [...matchedSucceeded].sort((a, b) => 
+                            new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+                        );
+                        
+                        for (const t of sortedTasks) {
                           const inputMsgs = t.input_json?.messages || [];
                           const lastUserMsg = [...inputMsgs].reverse().find((m: any) => m.role === "user");
                           if (lastUserMsg) {
@@ -323,18 +389,32 @@ export function ScriptAIAssistantSessionPane({
                       } else {
                         // Partial recovery: messages exist but plans are missing
                         // Try to patch plans from the most recent matching task
-                        const latestTask = matchedSucceeded[0]; // already sorted by created_at desc
+                        // matchedSucceeded is usually desc if from API list, but let's ensure we get the latest
+                        const latestTask = matchedSucceeded.sort((a, b) => 
+                            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                        )[0];
+                        
                         const taskPlans = mapResultPlans(latestTask.result_json?.plans);
                         const taskTrace = latestTask.result_json?.trace_events || null;
+                        
                         if (taskPlans && taskPlans.length > 0) {
-                          const patched = validatedMessages.map((msg: AIChatMessage) => {
-                            if (msg.role === "assistant" && (!msg.plans || msg.plans.length === 0)) {
-                              return { ...msg, plans: taskPlans, trace: msg.trace || taskTrace };
-                            }
-                            return msg;
-                          });
-                          console.warn("[loadSession] patched missing plans from task result, plans count:", taskPlans.length);
-                          setMessages(patched);
+                          // Only patch the LATEST assistant message to avoid incorrect history patching
+                          // Find the last assistant message index
+                          const lastAssistantIdx = validatedMessages.map(m => m.role).lastIndexOf("assistant");
+                          
+                          if (lastAssistantIdx >= 0) {
+                              const targetMsg = validatedMessages[lastAssistantIdx];
+                              if (!targetMsg.plans || targetMsg.plans.length === 0) {
+                                  const patched = [...validatedMessages];
+                                  patched[lastAssistantIdx] = {
+                                      ...targetMsg,
+                                      plans: taskPlans,
+                                      trace: targetMsg.trace || taskTrace
+                                  };
+                                  console.warn("[loadSession] patched latest assistant message from task result");
+                                  setMessages(patched);
+                              }
+                          }
                         }
                       }
                     }
@@ -424,6 +504,26 @@ export function ScriptAIAssistantSessionPane({
       console.error("delete session error", e);
     }
   }, [currentSession, loadSessions]);
+
+  const deleteAllSessions = useCallback(async () => {
+    try {
+      const url = projectId 
+        ? `/api/ai/chat/sessions?project_id=${projectId}` 
+        : `/api/ai/chat/sessions`;
+        
+      const res = await fetch(url, { method: "DELETE" });
+      if (!res.ok) {
+        throw new Error(await res.text());
+      }
+      
+      setCurrentSession(null);
+      setMessages([]);
+      await loadSessions();
+    } catch (e) {
+      console.error("delete all sessions error", e);
+      alert("删除失败，请重试");
+    }
+  }, [projectId, loadSessions]);
 
   useEffect(() => {
     loadScenes();
@@ -529,7 +629,7 @@ export function ScriptAIAssistantSessionPane({
           
           messages: [{ role: "user", content: enrichedContent }],
           context_exclude_types: [],
-          episode_ids: effectiveSelectedEpisodeIds,
+          episode_ids: effectiveSelectedEpisodeIds, // Pass explicitly selected episodes
         }),
       });
 
@@ -683,7 +783,7 @@ export function ScriptAIAssistantSessionPane({
           ...(plan || {}),
           inputs:
             plan.kind === "storyboard_apply" && !hasStoryboardId && targetEpId
-              ? { ...baseInputs, episode_id: targetEpId }
+              ? { ...baseInputs, episode_id: targetEpId, storyboard_id: null } // Explicitly set storyboard_id to null for new creation
               : baseInputs,
         };
 
@@ -926,6 +1026,7 @@ export function ScriptAIAssistantSessionPane({
           onSelectSession={handleSelectSession}
           onNewSession={createSession}
           onDeleteSession={deleteSession}
+          onDeleteAllSessions={deleteAllSessions}
           isLoading={sessionsLoading}
           collapsed={sessionListCollapsed}
           onToggleCollapse={() => setSessionListCollapsed(!sessionListCollapsed)}

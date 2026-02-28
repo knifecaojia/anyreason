@@ -480,6 +480,50 @@ async def api_execute_apply_plan(
                         "variant_md_node_id": str(variant_md_node.id),
                         "variant_md_filename": variant_md_filename,
                     })
+            
+            # 5. Handle Episode Binding (Auto-bind based on first_appearance_episode)
+            if existing_asset and a.first_appearance_episode:
+                # Try to extract episode number from "EP001" or similar
+                ep_num = None
+                ep_match = re.search(r"(\d+)", a.first_appearance_episode)
+                if ep_match:
+                    try:
+                        ep_num = int(ep_match.group(1))
+                    except ValueError:
+                        pass
+                
+                if ep_num is not None and ep_num > 0:
+                    episode_res = await db.execute(
+                        select(Episode).where(
+                            Episode.project_id == project_id,
+                            Episode.episode_number == ep_num,
+                        )
+                    )
+                    target_episode = episode_res.scalars().first()
+                    
+                    if target_episode:
+                        # Check if binding exists
+                        binding_exists = await db.execute(
+                            select(AssetBinding).where(
+                                AssetBinding.episode_id == target_episode.id,
+                                AssetBinding.asset_entity_id == existing_asset.id,
+                            )
+                        )
+                        if not binding_exists.scalars().first():
+                            # Create binding
+                            new_binding = AssetBinding(
+                                episode_id=target_episode.id,
+                                asset_entity_id=existing_asset.id,
+                                asset_variant_id=None, # Bind asset generally, not specific variant
+                            )
+                            db.add(new_binding)
+                            await db.flush()
+                            created_nodes.append({
+                                "type": "binding",
+                                "asset_name": a.name,
+                                "episode": f"EP{ep_num:03d}",
+                                "binding_id": str(new_binding.id)
+                            })
 
         await db.commit()
         return ResponseBase(code=200, msg="OK", data={"plan_id": str(plan.id), "created": created_nodes, "provenance": provenance})
