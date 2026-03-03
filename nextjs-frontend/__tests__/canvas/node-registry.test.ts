@@ -8,12 +8,10 @@ import {
 
 const ALL_NODE_TYPES = [
   'textNoteNode',
-  'mediaNode',
   'assetNode',
-  'referenceNode',
   'scriptNode',
   'generatorNode',
-  'previewNode',
+  'textGenNode',
   'slicerNode',
   'candidateNode',
   'storyboardNode',
@@ -21,15 +19,14 @@ const ALL_NODE_TYPES = [
 
 const GROUP_MAP: Record<NodeGroup, string[]> = {
   creation: ['textNoteNode', 'scriptNode', 'storyboardNode'],
-  'ai-generation': ['generatorNode', 'slicerNode', 'candidateNode'],
-  display: ['previewNode', 'mediaNode'],
-  reference: ['assetNode', 'referenceNode'],
+  'ai-generation': ['textGenNode', 'generatorNode', 'slicerNode', 'candidateNode'],
+  reference: ['assetNode'],
 };
 
 describe('node-registry', () => {
-  test('registers all 10 node types', () => {
+  test('registers all 8 node types', () => {
     const all = getAllNodeTypes();
-    expect(all.size).toBe(10);
+    expect(all.size).toBe(8);
     for (const t of ALL_NODE_TYPES) {
       expect(all.has(t)).toBe(true);
     }
@@ -59,7 +56,7 @@ describe('node-registry', () => {
   });
 
   test('every node belongs to exactly one group', () => {
-    const allGroups: NodeGroup[] = ['creation', 'ai-generation', 'display', 'reference'];
+    const allGroups: NodeGroup[] = ['creation', 'ai-generation', 'reference'];
     for (const t of ALL_NODE_TYPES) {
       const reg = getNodeType(t)!;
       expect(allGroups).toContain(reg.group);
@@ -74,12 +71,10 @@ describe('node-registry', () => {
   test('defaultData factories return fresh objects with correct kind', () => {
     const kindMap: Record<string, string> = {
       textNoteNode: 'text-note',
-      mediaNode: 'media',
       assetNode: 'asset',
-      referenceNode: 'reference',
       scriptNode: 'script',
       generatorNode: 'generator',
-      previewNode: 'preview',
+      textGenNode: 'text-gen',
       slicerNode: 'slicer',
       candidateNode: 'candidate',
       storyboardNode: 'storyboard',
@@ -96,7 +91,7 @@ describe('node-registry', () => {
     }
   });
 
-  test('buildReactFlowNodeTypes returns a record with all 10 types', () => {
+  test('buildReactFlowNodeTypes returns a record with all 8 types', () => {
     const nodeTypes = buildReactFlowNodeTypes();
     expect(Object.keys(nodeTypes).sort()).toEqual([...ALL_NODE_TYPES].sort());
     for (const t of ALL_NODE_TYPES) {
@@ -104,51 +99,48 @@ describe('node-registry', () => {
     }
   });
 
-  test('port definitions match the design spec', () => {
-    // textNoteNode: no ports
-    expect(getNodeType('textNoteNode')!.ports).toHaveLength(0);
-    // referenceNode: no ports
-    expect(getNodeType('referenceNode')!.ports).toHaveLength(0);
+  test('port definitions match the M1.2 design spec', () => {
+    // textNoteNode: 1 output (out-text)
+    const textNotePorts = getNodeType('textNoteNode')!.ports;
+    expect(textNotePorts).toHaveLength(1);
+    expect(textNotePorts[0]).toMatchObject({ id: 'out-text', direction: 'output', dataType: 'text' });
 
-    // scriptNode: 1 output (text)
+    // scriptNode: 1 output (out-text)
     const scriptPorts = getNodeType('scriptNode')!.ports;
     expect(scriptPorts).toHaveLength(1);
-    expect(scriptPorts[0]).toMatchObject({ direction: 'output', dataType: 'text' });
+    expect(scriptPorts[0]).toMatchObject({ id: 'out-text', direction: 'output', dataType: 'text' });
 
-    // generatorNode: 2 inputs (text, asset-ref), 1 output (image)
+    // storyboardNode: 2 inputs (in-image, in-asset), 2 outputs (out-text, out-ref)
+    const sbPorts = getNodeType('storyboardNode')!.ports;
+    expect(sbPorts).toHaveLength(4);
+    expect(sbPorts.filter((p) => p.direction === 'input')).toHaveLength(2);
+    expect(sbPorts.filter((p) => p.direction === 'output')).toHaveLength(2);
+
+    // textGenNode: 2 inputs (in-text, in-ref), 1 output (out-text)
+    const tgPorts = getNodeType('textGenNode')!.ports;
+    expect(tgPorts).toHaveLength(3);
+    expect(tgPorts.filter((p) => p.direction === 'input')).toHaveLength(2);
+    expect(tgPorts.filter((p) => p.direction === 'output')).toHaveLength(1);
+
+    // generatorNode: 2 inputs (in-text, in-ref), 2 outputs (out-image, out-video)
     const genPorts = getNodeType('generatorNode')!.ports;
-    expect(genPorts).toHaveLength(3);
+    expect(genPorts).toHaveLength(4);
     expect(genPorts.filter((p) => p.direction === 'input')).toHaveLength(2);
-    expect(genPorts.filter((p) => p.direction === 'output')).toHaveLength(1);
+    expect(genPorts.filter((p) => p.direction === 'output')).toHaveLength(2);
 
-    // previewNode: 1 input (image), 1 output (image)
-    const prevPorts = getNodeType('previewNode')!.ports;
-    expect(prevPorts).toHaveLength(2);
-
-    // slicerNode: 1 input (text), 1 output (storyboard-list)
+    // slicerNode: 1 input (in-text), 1 output (storyboard-list)
     const slicerPorts = getNodeType('slicerNode')!.ports;
     expect(slicerPorts).toHaveLength(2);
     expect(slicerPorts.find((p) => p.direction === 'output')!.dataType).toBe('storyboard-list');
 
-    // candidateNode: 1 input (text), no output
+    // candidateNode: 1 input (in-text), 1 output (out-refs)
     const candPorts = getNodeType('candidateNode')!.ports;
-    expect(candPorts).toHaveLength(1);
-    expect(candPorts[0].direction).toBe('input');
+    expect(candPorts).toHaveLength(2);
+    expect(candPorts.find((p) => p.id === 'out-refs')!.dataType).toBe('asset-ref');
 
-    // storyboardNode: 2 inputs (image, asset-ref), 1 output (text)
-    const sbPorts = getNodeType('storyboardNode')!.ports;
-    expect(sbPorts).toHaveLength(3);
-    expect(sbPorts.filter((p) => p.direction === 'input')).toHaveLength(2);
-    expect(sbPorts.filter((p) => p.direction === 'output')).toHaveLength(1);
-
-    // mediaNode: 1 output (image)
-    const mediaPorts = getNodeType('mediaNode')!.ports;
-    expect(mediaPorts).toHaveLength(1);
-    expect(mediaPorts[0]).toMatchObject({ direction: 'output', dataType: 'image' });
-
-    // assetNode: 1 output (asset-ref)
+    // assetNode: 1 output (out-ref)
     const assetPorts = getNodeType('assetNode')!.ports;
     expect(assetPorts).toHaveLength(1);
-    expect(assetPorts[0]).toMatchObject({ direction: 'output', dataType: 'asset-ref' });
+    expect(assetPorts[0]).toMatchObject({ id: 'out-ref', direction: 'output', dataType: 'asset-ref' });
   });
 });

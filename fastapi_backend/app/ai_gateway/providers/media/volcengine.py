@@ -21,7 +21,7 @@ class VolcengineMediaProvider(MediaProvider):
         )
 
     async def generate(self, request: MediaRequest) -> MediaResponse:
-        payload = {
+        payload: Dict[str, Any] = {
             "model": request.model_key,
             "prompt": request.prompt,
             "response_format": "url",

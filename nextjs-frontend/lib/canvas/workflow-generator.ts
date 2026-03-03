@@ -1,6 +1,7 @@
 // lib/canvas/workflow-generator.ts
 // Pure utility functions for auto-creating storyboard nodes from slicer output
-// and generating full workflows (script → slicer → storyboards → generators → previews).
+// and generating full workflows (script → slicer → storyboards → generators).
+// M1.2: Removed previewNode row. TextGenNode insertion deferred to M1.4.
 
 import type { Node, Edge } from '@xyflow/react';
 import type { StoryboardItem, StoryboardNodeData } from './types';
@@ -12,7 +13,7 @@ import { TYPED_EDGE_TYPE } from '@/components/canvas/TypedEdge';
 /** Horizontal spacing between nodes in the same row */
 const H_SPACING = 300;
 
-/** Horizontal spacing between storyboard/generator/preview nodes in a group */
+/** Horizontal spacing between storyboard/generator nodes in a group */
 const GROUP_H_SPACING = 250;
 
 /** Vertical spacing between rows */
@@ -163,13 +164,13 @@ export function generateFullWorkflow(
     } as any,
   });
 
-  // Edge: scriptNode.text → slicerNode.in-text
+  // Edge: scriptNode.out → slicerNode.in
   edges.push({
     id: generateId(),
     source: scriptNodeId,
     target: slicerNodeId,
-    sourceHandle: 'text',
-    targetHandle: 'in-text',
+    sourceHandle: 'out',
+    targetHandle: 'in',
     type: TYPED_EDGE_TYPE,
     data: { portType: 'text' },
   } as Edge);
@@ -208,8 +209,43 @@ export function generateFullWorkflow(
     });
   }
 
-  // --- Row 3: Generator Nodes (aligned under storyboard nodes) ---
+  // --- Row 3: TextGenNode (prompt generation between storyboard and generator) ---
   const row3Y = row2Y + V_SPACING;
+  const textGenNodeIds: string[] = [];
+
+  const textGenReg = getNodeType('textGenNode');
+
+  for (let i = 0; i < storyboards.length; i++) {
+    const nodeId = generateId();
+    textGenNodeIds.push(nodeId);
+
+    nodes.push({
+      id: nodeId,
+      type: 'textGenNode',
+      position: {
+        x: startPosition.x + i * GROUP_H_SPACING,
+        y: row3Y,
+      },
+      data: {
+        ...(textGenReg?.defaultData() ?? {}),
+        kind: 'text-gen',
+      } as any,
+    });
+
+    // Edge: storyboardNode[i].out → textGenNode[i].in
+    edges.push({
+      id: generateId(),
+      source: storyboardNodeIds[i],
+      target: nodeId,
+      sourceHandle: 'out',
+      targetHandle: 'in',
+      type: TYPED_EDGE_TYPE,
+      data: { portType: 'text' },
+    } as Edge);
+  }
+
+  // --- Row 4: Generator Nodes (aligned under textGenNodes) ---
+  const row4Y = row3Y + V_SPACING;
   const generatorNodeIds: string[] = [];
 
   const generatorReg = getNodeType('generatorNode');
@@ -223,7 +259,7 @@ export function generateFullWorkflow(
       type: 'generatorNode',
       position: {
         x: startPosition.x + i * GROUP_H_SPACING,
-        y: row3Y,
+        y: row4Y,
       },
       data: {
         ...(generatorReg?.defaultData() ?? {}),
@@ -231,48 +267,15 @@ export function generateFullWorkflow(
       } as any,
     });
 
-    // Edge: storyboardNode[i].out-desc → generatorNode[i].in-script
+    // Edge: textGenNode[i].out → generatorNode[i].in
     edges.push({
       id: generateId(),
-      source: storyboardNodeIds[i],
+      source: textGenNodeIds[i],
       target: nodeId,
-      sourceHandle: 'out-desc',
-      targetHandle: 'in-script',
+      sourceHandle: 'out',
+      targetHandle: 'in',
       type: TYPED_EDGE_TYPE,
       data: { portType: 'text' },
-    } as Edge);
-  }
-
-  // --- Row 4: Preview Nodes (aligned under generator nodes) ---
-  const row4Y = row3Y + V_SPACING;
-
-  const previewReg = getNodeType('previewNode');
-
-  for (let i = 0; i < storyboards.length; i++) {
-    const nodeId = generateId();
-
-    nodes.push({
-      id: nodeId,
-      type: 'previewNode',
-      position: {
-        x: startPosition.x + i * GROUP_H_SPACING,
-        y: row4Y,
-      },
-      data: {
-        ...(previewReg?.defaultData() ?? {}),
-        kind: 'preview',
-      } as any,
-    });
-
-    // Edge: generatorNode[i].image → previewNode[i].in-image
-    edges.push({
-      id: generateId(),
-      source: generatorNodeIds[i],
-      target: nodeId,
-      sourceHandle: 'image',
-      targetHandle: 'in-image',
-      type: TYPED_EDGE_TYPE,
-      data: { portType: 'image' },
     } as Edge);
   }
 

@@ -122,6 +122,7 @@ export interface Asset {
   resources?: AssetResource[];
   doc_content?: string;
   doc_node_id?: string;
+  lifecycle_status?: string;
 }
 
 export interface User {

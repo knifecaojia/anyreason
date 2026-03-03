@@ -13,7 +13,7 @@ export interface Viewport {
 }
 
 /** Rendering level for a node based on performance mode and viewport position */
-export type RenderLevel = 'full' | 'simplified' | 'placeholder';
+export type RenderLevel = 'full' | 'simplified' | 'placeholder' | 'icon';
 
 /**
  * PerformanceModeManager controls rendering quality based on
@@ -93,9 +93,9 @@ export class PerformanceModeManager {
       return 'full';
     }
 
-    // Outside viewport + zoom < 0.3: always placeholder regardless of mode
+    // Outside viewport + zoom < 0.3: always icon regardless of mode
     if (viewport.zoom < 0.3) {
-      return 'placeholder';
+      return 'icon';
     }
 
     // Outside viewport, normal zoom

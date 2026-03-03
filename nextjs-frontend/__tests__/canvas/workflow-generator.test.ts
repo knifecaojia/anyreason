@@ -99,7 +99,7 @@ describe('generateFullWorkflow', () => {
 
   test('creates correct number of nodes: 2 + 3*storyboards', () => {
     const result = generateFullWorkflow(baseEpisode, { x: 0, y: 0 });
-    // 1 script + 1 slicer + 3 storyboard + 3 generator + 3 preview = 11
+    // 1 script + 1 slicer + 3 storyboard + 3 textGen + 3 generator = 11
     expect(result.nodes).toHaveLength(11);
   });
 
@@ -109,13 +109,13 @@ describe('generateFullWorkflow', () => {
     expect(types.filter((t) => t === 'scriptNode')).toHaveLength(1);
     expect(types.filter((t) => t === 'slicerNode')).toHaveLength(1);
     expect(types.filter((t) => t === 'storyboardNode')).toHaveLength(3);
+    expect(types.filter((t) => t === 'textGenNode')).toHaveLength(3);
     expect(types.filter((t) => t === 'generatorNode')).toHaveLength(3);
-    expect(types.filter((t) => t === 'previewNode')).toHaveLength(3);
   });
 
   test('creates correct number of edges', () => {
     const result = generateFullWorkflow(baseEpisode, { x: 0, y: 0 });
-    // 1 (script→slicer) + 3 (storyboard→generator) + 3 (generator→preview) = 7
+    // 1 (script→slicer) + 3 (storyboard→textGen) + 3 (textGen→generator) = 7
     expect(result.edges).toHaveLength(7);
   });
 
@@ -151,37 +151,37 @@ describe('generateFullWorkflow', () => {
       (e) => e.source === scriptNode.id && e.target === slicerNode.id,
     );
     expect(scriptToSlicer).toBeDefined();
-    expect(scriptToSlicer!.sourceHandle).toBe('text');
+    expect(scriptToSlicer!.sourceHandle).toBe('out-text');
     expect(scriptToSlicer!.targetHandle).toBe('in-text');
   });
 
-  test('edges connect storyboard→generator with correct handles', () => {
+  test('edges connect storyboard→textGen with correct handles', () => {
     const result = generateFullWorkflow(baseEpisode, { x: 0, y: 0 });
     const sbNodes = result.nodes.filter((n) => n.type === 'storyboardNode');
-    const genNodes = result.nodes.filter((n) => n.type === 'generatorNode');
+    const tgNodes = result.nodes.filter((n) => n.type === 'textGenNode');
 
     for (let i = 0; i < sbNodes.length; i++) {
       const edge = result.edges.find(
-        (e) => e.source === sbNodes[i].id && e.target === genNodes[i].id,
+        (e) => e.source === sbNodes[i].id && e.target === tgNodes[i].id,
       );
       expect(edge).toBeDefined();
-      expect(edge!.sourceHandle).toBe('out-desc');
-      expect(edge!.targetHandle).toBe('in-script');
+      expect(edge!.sourceHandle).toBe('out-text');
+      expect(edge!.targetHandle).toBe('in-text');
     }
   });
 
-  test('edges connect generator→preview with correct handles', () => {
+  test('edges connect textGen→generator with correct handles', () => {
     const result = generateFullWorkflow(baseEpisode, { x: 0, y: 0 });
+    const tgNodes = result.nodes.filter((n) => n.type === 'textGenNode');
     const genNodes = result.nodes.filter((n) => n.type === 'generatorNode');
-    const prevNodes = result.nodes.filter((n) => n.type === 'previewNode');
 
-    for (let i = 0; i < genNodes.length; i++) {
+    for (let i = 0; i < tgNodes.length; i++) {
       const edge = result.edges.find(
-        (e) => e.source === genNodes[i].id && e.target === prevNodes[i].id,
+        (e) => e.source === tgNodes[i].id && e.target === genNodes[i].id,
       );
       expect(edge).toBeDefined();
-      expect(edge!.sourceHandle).toBe('image');
-      expect(edge!.targetHandle).toBe('in-image');
+      expect(edge!.sourceHandle).toBe('out-text');
+      expect(edge!.targetHandle).toBe('in-text');
     }
   });
 
@@ -199,15 +199,15 @@ describe('generateFullWorkflow', () => {
   test('layout: rows are spaced 200px apart vertically', () => {
     const result = generateFullWorkflow(baseEpisode, { x: 0, y: 0 });
     const sbNodes = result.nodes.filter((n) => n.type === 'storyboardNode');
+    const tgNodes = result.nodes.filter((n) => n.type === 'textGenNode');
     const genNodes = result.nodes.filter((n) => n.type === 'generatorNode');
-    const prevNodes = result.nodes.filter((n) => n.type === 'previewNode');
 
     // Row 2 (storyboard) at y=200
     for (const n of sbNodes) expect(n.position.y).toBe(200);
-    // Row 3 (generator) at y=400
-    for (const n of genNodes) expect(n.position.y).toBe(400);
-    // Row 4 (preview) at y=600
-    for (const n of prevNodes) expect(n.position.y).toBe(600);
+    // Row 3 (textGen) at y=400
+    for (const n of tgNodes) expect(n.position.y).toBe(400);
+    // Row 4 (generator) at y=600
+    for (const n of genNodes) expect(n.position.y).toBe(600);
   });
 
   test('handles episode with no storyboards', () => {

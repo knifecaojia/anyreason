@@ -125,14 +125,91 @@ export function getDownstreamNodes(nodeId: string, edges: Edge[]): string[] {
   return [...visited];
 }
 
+// ===== Multi-Source Input Merge =====
+
+/**
+ * Infers the port data type from a targetHandle id.
+ * Convention: handles named `in-text`, `in-image`, `in-asset`, etc.
+ * Falls back to edge.data.portType if available.
+ */
+function inferPortType(
+  targetHandle: string | null | undefined,
+  edge?: Edge,
+): 'text' | 'image' | 'asset-ref' | 'unknown' {
+  const edgePortType = (edge as unknown as { data?: Record<string, unknown> })?.data?.portType;
+  if (typeof edgePortType === 'string') {
+    if (edgePortType === 'text') return 'text';
+    if (edgePortType === 'image') return 'image';
+    if (edgePortType === 'asset-ref') return 'asset-ref';
+  }
+  if (!targetHandle) return 'unknown';
+  const h = targetHandle.toLowerCase();
+  if (h.includes('text') || h.includes('script') || h.includes('desc')) return 'text';
+  if (h.includes('image') || h.includes('img')) return 'image';
+  if (h.includes('asset') || h.includes('ref')) return 'asset-ref';
+  return 'unknown';
+}
+
+/**
+ * Merges multiple upstream values arriving at the same input port,
+ * according to the port's data type:
+ *
+ * - **text**: concatenate with `\n\n---\n\n` separator
+ * - **asset-ref**: merge into array, deduplicate by `assetId`
+ * - **image**: take the last value (most recently connected)
+ * - **unknown/other**: last-write-wins (backwards-compatible)
+ */
+export function mergeInputs(
+  values: unknown[],
+  portType: 'text' | 'image' | 'asset-ref' | 'unknown',
+): unknown {
+  if (values.length === 0) return undefined;
+  if (values.length === 1) return values[0];
+
+  switch (portType) {
+    case 'text': {
+      const texts = values
+        .map((v) => (typeof v === 'string' ? v : String(v ?? '')))
+        .filter((t) => t.length > 0);
+      return texts.join('\n\n---\n\n');
+    }
+    case 'asset-ref': {
+      const seen = new Set<string>();
+      const merged: unknown[] = [];
+      for (const v of values) {
+        const arr = Array.isArray(v) ? v : [v];
+        for (const item of arr) {
+          const id =
+            typeof item === 'object' && item !== null
+              ? (item as Record<string, unknown>).assetId ?? (item as Record<string, unknown>).id
+              : item;
+          const key = String(id ?? '');
+          if (key && !seen.has(key)) {
+            seen.add(key);
+            merged.push(item);
+          }
+        }
+      }
+      return merged;
+    }
+    case 'image': {
+      return values[values.length - 1];
+    }
+    default: {
+      return values[values.length - 1];
+    }
+  }
+}
+
 // ===== Data Propagation =====
 
 /**
  * Propagates data from a source node's output port to all directly connected
  * downstream nodes, then recursively propagates to their downstream nodes.
  *
- * For each edge from sourceNodeId with matching sourceHandle, updates the
- * target node's data with the propagated value keyed by the targetHandle.
+ * Multi-source merge: when multiple edges target the same (nodeId, targetHandle),
+ * all upstream values are collected and merged according to the port data type
+ * (see `mergeInputs`).
  */
 export function propagateData(
   sourceNodeId: string,
@@ -149,33 +226,75 @@ export function propagateData(
 
   if (outEdges.length === 0) return;
 
-  // Collect target node IDs and their target handles
-  const targets = outEdges.map((e) => ({
-    nodeId: e.target,
-    targetHandle: e.targetHandle,
-  }));
+  // Group targets by (nodeId, targetHandle) for multi-source merge
+  const targetMap = new Map<string, { nodeId: string; targetHandle: string; portType: ReturnType<typeof inferPortType>; values: unknown[] }>();
 
-  // Update target nodes' data
+  for (const edge of outEdges) {
+    const key = `${edge.target}::${edge.targetHandle ?? 'input'}`;
+    if (!targetMap.has(key)) {
+      targetMap.set(key, {
+        nodeId: edge.target,
+        targetHandle: edge.targetHandle ?? 'input',
+        portType: inferPortType(edge.targetHandle, edge),
+        values: [],
+      });
+    }
+    targetMap.get(key)!.values.push(data);
+  }
+
+  // Also collect values from OTHER edges targeting the same (nodeId, targetHandle)
+  // that are NOT from this source — needed for correct multi-source merge
+  for (const [key, target] of targetMap) {
+    const allIncoming = edges.filter(
+      (e) =>
+        e.target === target.nodeId &&
+        (e.targetHandle ?? 'input') === target.targetHandle &&
+        e.source !== sourceNodeId,
+    );
+    for (const inEdge of allIncoming) {
+      // Read the value currently stored from other sources
+      const srcNode = nodes.find((n) => n.id === inEdge.source);
+      if (srcNode) {
+        const srcData = srcNode.data as Record<string, unknown> | undefined;
+        const srcHandle = inEdge.sourceHandle;
+        // Try to read the output value from the source node
+        if (srcData && srcHandle && srcData[srcHandle] !== undefined) {
+          target.values.unshift(srcData[srcHandle]);
+        }
+      }
+    }
+  }
+
+  // Update target nodes' data with merged values
   setNodes((currentNodes) =>
     currentNodes.map((node) => {
-      const target = targets.find((t) => t.nodeId === node.id);
-      if (!target) return node;
+      const entries = [...targetMap.values()].filter((t) => t.nodeId === node.id);
+      if (entries.length === 0) return node;
 
       const existingData =
         typeof node.data === 'object' && node.data !== null ? node.data : {};
+      const updates: Record<string, unknown> = {};
+
+      for (const entry of entries) {
+        updates[entry.targetHandle] = mergeInputs(entry.values, entry.portType);
+      }
+
       return {
         ...node,
         data: {
           ...existingData,
-          [target.targetHandle ?? 'input']: data,
+          ...updates,
         },
       };
     }),
   );
 
   // Recursively propagate to downstream nodes
-  for (const target of targets) {
-    // Find output edges from the target node to continue propagation
+  const propagatedNodeIds = new Set<string>();
+  for (const target of targetMap.values()) {
+    if (propagatedNodeIds.has(target.nodeId)) continue;
+    propagatedNodeIds.add(target.nodeId);
+
     const targetOutEdges = edges.filter((e) => e.source === target.nodeId);
     const targetOutHandles = new Set(targetOutEdges.map((e) => e.sourceHandle));
 

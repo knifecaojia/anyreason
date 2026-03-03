@@ -5,6 +5,7 @@ import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow } from '@/lib/canvas/xyflow-compat';
 import type { ScriptNodeData } from '@/lib/canvas/types';
 import { getNodeType } from '@/lib/canvas/node-registry';
+import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import NodeShell from './NodeShell';
 
 const MAX_TEXT_LENGTH = 10000;
@@ -17,6 +18,8 @@ export default function ScriptNode(props: NodeProps) {
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
   const reg = getNodeType('scriptNode');
   const ports = reg?.ports ?? [];
+  const { expand, collapse, resolveLevel } = useNodeIconMode();
+  const renderLevel = resolveLevel();
   const text = data.text ?? '';
   const isOverLimit = text.length > MAX_TEXT_LENGTH;
 
@@ -30,9 +33,13 @@ export default function ScriptNode(props: NodeProps) {
       nodeId={props.id}
       title="剧本节点"
       icon={reg?.icon}
+      iconEmoji="📄"
       colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
+      renderLevel={renderLevel}
+      onExpand={expand}
+      onCollapse={collapse}
       ports={ports}
       selected={selected}
     >

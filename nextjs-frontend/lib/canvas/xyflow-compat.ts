@@ -17,6 +17,13 @@ export {
   useReactFlow,
 } from '@xyflow/react';
 
+// NodeResizer and NodeToolbar exist at runtime in @xyflow/react v12.10
+// but may be missing from the main type declarations.
+// @ts-ignore — runtime export verified
+export { NodeResizer } from '@xyflow/react';
+// @ts-ignore — runtime export verified
+export { NodeToolbar } from '@xyflow/react';
+
 // ---- Type-only exports ----
 
 /**

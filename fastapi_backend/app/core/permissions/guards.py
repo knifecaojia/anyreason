@@ -7,8 +7,8 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.ctx import current_user
-from app.database import get_db
+from app.users import current_active_user as current_user
+from app.database import get_async_session as get_db
 from app.models import User, WorkspaceMember
 
 

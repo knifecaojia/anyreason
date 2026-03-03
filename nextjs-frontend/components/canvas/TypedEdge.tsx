@@ -32,7 +32,7 @@ export default function TypedEdge({
   const isTransmitting = edgeData?.isTransmitting ?? false;
 
   const color = portType ? PORT_COLORS[portType] : DEFAULT_COLOR;
-  const strokeWidth = selected ? 3 : 2;
+  const strokeWidth = selected ? 2.5 : 1.5;
 
   const [edgePath] = getBezierPath({
     sourceX,
@@ -66,9 +66,9 @@ export default function TypedEdge({
         style={{
           stroke: color,
           strokeWidth,
+          strokeDasharray: '8 6',
           ...(isTransmitting
             ? {
-                strokeDasharray: '6 4',
                 animation: 'typedEdgeFlow 0.6s linear infinite',
               }
             : {}),

@@ -5,6 +5,7 @@ import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow } from '@/lib/canvas/xyflow-compat';
 import type { GeneratorNodeData } from '@/lib/canvas/types';
 import { getNodeType } from '@/lib/canvas/node-registry';
+import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import NodeShell from './NodeShell';
 
 export default function GeneratorNode(props: NodeProps) {
@@ -13,6 +14,8 @@ export default function GeneratorNode(props: NodeProps) {
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
   const reg = getNodeType('generatorNode');
   const ports = reg?.ports ?? [];
+  const { expand, collapse: collapseIcon, resolveLevel } = useNodeIconMode();
+  const renderLevel = resolveLevel();
   const rf = useReactFlow() as any;
   const updateNodeData = rf.updateNodeData as (id: string, data: any) => void;
   const mode = data.generationMode ?? 'image';
@@ -22,9 +25,13 @@ export default function GeneratorNode(props: NodeProps) {
       nodeId={props.id}
       title="生成节点"
       icon={reg?.icon}
+      iconEmoji="🖼"
       colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
+      renderLevel={renderLevel}
+      onExpand={expand}
+      onCollapse={collapseIcon}
       ports={ports}
       selected={selected}
     >

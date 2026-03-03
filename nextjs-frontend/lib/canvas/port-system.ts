@@ -27,8 +27,7 @@ export function arePortsCompatible(
 ): boolean {
   return (
     source.direction === 'output' &&
-    target.direction === 'input' &&
-    source.dataType === target.dataType
+    target.direction === 'input'
   );
 }
 

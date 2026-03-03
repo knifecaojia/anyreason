@@ -23,17 +23,16 @@ class GeminiMediaProvider(MediaProvider):
             "Content-Type": "application/json"
         }
         
-        payload = {
+        gen_config: Dict[str, Any] = {"responseModalities": ["IMAGE"]}
+        if request.param_json:
+            gen_config.update(request.param_json)
+
+        payload: Dict[str, Any] = {
             "contents": [{
                 "parts": [{"text": request.prompt}]
             }],
-            "generationConfig": {
-                 "responseModalities": ["IMAGE"]
-            }
+            "generationConfig": gen_config,
         }
-        
-        if request.param_json:
-             payload["generationConfig"].update(request.param_json)
 
         async with httpx.AsyncClient() as client:
             resp = await client.post(url, json=payload, headers=headers, timeout=60.0)

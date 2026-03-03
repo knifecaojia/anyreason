@@ -4,6 +4,7 @@ import { useState } from 'react';
 import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import type { StoryboardNodeData } from '@/lib/canvas/types';
 import { getNodeType } from '@/lib/canvas/node-registry';
+import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import NodeShell from './NodeShell';
 
 export default function StoryboardNode(props: NodeProps) {
@@ -12,15 +13,21 @@ export default function StoryboardNode(props: NodeProps) {
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
   const reg = getNodeType('storyboardNode');
   const ports = reg?.ports ?? [];
+  const { expand, collapse, resolveLevel } = useNodeIconMode();
+  const renderLevel = resolveLevel();
 
   return (
     <NodeShell
       nodeId={props.id}
       title={`镜头 #${data.shotNumber ?? 1}`}
       icon={reg?.icon}
+      iconEmoji="🎬"
       colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
+      renderLevel={renderLevel}
+      onExpand={expand}
+      onCollapse={collapse}
       ports={ports}
       selected={selected}
     >

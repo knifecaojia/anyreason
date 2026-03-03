@@ -405,28 +405,38 @@ class AIGatewayService:
         attachments: list[dict[str, Any]],
         credits_cost: int = 1,
     ) -> AsyncIterator[dict[str, Any]]:
-        cfg, cfg_id, resolved_binding_key = await self._resolve_model_config(
-            db=db,
-            category="text",
-            binding_key=binding_key,
-            model_config_id=model_config_id,
-            default_binding_key="chatbox",
-        )
+        # Resolve config inside try/except so errors become SSE error events
+        # instead of crashing the StreamingResponse.
+        try:
+            cfg, cfg_id, resolved_binding_key = await self._resolve_model_config(
+                db=db,
+                category="text",
+                binding_key=binding_key,
+                model_config_id=model_config_id,
+                default_binding_key="chatbox",
+            )
+        except AppError as e:
+            yield {"type": "error", "message": str(e.msg), "code": int(e.code or 400)}
+            return
 
         credits_cost = int(credits_cost or 0)
         consumed_credits = 0
         if credits_cost > 0:
-            await credit_service.adjust_balance(
-                db=db,
-                user_id=user_id,
-                delta=-credits_cost,
-                reason="ai.consume",
-                actor_user_id=None,
-                meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
-                allow_negative=False,
-            )
-            await db.commit()
-            consumed_credits = credits_cost
+            try:
+                await credit_service.adjust_balance(
+                    db=db,
+                    user_id=user_id,
+                    delta=-credits_cost,
+                    reason="ai.consume",
+                    actor_user_id=None,
+                    meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    allow_negative=False,
+                )
+                await db.commit()
+                consumed_credits = credits_cost
+            except AppError as e:
+                yield {"type": "error", "message": str(e.msg), "code": int(e.code or 400)}
+                return
 
         started = time.perf_counter()
         error_code: str | None = None

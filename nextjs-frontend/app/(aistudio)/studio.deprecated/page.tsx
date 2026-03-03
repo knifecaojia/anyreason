@@ -895,7 +895,7 @@ function StudioCanvasInner() {
       if (
         sourceNode?.type === "assetNode" &&
         targetNode?.type === "storyboardNode" &&
-        connection.targetHandle === "in-asset"
+        connection.targetHandle === "in"
       ) {
         const assetData = sourceNode.data as unknown as AssetNodeData;
         const storyboardData = targetNode.data as unknown as StoryboardNodeData;

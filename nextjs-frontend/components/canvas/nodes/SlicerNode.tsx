@@ -5,6 +5,7 @@ import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow } from '@/lib/canvas/xyflow-compat';
 import type { SlicerNodeData, StoryboardItem } from '@/lib/canvas/types';
 import { getNodeType } from '@/lib/canvas/node-registry';
+import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import NodeShell from './NodeShell';
 
 /** Parse AI response JSON into StoryboardItem[] */
@@ -43,6 +44,8 @@ export default function SlicerNode(props: NodeProps) {
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
   const reg = getNodeType('slicerNode');
   const ports = reg?.ports ?? [];
+  const { expand, collapse: collapseIcon, resolveLevel } = useNodeIconMode();
+  const renderLevel = resolveLevel();
   const items = data.storyboardItems ?? [];
 
   const handleStartSplit = async () => {
@@ -93,9 +96,13 @@ export default function SlicerNode(props: NodeProps) {
       nodeId={props.id}
       title="拆分节点"
       icon={reg?.icon}
+      iconEmoji="✂️"
       colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
+      renderLevel={renderLevel}
+      onExpand={expand}
+      onCollapse={collapseIcon}
       ports={ports}
       selected={selected}
     >

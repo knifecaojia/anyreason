@@ -13,6 +13,7 @@ const nextConfig = {
               compilerOptions: {
                 skipLibCheck: true,
               },
+              exclude: ['node_modules', '.next'],
             },
           },
         })

@@ -551,3 +551,74 @@ class TaskEventRead(BaseModel):
 class TaskWsTicketRead(BaseModel):
     ticket: str
     expires_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Canvas (创作工坊) — M2.2
+# ---------------------------------------------------------------------------
+
+class CanvasCreate(BaseModel):
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str | None = None
+
+
+class CanvasUpdate(BaseModel):
+    name: str | None = Field(None, min_length=1, max_length=255)
+    description: str | None = None
+    status: Literal["draft", "active", "archived"] | None = None
+    node_count: int | None = None
+
+
+class CanvasRead(BaseModel):
+    id: UUID
+    name: str
+    description: str | None = None
+    user_id: UUID
+    status: str
+    canvas_json_node_id: UUID | None = None
+    thumbnail_node_id: UUID | None = None
+    node_count: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CanvasNodeRead(BaseModel):
+    id: UUID
+    canvas_id: UUID
+    frontend_node_id: str
+    node_type: str
+    source_storyboard_id: UUID | None = None
+    source_asset_id: UUID | None = None
+    config_json: dict[str, Any] = Field(default_factory=dict)
+    status: str
+    last_task_id: UUID | None = None
+    output_file_node_id: UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class CanvasNodeUpsert(BaseModel):
+    frontend_node_id: str = Field(..., min_length=1, max_length=64)
+    node_type: str = Field(..., min_length=1, max_length=32)
+    source_storyboard_id: UUID | None = None
+    source_asset_id: UUID | None = None
+    config_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class CanvasExecutionRead(BaseModel):
+    id: UUID
+    canvas_id: UUID
+    trigger_type: str
+    status: str
+    total_nodes: int
+    completed_nodes: int
+    started_at: datetime | None = None
+    finished_at: datetime | None = None
+    result_summary: dict[str, Any] | None = None
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

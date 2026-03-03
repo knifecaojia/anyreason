@@ -16,34 +16,29 @@ import {
 
 const ALL_NODE_TYPES = [
   'textNoteNode',
-  'mediaNode',
   'assetNode',
-  'referenceNode',
   'scriptNode',
   'generatorNode',
-  'previewNode',
+  'textGenNode',
   'slicerNode',
   'candidateNode',
   'storyboardNode',
 ] as const;
 
-const ALL_GROUPS: NodeGroup[] = ['creation', 'ai-generation', 'display', 'reference'];
+const ALL_GROUPS: NodeGroup[] = ['creation', 'ai-generation', 'reference'];
 
 const GROUP_MAP: Record<NodeGroup, string[]> = {
   creation: ['textNoteNode', 'scriptNode', 'storyboardNode'],
-  'ai-generation': ['generatorNode', 'slicerNode', 'candidateNode'],
-  display: ['previewNode', 'mediaNode'],
-  reference: ['assetNode', 'referenceNode'],
+  'ai-generation': ['textGenNode', 'generatorNode', 'slicerNode', 'candidateNode'],
+  reference: ['assetNode'],
 };
 
 const KIND_MAP: Record<string, string> = {
   textNoteNode: 'text-note',
-  mediaNode: 'media',
   assetNode: 'asset',
-  referenceNode: 'reference',
   scriptNode: 'script',
   generatorNode: 'generator',
-  previewNode: 'preview',
+  textGenNode: 'text-gen',
   slicerNode: 'slicer',
   candidateNode: 'candidate',
   storyboardNode: 'storyboard',
@@ -94,7 +89,7 @@ describe('Feature: infinite-canvas-storyboard-fusion, Property 1: Node registry 
         const reg = getNodeType(nodeType);
         expect(reg).toBeDefined();
 
-        // Node belongs to one of the 4 groups
+        // Node belongs to one of the 3 groups
         expect(ALL_GROUPS).toContain(reg!.group);
 
         // Node appears in exactly one group

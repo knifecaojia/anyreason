@@ -5,6 +5,7 @@ import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow } from '@/lib/canvas/xyflow-compat';
 import type { CandidateNodeData, AssetCandidate } from '@/lib/canvas/types';
 import { getNodeType } from '@/lib/canvas/node-registry';
+import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import NodeShell from './NodeShell';
 
 /** Parse AI response JSON into AssetCandidate[] */
@@ -45,6 +46,8 @@ export default function CandidateNode(props: NodeProps) {
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
   const reg = getNodeType('candidateNode');
   const ports = reg?.ports ?? [];
+  const { expand, collapse: collapseIcon, resolveLevel } = useNodeIconMode();
+  const renderLevel = resolveLevel();
   const candidates = data.candidates ?? [];
 
   const handleStartExtract = async () => {
@@ -95,9 +98,13 @@ export default function CandidateNode(props: NodeProps) {
       nodeId={props.id}
       title="资产候选清单"
       icon={reg?.icon}
+      iconEmoji="👥"
       colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
+      renderLevel={renderLevel}
+      onExpand={expand}
+      onCollapse={collapseIcon}
       ports={ports}
       selected={selected}
     >

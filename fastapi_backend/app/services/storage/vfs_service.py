@@ -585,6 +585,63 @@ async def get_or_create_user_ai_folder(*, db: AsyncSession, user_id: UUID) -> Fi
     return folder
 
 
+async def get_or_create_canvas_output_folder(
+    *, db: AsyncSession, user_id: UUID, canvas_id: str,
+) -> FileNode:
+    """Ensure ``/创作工坊/{canvas_id}/`` exists and return the canvas folder node."""
+    from app.vfs_layout import CANVAS_ROOT_FOLDER_NAME, canvas_output_folder_name
+
+    # 1) Ensure root 创作工坊 folder
+    res = await db.execute(
+        select(FileNode).where(
+            FileNode.created_by == user_id,
+            FileNode.parent_id.is_(None),
+            FileNode.name == CANVAS_ROOT_FOLDER_NAME,
+            FileNode.is_folder.is_(True),
+            FileNode.project_id.is_(None),
+            FileNode.workspace_id.is_(None),
+        )
+    )
+    root = res.scalars().first()
+    if not root:
+        root = FileNode(
+            id=uuid4(),
+            name=CANVAS_ROOT_FOLDER_NAME,
+            is_folder=True,
+            parent_id=None,
+            workspace_id=None,
+            project_id=None,
+            created_by=user_id,
+        )
+        db.add(root)
+        await db.flush()
+
+    # 2) Ensure canvas-specific sub-folder
+    folder_name = canvas_output_folder_name(canvas_id=canvas_id)
+    res2 = await db.execute(
+        select(FileNode).where(
+            FileNode.parent_id == root.id,
+            FileNode.name == folder_name,
+            FileNode.is_folder.is_(True),
+        )
+    )
+    canvas_folder = res2.scalars().first()
+    if not canvas_folder:
+        canvas_folder = FileNode(
+            id=uuid4(),
+            name=folder_name,
+            is_folder=True,
+            parent_id=root.id,
+            workspace_id=None,
+            project_id=None,
+            created_by=user_id,
+        )
+        db.add(canvas_folder)
+        await db.flush()
+
+    return canvas_folder
+
+
 async def get_or_create_project_ai_folder(*, db: AsyncSession, user_id: UUID, project_id: UUID) -> FileNode:
     await vfs_service._assert_project_access(db=db, user_id=user_id, project_id=project_id)
     res = await db.execute(

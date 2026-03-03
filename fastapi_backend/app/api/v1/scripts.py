@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.exceptions import AppError
 from app.database import User, get_async_session
-from app.models import Asset, AssetBinding, Episode, FileNode, Storyboard
+from app.models import Asset, AssetBinding, Episode, FileNode, Script, Storyboard
 from app.schemas import AssetBrief, AssetResourceRead, EpisodeRead, StoryboardRead, ScriptHierarchyRead, ScriptRead, ScriptStatsRead
 from app.schemas_response import ResponseBase
 from app.services.script_parse_service import script_parse_service

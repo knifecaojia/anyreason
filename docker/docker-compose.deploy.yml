@@ -146,8 +146,9 @@ services:
 
   task-worker:
     image: anyreason-backend
-    container_name: anyreason-prod-worker
     restart: unless-stopped
+    deploy:
+      replicas: ${WORKER_REPLICAS:-3}
     env_file:
       - .env
     environment:

@@ -29,7 +29,7 @@ export interface TextNoteNodeData extends BaseNodeData {
   content: string;
 }
 
-/** 媒体节点 - 来自 Studio MediaNodeData */
+/** @deprecated MediaNodeData — merged into GeneratorNode (upload mode). Kept for lazy migration. */
 export interface MediaNodeData extends BaseNodeData {
   kind: 'media';
   title: string;
@@ -47,7 +47,7 @@ export interface AssetNodeData extends BaseNodeData {
   category?: string;
 }
 
-/** 引用节点 - 来自 Studio ReferenceNodeData */
+/** @deprecated ReferenceNodeData — merged into StoryboardNode. Kept for lazy migration. */
 export interface ReferenceNodeData extends BaseNodeData {
   kind: 'reference';
   title: string;
@@ -66,7 +66,7 @@ export interface ScriptNodeData extends BaseNodeData {
   text: string; // 剧本文本，最大 10000 字符
 }
 
-/** 生成节点 - 来自 Storyboard GeneratorNode */
+/** 生成节点 - 合并原 PreviewNode 预览能力 + MediaNode 手动上传模式 */
 export interface GeneratorNodeData extends BaseNodeData {
   kind: 'generator';
   model: string; // AI 模型标识
@@ -78,15 +78,33 @@ export interface GeneratorNodeData extends BaseNodeData {
   progress?: number; // 0-100
   taskId?: string; // 后端任务 ID
   lastImage?: string; // 生成结果 URL
+  lastVideo?: string; // 视频生成结果 URL
   error?: string;
   generationMode?: 'image' | 'video'; // 生成模式，默认 'image'
+  uploadMode?: boolean; // 手动上传模式 (merged from MediaNode)
+  promptSource?: 'manual' | 'upstream' | null; // 提示词来源: 手动编辑 vs TextGenNode 自动填入
 }
 
-/** 预览节点 - 来自 Storyboard PreviewNode */
+/** @deprecated PreviewNodeData — merged into GeneratorNode. Kept for lazy migration. */
 export interface PreviewNodeData extends BaseNodeData {
   kind: 'preview';
   mediaType?: 'image' | 'video';
   url?: string; // 预览内容 URL
+}
+
+/** 文本生成节点 (TextGenNode) — LLM 驱动的文本/提示词生成 */
+export interface TextGenNodeData extends BaseNodeData {
+  kind: 'text-gen';
+  systemPrompt: string;
+  userPromptTemplate: string;
+  bindingKey: string; // AI 文本模型配置 key
+  modelConfigId?: string; // 直接指定模型配置 ID（用户从下拉选择时设置）
+  presetId?: string; // 关联提示词预设 ID
+  temperature: number; // 默认 0.7
+  maxTokens: number; // 默认 2048
+  lastOutput?: string; // 最近一次生成的输出文本
+  status: 'idle' | 'streaming' | 'succeeded' | 'failed';
+  error?: string;
 }
 
 /** 分镜条目（拆分节点输出） */
@@ -121,6 +139,56 @@ export interface CandidateNodeData extends BaseNodeData {
   error?: string;
 }
 
+/** 图像输出节点 — 从 GeneratorNode 拆分 */
+export interface ImageOutputNodeData extends BaseNodeData {
+  kind: 'image-output';
+  model: string;
+  bindingKey?: string; // AI 图像模型绑定 key
+  modelConfigId?: string; // 直接指定模型配置 ID
+  prompt: string;
+  negPrompt?: string;
+  aspectRatio?: string;
+  resolution?: string; // 清晰度: 'standard' | 'hd' | '2k' | '4k'
+  referenceImages?: string[]; // 多图参考 URL 列表
+  isProcessing?: boolean;
+  progress?: number;
+  taskId?: string;
+  lastImage?: string;
+  lastImageFull?: string; // full-resolution download URL (lastImage may be thumbnail)
+  error?: string;
+  uploadMode?: boolean;
+  promptSource?: 'manual' | 'upstream' | null;
+}
+
+/** 视频输出节点 — 从 GeneratorNode 拆分 */
+export interface VideoOutputNodeData extends BaseNodeData {
+  kind: 'video-output';
+  model: string;
+  bindingKey?: string; // AI 视频模型绑定 key
+  modelConfigId?: string; // 直接指定模型配置 ID
+  prompt: string;
+  negPrompt?: string;
+  aspectRatio?: string;
+  resolution?: string; // 清晰度: 'standard' | 'hd' | '2k' | '4k'
+  duration?: number; // 视频时长（秒）
+  referenceImages?: string[]; // 多图参考 URL 列表
+  isProcessing?: boolean;
+  progress?: number;
+  taskId?: string;
+  lastVideo?: string;
+  referenceImage?: string; // 参考图 URL（图生视频）— 兼容旧数据
+  error?: string;
+  promptSource?: 'manual' | 'upstream' | null;
+}
+
+/** 分组节点 */
+export interface GroupNodeData extends BaseNodeData {
+  kind: 'group';
+  label?: string;
+  color?: string;
+  childNodeIds?: string[];
+}
+
 /** 分镜节点 - 新建 */
 export interface StoryboardNodeData extends BaseNodeData {
   kind: 'storyboard';
@@ -137,28 +205,34 @@ export interface StoryboardNodeData extends BaseNodeData {
 /** 所有节点数据的联合类型 */
 export type UnifiedNodeData =
   | TextNoteNodeData
-  | MediaNodeData
   | AssetNodeData
-  | ReferenceNodeData
   | ScriptNodeData
   | GeneratorNodeData
-  | PreviewNodeData
+  | TextGenNodeData
   | SlicerNodeData
   | CandidateNodeData
-  | StoryboardNodeData;
+  | StoryboardNodeData
+  | ImageOutputNodeData
+  | VideoOutputNodeData
+  | GroupNodeData
+  // @deprecated — kept for lazy migration
+  | MediaNodeData
+  | PreviewNodeData
+  | ReferenceNodeData;
 
 /** 节点类型标识 */
 export type UnifiedNodeType =
   | 'textNoteNode'
-  | 'mediaNode'
   | 'assetNode'
-  | 'referenceNode'
   | 'scriptNode'
   | 'generatorNode'
-  | 'previewNode'
+  | 'textGenNode'
   | 'slicerNode'
   | 'candidateNode'
-  | 'storyboardNode';
+  | 'storyboardNode'
+  | 'imageOutputNode'
+  | 'videoOutputNode'
+  | 'groupNode';
 
 // ===== 序列化类型 =====
 

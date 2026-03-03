@@ -5,21 +5,24 @@ import type {
   SerializedEdge,
   PortDataType,
 } from './types';
+import { needsMigration, migrateCanvasSnapshot } from './migrate-canvas';
 
 /** Current snapshot format version */
 export const CURRENT_VERSION = 2;
 
 const VALID_NODE_TYPES = new Set([
   'textNoteNode',
-  'mediaNode',
   'assetNode',
-  'referenceNode',
   'scriptNode',
   'generatorNode',
-  'previewNode',
+  'textGenNode',
   'slicerNode',
   'candidateNode',
   'storyboardNode',
+  // Deprecated types accepted for import & lazy migration
+  'mediaNode',
+  'previewNode',
+  'referenceNode',
 ]);
 
 const VALID_PORT_TYPES = new Set<string>([
@@ -237,12 +240,8 @@ export function deserializeCanvas(
 // ===== migrateSnapshot =====
 
 export function migrateSnapshot(snapshot: WorkflowSnapshot): WorkflowSnapshot {
-  if (snapshot.version >= CURRENT_VERSION) {
-    return snapshot;
-  }
-
   // Deep clone to avoid mutating the original
-  const migrated: WorkflowSnapshot = JSON.parse(JSON.stringify(snapshot));
+  let migrated: WorkflowSnapshot = JSON.parse(JSON.stringify(snapshot));
 
   // v1 → v2: add collapsed defaults and portType to edges
   if (migrated.version < 2) {
@@ -260,6 +259,11 @@ export function migrateSnapshot(snapshot: WorkflowSnapshot): WorkflowSnapshot {
     }));
 
     migrated.version = 2;
+  }
+
+  // M1.2: Lazy migration — convert deprecated node types & old port names
+  if (needsMigration(migrated)) {
+    migrated = migrateCanvasSnapshot(migrated);
   }
 
   return migrated;

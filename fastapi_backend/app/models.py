@@ -33,6 +33,30 @@ asset_type_enum = ENUM(
     create_type=True,
 )
 
+canvas_status_enum = ENUM(
+    "draft", "active", "archived",
+    name="canvas_status_enum",
+    create_type=False,
+)
+
+canvas_node_status_enum = ENUM(
+    "pending", "running", "completed", "failed",
+    name="canvas_node_status_enum",
+    create_type=False,
+)
+
+canvas_execution_status_enum = ENUM(
+    "pending", "running", "completed", "partial", "failed", "cancelled",
+    name="canvas_execution_status_enum",
+    create_type=False,
+)
+
+canvas_trigger_type_enum = ENUM(
+    "manual", "batch", "auto",
+    name="canvas_trigger_type_enum",
+    create_type=False,
+)
+
 
 class Base(DeclarativeBase):
     pass
@@ -1501,4 +1525,139 @@ class AIModel(Base):
             "category IS NULL OR category IN ('text', 'image', 'video')",
             name="ck_ai_models_category",
         ),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Canvas (创作工坊) — M2.1
+# Canvas is a user-level independent resource (no project_id / episode_id FK).
+# ---------------------------------------------------------------------------
+
+class Canvas(Base):
+    __tablename__ = "canvases"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    name = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    status = Column(
+        canvas_status_enum,
+        nullable=False,
+        server_default=text("'draft'"),
+    )
+    canvas_json_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    thumbnail_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    node_count = Column(Integer, nullable=False, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User", backref=backref("canvases", cascade="all, delete-orphan", passive_deletes=True))
+
+    __table_args__ = (
+        Index("idx_canvases_user", "user_id"),
+        Index("idx_canvases_status", "status"),
+        Index("idx_canvases_user_status", "user_id", "status"),
+    )
+
+
+class CanvasNode(Base):
+    """Node registration for VFS→DB sync.
+
+    source_storyboard_id / source_asset_id are **weak references** (no FK)
+    so nodes survive even if the referenced entity is deleted.
+    """
+    __tablename__ = "canvas_nodes"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    canvas_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("canvases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    frontend_node_id = Column(String(64), nullable=False)
+    node_type = Column(String(32), nullable=False)
+    source_storyboard_id = Column(UUID(as_uuid=True), nullable=True)  # weak ref, no FK
+    source_asset_id = Column(UUID(as_uuid=True), nullable=True)       # weak ref, no FK
+    config_json = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    status = Column(
+        canvas_node_status_enum,
+        nullable=False,
+        server_default=text("'pending'"),
+    )
+    last_task_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("tasks.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    output_file_node_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("file_nodes.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    canvas = relationship("Canvas", backref=backref("nodes", cascade="all, delete-orphan", passive_deletes=True))
+
+    __table_args__ = (
+        UniqueConstraint("canvas_id", "frontend_node_id", name="uq_canvas_nodes_canvas_frontend_id"),
+        Index("idx_canvas_nodes_canvas", "canvas_id"),
+        Index("idx_canvas_nodes_type", "node_type"),
+        Index("idx_canvas_nodes_status", "status"),
+        Index("idx_canvas_nodes_source_storyboard", "source_storyboard_id"),
+        Index("idx_canvas_nodes_source_asset", "source_asset_id"),
+        CheckConstraint(
+            "node_type IN ('textNoteNode', 'scriptNode', 'storyboardNode', "
+            "'textGenNode', 'generatorNode', 'slicerNode', 'candidateNode', 'assetNode', "
+            "'imageOutputNode', 'videoOutputNode', 'groupNode')",
+            name="ck_canvas_nodes_node_type",
+        ),
+    )
+
+
+class CanvasExecution(Base):
+    __tablename__ = "canvas_executions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    canvas_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("canvases.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    trigger_type = Column(
+        canvas_trigger_type_enum,
+        nullable=False,
+        server_default=text("'manual'"),
+    )
+    status = Column(
+        canvas_execution_status_enum,
+        nullable=False,
+        server_default=text("'pending'"),
+    )
+    total_nodes = Column(Integer, nullable=False, server_default=text("0"))
+    completed_nodes = Column(Integer, nullable=False, server_default=text("0"))
+    started_at = Column(DateTime(timezone=True), nullable=True)
+    finished_at = Column(DateTime(timezone=True), nullable=True)
+    result_summary = Column(JSONB, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    canvas = relationship("Canvas", backref=backref("executions", cascade="all, delete-orphan", passive_deletes=True))
+
+    __table_args__ = (
+        Index("idx_canvas_executions_canvas", "canvas_id"),
+        Index("idx_canvas_executions_status", "status"),
+        Index("idx_canvas_executions_canvas_status", "canvas_id", "status"),
+        Index("idx_canvas_executions_created", "created_at"),
     )

@@ -168,7 +168,7 @@ class AssetService:
         if name is not None:
             asset.name = name.strip()[:100]
         if category is not None:
-            asset.category = (category.strip() or None)[:50] if category is not None else None
+            asset.category = category.strip()[:50] or None if category is not None else None
         if lifecycle_status is not None:
             asset.lifecycle_status = lifecycle_status
 
