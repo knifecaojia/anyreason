@@ -8,8 +8,8 @@ import type { NodeProps } from './xyflow-compat';
 import type { PortDefinition } from './types';
 import {
   StickyNote, FileText, Clapperboard,
-  Wand2, Scissors, Users,
-  Package, MessageSquareText,
+  Scissors, Users,
+  Package, MessageSquareText, MessageCircle,
   Image as ImageIcon, Film, Group,
 } from 'lucide-react';
 
@@ -101,13 +101,13 @@ export function buildReactFlowNodeTypes(): Record<string, ComponentType<NodeProp
 import TextNoteNode from '@/components/canvas/nodes/TextNoteNode';
 import AssetNode from '@/components/canvas/nodes/AssetNode';
 import ScriptNode from '@/components/canvas/nodes/ScriptNode';
-import GeneratorNode from '@/components/canvas/nodes/GeneratorNode';
 import ImageOutputNode from '@/components/canvas/nodes/ImageOutputNode';
 import VideoOutputNode from '@/components/canvas/nodes/VideoOutputNode';
 import GroupNode from '@/components/canvas/nodes/GroupNode';
 import SlicerNode from '@/components/canvas/nodes/SlicerNode';
 import CandidateNode from '@/components/canvas/nodes/CandidateNode';
 import StoryboardNode from '@/components/canvas/nodes/StoryboardNode';
+import PromptNode from '@/components/canvas/nodes/PromptNode';
 import TextGenNode from '@/components/canvas/nodes/TextGenNode';
 
 // ===== Register All 8 Node Types =====
@@ -129,6 +129,7 @@ registerNodeType({
     content: '',
   }),
   ports: [
+    { id: 'in', direction: 'input', dataType: 'text', label: 'Input' },
     { id: 'out', direction: 'output', dataType: 'text', label: 'Output' },
   ],
 });
@@ -170,6 +171,23 @@ registerNodeType({
   ],
 });
 
+registerNodeType({
+  type: 'promptNode',
+  label: '提示词',
+  group: 'creation',
+  icon: MessageCircle,
+  colorClass: GROUP_COLORS['creation'],
+  component: PromptNode,
+  defaultData: () => ({
+    kind: 'prompt',
+    content: '',
+  }),
+  ports: [
+    { id: 'in', direction: 'input', dataType: 'text', label: 'Input' },
+    { id: 'out', direction: 'output', dataType: 'text', label: 'Output' },
+  ],
+});
+
 // --- AI Generation Group ---
 
 registerNodeType({
@@ -188,29 +206,6 @@ registerNodeType({
     maxTokens: 2048,
     lastOutput: undefined,
     status: 'idle',
-  }),
-  ports: [
-    { id: 'in', direction: 'input', dataType: 'text', label: 'Input' },
-    { id: 'out', direction: 'output', dataType: 'text', label: 'Output' },
-  ],
-});
-
-registerNodeType({
-  type: 'generatorNode',
-  label: '生成节点',
-  group: 'ai-generation',
-  icon: Wand2,
-  colorClass: GROUP_COLORS['ai-generation'],
-  component: GeneratorNode,
-  defaultData: () => ({
-    kind: 'generator',
-    model: '',
-    prompt: '',
-    negPrompt: '',
-    aspectRatio: '1:1',
-    isProcessing: false,
-    progress: 0,
-    promptSource: null,
   }),
   ports: [
     { id: 'in', direction: 'input', dataType: 'text', label: 'Input' },

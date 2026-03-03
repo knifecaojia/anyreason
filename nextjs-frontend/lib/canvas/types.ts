@@ -45,6 +45,8 @@ export interface AssetNodeData extends BaseNodeData {
   assetType: string;
   thumbnail?: string;
   category?: string;
+  resources?: { thumbnail: string; download: string }[];
+  activeResourceIndex?: number;
 }
 
 /** @deprecated ReferenceNodeData — merged into StoryboardNode. Kept for lazy migration. */
@@ -66,7 +68,7 @@ export interface ScriptNodeData extends BaseNodeData {
   text: string; // 剧本文本，最大 10000 字符
 }
 
-/** 生成节点 - 合并原 PreviewNode 预览能力 + MediaNode 手动上传模式 */
+/** @deprecated GeneratorNodeData — migrated to ImageOutputNode / VideoOutputNode. Kept for lazy migration. */
 export interface GeneratorNodeData extends BaseNodeData {
   kind: 'generator';
   model: string; // AI 模型标识
@@ -90,6 +92,12 @@ export interface PreviewNodeData extends BaseNodeData {
   kind: 'preview';
   mediaType?: 'image' | 'video';
   url?: string; // 预览内容 URL
+}
+
+/** 提示词节点 — 无 AI，直接传递文本给下游 */
+export interface PromptNodeData extends BaseNodeData {
+  kind: 'prompt';
+  content: string;
 }
 
 /** 文本生成节点 (TextGenNode) — LLM 驱动的文本/提示词生成 */
@@ -207,7 +215,7 @@ export type UnifiedNodeData =
   | TextNoteNodeData
   | AssetNodeData
   | ScriptNodeData
-  | GeneratorNodeData
+  | PromptNodeData
   | TextGenNodeData
   | SlicerNodeData
   | CandidateNodeData
@@ -225,7 +233,7 @@ export type UnifiedNodeType =
   | 'textNoteNode'
   | 'assetNode'
   | 'scriptNode'
-  | 'generatorNode'
+  | 'promptNode'
   | 'textGenNode'
   | 'slicerNode'
   | 'candidateNode'

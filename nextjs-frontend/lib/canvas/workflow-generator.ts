@@ -109,13 +109,13 @@ export interface FullWorkflowResult {
  * Generates a complete workflow for an episode:
  *   Row 1: scriptNode → slicerNode
  *   Row 2: storyboardNode group (horizontal, GROUP_H_SPACING apart)
- *   Row 3: generatorNode group (aligned under storyboard nodes)
- *   Row 4: previewNode group (aligned under generator nodes)
+ *   Row 3: textGenNode group (aligned under storyboard nodes)
+ *   Row 4: imageOutputNode group (aligned under textGenNodes)
  *
  * All nodes are automatically connected:
- *   - scriptNode.text → slicerNode.in-text
- *   - storyboardNode[i].out-desc → generatorNode[i].in-script
- *   - generatorNode[i].image → previewNode[i].in-image
+ *   - scriptNode.out → slicerNode.in
+ *   - storyboardNode[i].out → textGenNode[i].in
+ *   - textGenNode[i].out → imageOutputNode[i].in
  *
  * @param episodeData - Episode data including storyboards
  * @param startPosition - The top-left position for the workflow
@@ -244,30 +244,30 @@ export function generateFullWorkflow(
     } as Edge);
   }
 
-  // --- Row 4: Generator Nodes (aligned under textGenNodes) ---
+  // --- Row 4: Image Output Nodes (aligned under textGenNodes) ---
   const row4Y = row3Y + V_SPACING;
-  const generatorNodeIds: string[] = [];
+  const imageOutputNodeIds: string[] = [];
 
-  const generatorReg = getNodeType('generatorNode');
+  const imageOutputReg = getNodeType('imageOutputNode');
 
   for (let i = 0; i < storyboards.length; i++) {
     const nodeId = generateId();
-    generatorNodeIds.push(nodeId);
+    imageOutputNodeIds.push(nodeId);
 
     nodes.push({
       id: nodeId,
-      type: 'generatorNode',
+      type: 'imageOutputNode',
       position: {
         x: startPosition.x + i * GROUP_H_SPACING,
         y: row4Y,
       },
       data: {
-        ...(generatorReg?.defaultData() ?? {}),
-        kind: 'generator',
+        ...(imageOutputReg?.defaultData() ?? {}),
+        kind: 'image-output',
       } as any,
     });
 
-    // Edge: textGenNode[i].out → generatorNode[i].in
+    // Edge: textGenNode[i].out → imageOutputNode[i].in
     edges.push({
       id: generateId(),
       source: textGenNodeIds[i],

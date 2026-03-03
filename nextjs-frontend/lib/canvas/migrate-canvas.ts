@@ -1,6 +1,6 @@
 // lib/canvas/migrate-canvas.ts
 // Lazy migration for canvas data: converts deprecated node types to their new equivalents.
-// M1.2: PreviewNode → GeneratorNode, MediaNode → GeneratorNode (upload mode), ReferenceNode → StoryboardNode.
+// M1.2: PreviewNode/MediaNode/GeneratorNode → ImageOutputNode/VideoOutputNode, ReferenceNode → StoryboardNode.
 
 import type { SerializedNode, SerializedEdge } from './types';
 
@@ -33,12 +33,31 @@ const PORT_REMAP: Record<string, string> = {
 function migrateNode(node: SerializedNode): SerializedNode {
   switch (node.type) {
     case 'previewNode': {
-      // PreviewNode → GeneratorNode (result already generated, use as uploaded media)
+      // PreviewNode → ImageOutputNode or VideoOutputNode
+      const pvMode = (node.data.mediaType as string) === 'video' ? 'video' : 'image';
+      if (pvMode === 'video') {
+        return {
+          ...node,
+          type: 'videoOutputNode',
+          data: {
+            kind: 'video-output',
+            model: '',
+            prompt: '',
+            negPrompt: '',
+            aspectRatio: '16:9',
+            duration: 4,
+            isProcessing: false,
+            progress: 100,
+            lastVideo: node.data.url ?? undefined,
+            promptSource: null,
+          },
+        };
+      }
       return {
         ...node,
-        type: 'generatorNode',
+        type: 'imageOutputNode',
         data: {
-          kind: 'generator',
+          kind: 'image-output',
           model: '',
           prompt: '',
           negPrompt: '',
@@ -46,7 +65,6 @@ function migrateNode(node: SerializedNode): SerializedNode {
           isProcessing: false,
           progress: 100,
           lastImage: node.data.url ?? undefined,
-          generationMode: (node.data.mediaType as string) === 'video' ? 'video' : 'image',
           uploadMode: true,
           promptSource: null,
         },
@@ -54,12 +72,31 @@ function migrateNode(node: SerializedNode): SerializedNode {
     }
 
     case 'mediaNode': {
-      // MediaNode → GeneratorNode (upload mode)
+      // MediaNode → ImageOutputNode or VideoOutputNode
+      const mdMode = (node.data.mediaType as string) === 'video' ? 'video' : 'image';
+      if (mdMode === 'video') {
+        return {
+          ...node,
+          type: 'videoOutputNode',
+          data: {
+            kind: 'video-output',
+            model: '',
+            prompt: '',
+            negPrompt: '',
+            aspectRatio: '16:9',
+            duration: 4,
+            isProcessing: false,
+            progress: node.data.resultUrl ? 100 : 0,
+            lastVideo: node.data.resultUrl ?? undefined,
+            promptSource: null,
+          },
+        };
+      }
       return {
         ...node,
-        type: 'generatorNode',
+        type: 'imageOutputNode',
         data: {
-          kind: 'generator',
+          kind: 'image-output',
           model: '',
           prompt: '',
           negPrompt: '',
@@ -67,7 +104,6 @@ function migrateNode(node: SerializedNode): SerializedNode {
           isProcessing: false,
           progress: node.data.resultUrl ? 100 : 0,
           lastImage: node.data.resultUrl ?? undefined,
-          generationMode: (node.data.mediaType as string) === 'video' ? 'video' : 'image',
           uploadMode: true,
           promptSource: null,
         },

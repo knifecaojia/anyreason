@@ -20,15 +20,20 @@
                 "type": "string",
                 "enum": [
                   "textNoteNode",
-                  "mediaNode",
                   "assetNode",
-                  "referenceNode",
                   "scriptNode",
-                  "generatorNode",
-                  "previewNode",
+                  "promptNode",
+                  "textGenNode",
                   "slicerNode",
                   "candidateNode",
-                  "storyboardNode"
+                  "storyboardNode",
+                  "imageOutputNode",
+                  "videoOutputNode",
+                  "groupNode",
+                  "mediaNode",
+                  "referenceNode",
+                  "generatorNode",
+                  "previewNode"
                 ]
               },
               "position": {

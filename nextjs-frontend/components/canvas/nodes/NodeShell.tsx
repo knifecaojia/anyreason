@@ -27,6 +27,7 @@ const HANDLE_STYLE: React.CSSProperties = {
   background: '#374151', border: '3px solid #1f2937',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: 14, fontWeight: 700, color: '#9ca3af',
+  top: '50%', zIndex: 30,
 };
 
 function PortHandles({ ports, selected = false }: { ports: PortDefinition[]; selected?: boolean }) {

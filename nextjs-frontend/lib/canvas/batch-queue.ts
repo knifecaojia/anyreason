@@ -50,29 +50,27 @@ export class BatchQueueManager {
    * and add as pending QueueItems.
    */
   enqueue(nodeIds: string[], nodes: Node[], edges: Edge[]): void {
-    // Filter to only generator nodes
-    const generatorNodeIds = nodeIds.filter((id) => {
+    // Filter to only output generation nodes (image / video)
+    const OUTPUT_TYPES = new Set(['imageOutputNode', 'videoOutputNode']);
+    const outputNodeIds = nodeIds.filter((id) => {
       const node = nodes.find((n) => n.id === id);
       if (!node) return false;
-      // Check via node-registry or node.type
-      const reg = getNodeType(node.type ?? '');
-      if (reg && reg.type === 'generatorNode') return true;
-      return node.type === 'generatorNode';
+      return OUTPUT_TYPES.has(node.type ?? '');
     });
 
-    if (generatorNodeIds.length === 0) return;
+    if (outputNodeIds.length === 0) return;
 
     // Topologically sort the filtered nodes
-    const filteredNodes = nodes.filter((n) => generatorNodeIds.includes(n.id));
+    const filteredNodes = nodes.filter((n) => outputNodeIds.includes(n.id));
     const relevantEdges = edges.filter(
-      (e) => generatorNodeIds.includes(e.source) && generatorNodeIds.includes(e.target),
+      (e) => outputNodeIds.includes(e.source) && outputNodeIds.includes(e.target),
     );
     const sortResult = topologySort(filteredNodes, relevantEdges);
 
     // Use sorted order, falling back to original order for nodes not in sort result
-    const sortedIds = sortResult.order.filter((id) => generatorNodeIds.includes(id));
-    // Add any remaining generator nodes not in the sort result (e.g., disconnected)
-    for (const id of generatorNodeIds) {
+    const sortedIds = sortResult.order.filter((id) => outputNodeIds.includes(id));
+    // Add any remaining output nodes not in the sort result (e.g., disconnected)
+    for (const id of outputNodeIds) {
       if (!sortedIds.includes(id)) {
         sortedIds.push(id);
       }

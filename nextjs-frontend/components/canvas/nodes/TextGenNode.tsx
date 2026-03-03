@@ -136,6 +136,57 @@ async function* streamChat(
   }
 }
 
+// ===== Editable Preview Modal =====
+
+function TextGenPreviewModal({ text, onClose, onSave }: { text: string; onClose: () => void; onSave: (newText: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(text);
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={onClose}>
+      <div className="bg-background border border-border/40 rounded-xl shadow-2xl w-[640px] max-w-[90vw] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
+          <span className="text-sm font-medium text-textMain">{editing ? '编辑内容' : '生成内容预览'}</span>
+          <div className="flex items-center gap-2">
+            {!editing ? (
+              <button type="button" onClick={() => { setDraft(text); setEditing(true); }}
+                className="text-xs text-textMuted hover:text-textMain transition-colors px-2 py-1 rounded hover:bg-surfaceHighlight">
+                ✏️ 编辑
+              </button>
+            ) : (
+              <>
+                <button type="button" onClick={() => setEditing(false)}
+                  className="text-xs text-textMuted hover:text-textMain transition-colors px-2 py-1 rounded hover:bg-surfaceHighlight">
+                  取消
+                </button>
+                <button type="button" onClick={() => onSave(draft)}
+                  className="text-xs text-white bg-primary hover:bg-primary/80 transition-colors px-3 py-1 rounded">
+                  保存
+                </button>
+              </>
+            )}
+            <button type="button" onClick={onClose} className="text-textMuted hover:text-textMain transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+        {editing ? (
+          <textarea
+            className="flex-1 overflow-y-auto px-4 py-3 text-sm text-textMain bg-transparent outline-none resize-none min-h-[300px]"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            autoFocus
+          />
+        ) : (
+          <div className="flex-1 overflow-y-auto px-4 py-3 prose prose-sm prose-invert max-w-none text-textMain">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{text}</ReactMarkdown>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ===== Component =====
 
 export default function TextGenNode(props: NodeProps) {
@@ -282,13 +333,13 @@ export default function TextGenNode(props: NodeProps) {
     {/* Single input handle — left center, animated */}
     <Handle id="in" type="target" position={Position.Left}
       className="node-handle-in"
-      style={{ width: 28, height: 28, borderRadius: 9999, background: '#374151', border: '3px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#9ca3af' }}>
+      style={{ width: 28, height: 28, borderRadius: 9999, background: '#374151', border: '3px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#9ca3af', top: '50%', zIndex: 30 }}>
       <span className="pointer-events-none select-none leading-none">+</span>
     </Handle>
     {/* Single output handle — right center, animated */}
     <Handle id="out" type="source" position={Position.Right}
       className="node-handle-out"
-      style={{ width: 28, height: 28, borderRadius: 9999, background: '#374151', border: '3px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#9ca3af' }}>
+      style={{ width: 28, height: 28, borderRadius: 9999, background: '#374151', border: '3px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#9ca3af', top: '50%', zIndex: 30 }}>
       <span className="pointer-events-none select-none leading-none">+</span>
     </Handle>
 
@@ -419,21 +470,19 @@ export default function TextGenNode(props: NodeProps) {
         </div>
       </div>
 
-      {/* Markdown preview modal */}
+      {/* Editable preview modal */}
       {showPreviewModal && typeof document !== 'undefined' && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50" onClick={() => setShowPreviewModal(false)}>
-          <div className="bg-background border border-border/40 rounded-xl shadow-2xl w-[640px] max-w-[90vw] max-h-[80vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-border/30">
-              <span className="text-sm font-medium text-textMain">生成内容预览</span>
-              <button type="button" onClick={() => setShowPreviewModal(false)} className="text-textMuted hover:text-textMain transition-colors">
-                <X size={16} />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto px-4 py-3 prose prose-sm prose-invert max-w-none text-textMain">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{String(displayText)}</ReactMarkdown>
-            </div>
-          </div>
-        </div>,
+        <TextGenPreviewModal
+          text={String(lastOutput)}
+          onClose={() => setShowPreviewModal(false)}
+          onSave={(newText) => {
+            updateNodeData(props.id, { ...data, lastOutput: newText, status: 'succeeded' });
+            const currentNodes = getNodes();
+            const currentEdges = getEdges();
+            propagateData(props.id, 'out', newText, currentNodes, currentEdges, rf.setNodes);
+            setShowPreviewModal(false);
+          }}
+        />,
         document.body,
       )}
 

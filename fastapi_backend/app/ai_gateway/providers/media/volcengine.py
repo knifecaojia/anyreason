@@ -7,6 +7,55 @@ from app.ai_gateway.providers.base_media import MediaProvider
 from app.schemas_media import MediaRequest, MediaResponse
 from app.core.exceptions import AppError
 
+def _resolve_volcengine_size(
+    resolution: str | None,
+    aspect_ratio: str | None,
+    resolution_tier: str | None = None,
+) -> str:
+    """将前端参数转换为 Volcengine SDK 的 size 参数（WIDTHxHEIGHT 格式）。
+
+    优先级：resolution_tier > resolution > 默认值。
+    SeedDream 系列模型最低像素 3,686,400（≈1920²），所以所有档位都需满足此下限。
+
+    Volcengine size 接受: 'WIDTHxHEIGHT' | '1k' | '2k' | '4k'
+    """
+    # SeedDream 最低 3,686,400 像素；按比例算最小尺寸
+    _SIZE_MAP: dict[str, dict[str, str]] = {
+        "standard": {
+            "1:1": "1920x1920", "16:9": "2560x1440", "9:16": "1440x2560",
+            "4:3": "2216x1664", "3:4": "1664x2216",
+        },
+        "hd": {
+            "1:1": "1920x1920", "16:9": "2560x1440", "9:16": "1440x2560",
+            "4:3": "2216x1664", "3:4": "1664x2216",
+        },
+        "1k": {
+            "1:1": "1920x1920", "16:9": "2560x1440", "9:16": "1440x2560",
+            "4:3": "2216x1664", "3:4": "1664x2216",
+        },
+        "2k": {
+            "1:1": "2048x2048", "16:9": "2560x1440", "9:16": "1440x2560",
+            "4:3": "2216x1664", "3:4": "1664x2216",
+        },
+        "4k": {
+            "1:1": "4096x4096", "16:9": "3840x2160", "9:16": "2160x3840",
+            "4:3": "4096x3072", "3:4": "3072x4096",
+        },
+    }
+
+    # 决定使用哪个 resolution key（resolution_tier 优先）
+    raw = resolution_tier or resolution or "standard"
+    res_key = raw.strip().lower()
+    ratio_key = (aspect_ratio or "1:1").strip()
+
+    # 已经是 WIDTHxHEIGHT 格式，直接返回
+    if "x" in res_key and res_key.replace("x", "").isdigit():
+        return raw.strip()
+
+    tier = _SIZE_MAP.get(res_key, _SIZE_MAP["standard"])
+    return tier.get(ratio_key, tier.get("1:1", "1920x1920"))
+
+
 class VolcengineMediaProvider(MediaProvider):
     def __init__(self, api_key: str, base_url: str = "https://ark.cn-beijing.volces.com/api/v3"):
         self.api_key = api_key
@@ -30,29 +79,18 @@ class VolcengineMediaProvider(MediaProvider):
         payload.update(request.param_json)
 
         # 移除前端专用字段，不传给 SDK
-        payload.pop("resolution_tier", None)
-        payload.pop("aspect_ratio", None)  # Volcengine 不用 aspect_ratio，用 size 控制
         payload.pop("negative_prompt", None)  # Volcengine SDK 不支持 negative_prompt
         payload.pop("model_config_id", None)
         payload.pop("parent_node_id", None)
         payload.pop("project_id", None)
         payload.pop("filename", None)
 
-        # 前端 resolution 字段映射为 SDK 的 size 参数（如果 size 未设置）
+        # 将前端 resolution / resolution_tier / aspect_ratio 合并为 Volcengine size
+        resolution_tier = payload.pop("resolution_tier", None)
         resolution = payload.pop("resolution", None)
-        if resolution and "size" not in payload:
-            payload["size"] = resolution
-
-        # 将清晰度档位名（"1K"/"2K"/"4K"）转换为 SDK 期望的像素尺寸
-        # Volcengine SDK 的 size 参数只接受 "宽x高" 格式或不传
-        _TIER_TO_SIZE = {
-            "1K": "1024x1024",
-            "2K": "2048x2048",
-            "4K": "4096x4096",
-        }
-        size_val = payload.get("size")
-        if isinstance(size_val, str) and size_val in _TIER_TO_SIZE:
-            payload["size"] = _TIER_TO_SIZE[size_val]
+        aspect_ratio = payload.pop("aspect_ratio", None)
+        if "size" not in payload:
+            payload["size"] = _resolve_volcengine_size(resolution, aspect_ratio, resolution_tier)
 
         # 将 image_data_urls 转换为 Volcengine SDK 期望的 image 参数
         image_data_urls = payload.pop("image_data_urls", None)

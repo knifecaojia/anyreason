@@ -14,10 +14,9 @@ import { useUndoRedo } from "@/hooks/useUndoRedo";
 import { usePerformanceMode } from "@/hooks/usePerformanceMode";
 import AlignmentGuides from "@/components/canvas/AlignmentGuides";
 import type { DraggingNodeBounds, NodeBounds } from "@/components/canvas/AlignmentGuides";
-import type { PerformanceMode, StoryboardNodeData, SlicerNodeData, GeneratorNodeData } from "@/lib/canvas/types";
+import type { PerformanceMode, StoryboardNodeData, SlicerNodeData } from "@/lib/canvas/types";
 import { createStoryboardNodesFromSlicerOutput, generateFullWorkflow } from "@/lib/canvas/workflow-generator";
 import { needsMigration, migrateCanvasSnapshot } from "@/lib/canvas/migrate-canvas";
-import GeneratorPromptPanel from "@/components/canvas/GeneratorPromptPanel";
 import { syncAfterSave, startupSyncValidation, uploadCanvasThumbnail } from "@/lib/canvas/canvas-sync";
 import { ArrowLeft, Check, Loader2, AlertCircle, Pencil } from "lucide-react";
 
@@ -33,13 +32,32 @@ type StoryboardRow = {
   dialogue?: string | null;
 };
 
+type AssetBriefResource = {
+  id: string;
+  res_type: string;
+  meta_data?: { file_node_id?: string; [key: string]: any };
+};
+
 type AssetBrief = {
   id: string;
   asset_id: string;
   name: string;
   type: string;
   category?: string | null;
+  resources?: AssetBriefResource[];
 };
+
+function assetThumbnailUrl(a: AssetBrief): string {
+  const r = a.resources?.find(r => r.meta_data?.file_node_id);
+  return r?.meta_data?.file_node_id ? `/api/vfs/nodes/${r.meta_data.file_node_id}/thumbnail` : '';
+}
+
+function assetResourceUrls(a: AssetBrief): { thumbnail: string; download: string }[] {
+  return (a.resources ?? []).filter(r => r.meta_data?.file_node_id).map(r => ({
+    thumbnail: `/api/vfs/nodes/${r.meta_data!.file_node_id}/thumbnail`,
+    download: `/api/vfs/nodes/${r.meta_data!.file_node_id}/download`,
+  }));
+}
 
 type EpisodeWithStoryboard = {
   id: string;
@@ -334,27 +352,6 @@ function StudioCanvasEditor() {
     },
   });
 
-  const focusedLlmNodeId = useMemo(() => {
-    if (!selectedNodeId) return null;
-    const n = nodes.find((x) => x.id === selectedNodeId);
-    if (!n) return null;
-    if (viewport.zoom < 0.6) return null;
-    return (n.data as any).kind === "generator" ? n.id : null;
-  }, [nodes, selectedNodeId, viewport.zoom]);
-
-  const focusedGeneratorData = useMemo<GeneratorNodeData | null>(() => {
-    if (!focusedLlmNodeId) return null;
-    const n = nodes.find((x) => x.id === focusedLlmNodeId);
-    return n ? (n.data as unknown as GeneratorNodeData) : null;
-  }, [focusedLlmNodeId, nodes]);
-
-  const handleUpdateGeneratorData = useCallback((nid: string, partial: Partial<GeneratorNodeData>) => {
-    setNodes((ns) => ns.map((n) => {
-      if (n.id !== nid) return n;
-      return { ...n, data: { ...(n.data as Record<string, unknown>), ...partial } };
-    }) as any);
-  }, [setNodes]);
-
   const selectedNode = useMemo(() => {
     if (!selectedNodeId) return null;
     return nodes.find((n) => n.id === selectedNodeId) || null;
@@ -610,7 +607,7 @@ function StudioCanvasEditor() {
     for (const sbId of sbIds) {
       for (const edge of edges.filter((e: any) => e.source === sbId)) {
         const t = nodes.find((n) => n.id === (edge as any).target);
-        if (t?.type === 'generatorNode' && !genIds.includes(t.id)) genIds.push(t.id);
+        if ((t?.type === 'imageOutputNode' || t?.type === 'videoOutputNode') && !genIds.includes(t.id)) genIds.push(t.id);
       }
     }
     if (genIds.length > 0) { enqueue(genIds, nodes, edges); start(); }
@@ -674,7 +671,7 @@ function StudioCanvasEditor() {
   // --- Context menu ---
   const onNodeContextMenu = useCallback((event: React.MouseEvent, node: any) => {
     event.preventDefault();
-    if (node.type !== "generatorNode") return;
+    if (node.type !== "imageOutputNode" && node.type !== "videoOutputNode") return;
     const q = queueState.items.find((i) => i.nodeId === node.id);
     if (!q || q.status !== "running") return;
     setContextMenu({ x: event.clientX, y: event.clientY, nodeId: node.id });
@@ -826,6 +823,9 @@ function StudioCanvasEditor() {
       rfAddNodes([{ id, type: "assetNode", position: pos, data: {
         kind: "asset", assetId: String(payload.assetId || ""),
         name: String(payload.name || "资产"), assetType: String(payload.assetType || ""),
+        thumbnail: payload.thumbnail ? String(payload.thumbnail) : undefined,
+        resources: Array.isArray(payload.resources) ? payload.resources : undefined,
+        activeResourceIndex: 0,
       } as AssetNodeData } as any]);
       return;
     }
@@ -909,18 +909,6 @@ function StudioCanvasEditor() {
             </>
           )}
 
-          {focusedLlmNodeId && focusedGeneratorData ? (
-            <GeneratorPromptPanel
-              nodeId={focusedLlmNodeId}
-              nodeData={focusedGeneratorData}
-              viewport={viewport}
-              nodes={nodes as any}
-              edges={edges as any}
-              onUpdateNodeData={handleUpdateGeneratorData}
-              onGenerate={handleGenerateFromPanel}
-              onClose={() => setSelectedNodeId(null)}
-            />
-          ) : null}
         </div>
 
         {/* Right panel: Reference Data Browser */}
@@ -1005,14 +993,31 @@ function StudioCanvasEditor() {
           {activeTab === "assets" && (
             <div className="p-4 space-y-3">
               <div className="text-xs text-textMuted">项目资产</div>
-              {(activeEpisode?.assets || []).map((a) => (
-                <div key={a.id} draggable
-                  onDragStart={(e) => beginDrag(e, { kind: "asset", assetId: a.id, name: a.name, assetType: a.type })}
-                  className="p-2.5 rounded-lg border border-border bg-surfaceHighlight hover:bg-surface cursor-grab active:cursor-grabbing">
-                  <div className="text-xs text-textMain font-medium">{a.name}</div>
-                  <div className="text-[10px] text-textMuted">{a.type}</div>
-                </div>
-              ))}
+              {(activeEpisode?.assets || []).map((a) => {
+                const thumb = assetThumbnailUrl(a);
+                const urls = assetResourceUrls(a);
+                return (
+                  <div key={a.id} draggable
+                    onDragStart={(e) => beginDrag(e, {
+                      kind: "asset", assetId: a.id, name: a.name, assetType: a.type,
+                      thumbnail: thumb, resources: urls,
+                    })}
+                    className="rounded-lg border border-border bg-surfaceHighlight hover:bg-surface cursor-grab active:cursor-grabbing overflow-hidden">
+                    {thumb && (
+                      <div className="w-full aspect-[16/10] bg-black/20 flex items-center justify-center">
+                        <img src={thumb} alt={a.name} className="w-full h-full object-cover" loading="lazy" />
+                      </div>
+                    )}
+                    <div className="p-2">
+                      <div className="text-xs text-textMain font-medium truncate">{a.name}</div>
+                      <div className="text-[10px] text-textMuted flex items-center gap-1">
+                        <span>{a.type}</span>
+                        {urls.length > 1 && <span className="text-textMuted/50">· {urls.length}张图</span>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
               {!activeEpisode?.assets?.length && (
                 <div className="text-xs text-textMuted">{activeScriptId ? "暂无资产" : "请先在故事板标签中选择剧本与分集"}</div>
               )}

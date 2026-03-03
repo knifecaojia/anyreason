@@ -87,15 +87,24 @@ export function useAIModelList(
       capsCache.set(category, capsMap);
 
       // Only keep models that are enabled AND have an API key
+      // Deduplicate by manufacturer+model, keeping the first (highest sort_order) entry
       const configs = ((configsJson?.data ?? []) as AIModelConfig[])
-        .filter((c) => c.enabled && c.has_api_key);
-      const opts: ModelOption[] = configs.map((c) => ({
-        configId: c.id,
-        displayName: `${c.manufacturer}/${c.model}`,
-        manufacturer: c.manufacturer,
-        model: c.model,
-        capabilities: capsMap.get(`${c.manufacturer}/${c.model}`) ?? undefined,
-      }));
+        .filter((c) => c.enabled && c.has_api_key)
+        .sort((a, b) => a.sort_order - b.sort_order);
+      const seen = new Set<string>();
+      const opts: ModelOption[] = [];
+      for (const c of configs) {
+        const key = `${c.manufacturer}/${c.model}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        opts.push({
+          configId: c.id,
+          displayName: key,
+          manufacturer: c.manufacturer,
+          model: c.model,
+          capabilities: capsMap.get(key) ?? undefined,
+        });
+      }
 
       const b = (bindingsJson?.data ?? []) as AIModelBinding[];
 

@@ -1,21 +1,21 @@
 'use client';
 
 /**
- * VideoOutputNode — AI video generation node.
- * Pre-gen: prompt textarea + controls only (no video placeholder).
- * Post-gen: video fills node, controls hidden, only top bar + bottom pill bar.
- * Single input/output handles centered on left/right.
- * Integrates with backend task system. Animated scanning border while processing.
+ * VideoOutputNode — Pure AI video generation node.
+ * No local prompt editing — text comes exclusively from upstream text nodes.
+ * Reference images come from upstream AssetNodes, ordered by Y position with @N indices.
+ * Single `in` handle accepts both text and image connections (auto-detected by source type).
+ * If no text node connected → generate button disabled.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow-compat';
 import type { VideoOutputNodeData } from '@/lib/canvas/types';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import { useAIModelList } from '@/hooks/useAIModelList';
-import PromptTemplateModal, { type PromptPreset } from '@/components/canvas/PromptTemplateModal';
-import { ChevronDown, Loader2, Square, Pencil, Download } from 'lucide-react';
+import { ChevronDown, Loader2, Square, Download, ImageIcon } from 'lucide-react';
+import { collectUpstreamData, fetchRefImagesAsBase64 } from '@/lib/canvas/image-utils';
 
 const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'] as const;
 const DURATIONS = [
@@ -62,12 +62,13 @@ const HANDLE_STYLE: React.CSSProperties = {
 
 export default function VideoOutputNode(props: NodeProps) {
   const data = props.data as unknown as VideoOutputNodeData;
-  const rawData = props.data as unknown as Record<string, unknown>;
   const selected = Boolean(props.selected);
   const { expand, resolveLevel } = useNodeIconMode();
   const renderLevel = resolveLevel();
   const rf = useReactFlow() as any;
   const updateNodeData = rf.updateNodeData as (id: string, d: any) => void;
+  const getNodes = rf.getNodes as () => any[];
+  const getEdges = rf.getEdges as () => any[];
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const dataRef = useRef(data);
   dataRef.current = data;
@@ -75,22 +76,23 @@ export default function VideoOutputNode(props: NodeProps) {
   nodeIdRef.current = props.id;
 
   const [showModelMenu, setShowModelMenu] = useState(false);
-  const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [showSizePicker, setShowSizePicker] = useState(false);
-  const [editMode, setEditMode] = useState(false);
   const { models: videoModels, selectedConfigId, selectModel } = useAIModelList('video', data.bindingKey ?? 'video-default', data.modelConfigId);
   const selectedModel = videoModels.find((m) => m.configId === selectedConfigId);
   const caps = selectedModel?.capabilities;
   const supportsRatio = !caps || !!caps.aspect_ratios?.length;
-  const modelDisplayName = selectedModel?.model ?? data.model ?? '模型';
+  const modelDisplayName = selectedModel?.displayName ?? data.model ?? '模型';
   const ratio = data.aspectRatio ?? '16:9';
   const duration = data.duration ?? 4;
   const isProcessing = !!data.isProcessing;
   const hasVideo = !!data.lastVideo;
 
-  // Upstream text replaces prompt when available
-  const upstreamText = rawData['in'] ? String(rawData['in']) : '';
-  const effectivePrompt = upstreamText || data.prompt || '';
+  // Collect upstream data: text from text nodes, images from asset nodes (single `in` handle)
+  const upstream = useMemo(
+    () => collectUpstreamData(props.id, getNodes(), getEdges()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [props.id, getNodes, getEdges, data],
+  );
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -147,29 +149,46 @@ export default function VideoOutputNode(props: NodeProps) {
 
   const handleGenerate = useCallback(async () => {
     if (isProcessing) return;
-    if (!effectivePrompt.trim()) {
-      updateNodeData(props.id, { ...data, error: '请输入提示词' });
+    // Require upstream text — no local prompt editing
+    const currentUpstream = collectUpstreamData(props.id, getNodes(), getEdges());
+    if (!currentUpstream.hasTextSource) {
+      updateNodeData(props.id, { ...data, error: '请连接文本节点提供提示词' });
       return;
     }
-    const finalPrompt = `${effectivePrompt.trim()}, aspect ratio ${ratio}`;
+    const promptText = currentUpstream.promptText.trim();
+    if (!promptText) {
+      updateNodeData(props.id, { ...data, error: '上游文本节点内容为空' });
+      return;
+    }
+    const finalPrompt = `${promptText}, aspect ratio ${ratio}`;
     updateNodeData(props.id, { ...data, isProcessing: true, progress: 0, error: undefined, lastVideo: undefined });
     try {
+      const inputJson: Record<string, unknown> = {
+        prompt: finalPrompt,
+        model_config_id: selectedConfigId || undefined,
+        binding_key: data.bindingKey || 'video-default',
+        aspect_ratio: ratio,
+        duration,
+      };
+
+      // Collect upstream reference images → base64 data URIs (preserves @N order)
+      if (currentUpstream.refImages.length > 0) {
+        const base64Images = await fetchRefImagesAsBase64(currentUpstream.refImages);
+        if (base64Images.length > 0) {
+          inputJson.images = base64Images;
+        }
+      }
+
       const task = await createTaskApi({
         type: 'asset_video_generate',
-        input_json: {
-          prompt: finalPrompt,
-          model_config_id: selectedConfigId || undefined,
-          binding_key: data.bindingKey || 'video-default',
-          aspect_ratio: ratio,
-          duration,
-        },
+        input_json: inputJson,
       });
       updateNodeData(props.id, { ...dataRef.current, isProcessing: true, progress: 0, taskId: task.id, error: undefined, lastVideo: undefined });
       startPolling(task.id);
     } catch (err: any) {
       updateNodeData(props.id, { ...dataRef.current, isProcessing: false, error: String(err?.message || err) });
     }
-  }, [data, effectivePrompt, isProcessing, props.id, ratio, duration, selectedConfigId, startPolling, updateNodeData]);
+  }, [data, isProcessing, props.id, ratio, duration, selectedConfigId, startPolling, updateNodeData, getNodes, getEdges]);
 
   const handleStop = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -199,13 +218,13 @@ export default function VideoOutputNode(props: NodeProps) {
         lineClassName="!border-primary/30"
         handleClassName="!w-2 !h-2 !bg-textMuted !border-background !border-2 !rounded-sm" />
 
-      {/* Single input handle — left center, animated */}
+      {/* Single input handle — accepts text + image connections */}
       <Handle id="in" type="target" position={Position.Left}
         className="node-handle-in"
         style={HANDLE_STYLE}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
-      {/* Single output handle — right center, animated */}
+      {/* Output handle */}
       <Handle id="out" type="source" position={Position.Right}
         className="node-handle-out"
         style={HANDLE_STYLE}>
@@ -215,20 +234,16 @@ export default function VideoOutputNode(props: NodeProps) {
       {/* Invisible outer wrapper — allows toolbar to float outside visible card */}
       <div className="group relative" style={{ width: props.width || 400 }}>
 
-        {/* Floating toolbar — OUTSIDE visible card, above it */}
-        {hasVideo && !editMode && !isProcessing && (
+        {/* Floating toolbar — above card when video generated */}
+        {hasVideo && !isProcessing && (
           <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-surface/90 backdrop-blur rounded-full px-3 py-1.5 border border-border/30 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
-            <button type="button" onClick={() => setEditMode(true)}
-              className="nodrag text-[11px] text-textMuted hover:text-textMain flex items-center gap-1 transition-colors">
-              <Pencil size={11} /> 编辑
-            </button>
-            <span className="text-textMuted/30">|</span>
             <a href={data.lastVideo} download className="nodrag text-textMuted hover:text-textMain transition-colors">
               <Download size={13} />
             </a>
             <span className="text-textMuted/30">|</span>
             <button type="button" onClick={handleGenerate}
-              className="nodrag text-textMuted hover:text-textMain transition-colors text-[11px]">
+              disabled={!upstream.hasTextSource}
+              className="nodrag text-textMuted hover:text-textMain transition-colors text-[11px] disabled:opacity-30 disabled:cursor-not-allowed">
               ▶ 重新生成
             </button>
           </div>
@@ -251,71 +266,63 @@ export default function VideoOutputNode(props: NodeProps) {
             </div>
 
           /* ===== POST-GEN: video fills entire card ===== */
-          ) : hasVideo && !editMode ? (
+          ) : hasVideo ? (
             <>
               <video src={data.lastVideo} className="w-full h-full object-cover" controls muted />
               {/* Bottom pill bar — hover overlay */}
               <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center px-2 pb-2 pt-6 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="flex items-center gap-2 bg-surface/80 backdrop-blur rounded-full px-3 py-1 border border-border/30 text-[11px]">
-                  <div className="relative">
-                    <button type="button" onClick={() => setShowModelMenu(!showModelMenu)}
-                      className="nodrag text-textMuted hover:text-textMain flex items-center gap-0.5 transition-colors">
-                      <span className="truncate max-w-[120px]">{modelDisplayName}</span>
-                      <ChevronDown size={10} />
-                    </button>
-                    {showModelMenu && (
-                      <div className="absolute bottom-full left-0 mb-1 bg-background border border-border/40 rounded-lg py-1 z-20 min-w-[160px] max-h-[200px] overflow-y-auto shadow-lg">
-                        {videoModels.length === 0 ? (
-                          <div className="px-3 py-1.5 text-[11px] text-textMuted">无可用模型</div>
-                        ) : videoModels.map((m) => (
-                          <button key={m.configId} type="button"
-                            onClick={() => {
-                              updateNodeData(props.id, { ...data, model: m.displayName, modelConfigId: m.configId });
-                              selectModel(m.configId);
-                              setShowModelMenu(false);
-                            }}
-                            className={`nodrag block w-full px-3 py-1.5 text-[11px] text-left hover:bg-surfaceHighlight transition-colors ${
-                              selectedConfigId === m.configId ? 'text-textMain font-medium' : 'text-textMuted'
-                            }`}>{m.model}</button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
+                  <span className="text-textMuted truncate max-w-[120px]">{modelDisplayName}</span>
                   <span className="text-textMuted/20">·</span>
                   <span className="text-textMuted">{ratio} {duration}s</span>
+                  {upstream.refImages.length > 0 && (
+                    <>
+                      <span className="text-textMuted/20">·</span>
+                      <span className="text-purple-400 flex items-center gap-0.5">
+                        <ImageIcon size={10} />{upstream.refImages.length}
+                      </span>
+                    </>
+                  )}
                 </div>
               </div>
             </>
 
-          /* ===== EDIT / PRE-GEN VIEW ===== */
+          /* ===== PRE-GEN VIEW: upstream status + ref images + controls ===== */
           ) : (
             <div className="flex flex-col h-full">
               {/* Top bar */}
               <div className="flex items-center justify-between px-3 py-1.5 shrink-0">
                 <span className="text-[11px] text-textMuted">视频</span>
-                <div className="flex items-center gap-2">
-                  {hasVideo && (
-                    <button type="button" onClick={() => setEditMode(false)}
-                      className="nodrag text-[10px] text-accent hover:text-accent/80 transition-colors">返回预览</button>
-                  )}
-                  <span className="text-[10px] text-textMuted/60 tabular-nums">{duration}s · {ratio}</span>
-                </div>
+                <span className="text-[10px] text-textMuted/60 tabular-nums">{duration}s · {ratio}</span>
               </div>
 
-              {/* Body — prompt + controls */}
+              {/* Body — upstream text preview + ref image list */}
               <div className="px-3 pb-2 gap-1.5 flex-1 min-h-0 overflow-hidden flex flex-col">
-                <textarea
-                  className="nodrag nowheel w-full flex-1 min-h-[2rem] rounded-lg border border-border/40 bg-background p-2 text-[11px] leading-relaxed text-textMain placeholder:text-textMuted/40 outline-none focus:border-border resize-none"
-                  placeholder={upstreamText ? '上游文本已接入...' : '输入生视频提示词...'}
-                  value={upstreamText ? '' : (data.prompt || '')}
-                  onChange={(e) => updateNodeData(props.id, { ...data, prompt: e.target.value })}
-                  disabled={!!upstreamText}
-                />
-                {upstreamText && (
-                  <div className="text-[9px] text-textMuted/50 truncate shrink-0" title={upstreamText}>
-                    上游: {upstreamText.slice(0, 60)}...
+                {/* Upstream text status */}
+                {upstream.hasTextSource ? (
+                  <div className="rounded-lg border border-border/40 bg-background p-2 text-[11px] leading-relaxed text-textMuted/70 max-h-[4rem] overflow-hidden">
+                    <span className="text-accent/60 text-[9px] block mb-0.5">提示词 (来自上游)</span>
+                    {upstream.promptText.slice(0, 120)}{upstream.promptText.length > 120 ? '...' : ''}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border/40 bg-background/50 p-3 flex items-center justify-center text-[11px] text-textMuted/40 flex-1">
+                    请连接文本节点提供提示词
                   </div>
                 )}
+
+                {/* Reference image list with @N indices */}
+                {upstream.refImages.length > 0 && (
+                  <div className="flex flex-wrap gap-1.5 mt-1">
+                    {upstream.refImages.map((ref) => (
+                      <div key={ref.index} className="flex items-center gap-1 bg-purple-500/10 rounded-md px-1.5 py-0.5 border border-purple-500/20">
+                        <img src={ref.thumbUrl} alt={ref.name} className="w-5 h-5 rounded object-cover" />
+                        <span className="text-[10px] text-purple-300 font-medium">@{ref.index}</span>
+                        <span className="text-[9px] text-textMuted/60 truncate max-w-[60px]">{ref.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {data.error && (
                   <div className="text-[10px] text-red-400/80 truncate shrink-0" title={data.error}>{data.error}</div>
                 )}
@@ -345,7 +352,7 @@ export default function VideoOutputNode(props: NodeProps) {
                               }}
                               className={`nodrag block w-full px-3 py-1.5 text-[11px] text-left hover:bg-surfaceHighlight transition-colors ${
                                 selectedConfigId === m.configId ? 'text-textMain font-medium' : 'text-textMuted'
-                              }`}>{m.model}</button>
+                              }`}>{m.displayName}</button>
                           ))}
                         </div>
                       )}
@@ -390,26 +397,24 @@ export default function VideoOutputNode(props: NodeProps) {
                       )}
                     </div>
                   </div>
-                  <button type="button" onClick={handleGenerate}
-                    className="nodrag text-accent hover:text-accent/80 transition-colors shrink-0" title="生成">
-                    ▶
-                  </button>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {upstream.refImages.length > 0 && (
+                      <span className="text-[10px] text-purple-400 flex items-center gap-0.5" title={`${upstream.refImages.length} 张参考图`}>
+                        <ImageIcon size={10} />{upstream.refImages.length}
+                      </span>
+                    )}
+                    <button type="button" onClick={handleGenerate}
+                      disabled={!upstream.hasTextSource}
+                      className="nodrag text-accent hover:text-accent/80 transition-colors disabled:opacity-30 disabled:cursor-not-allowed" title={upstream.hasTextSource ? '生成' : '请先连接文本节点'}>
+                      ▶
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
           )}
         </div>
       </div>
-
-      {/* Prompt template modal */}
-      <PromptTemplateModal
-        open={showTemplateModal}
-        toolKey="canvas_video_gen"
-        onClose={() => setShowTemplateModal(false)}
-        onSelect={(preset: PromptPreset) => {
-          updateNodeData(props.id, { ...data, prompt: preset.prompt_template });
-        }}
-      />
     </>
   );
 }

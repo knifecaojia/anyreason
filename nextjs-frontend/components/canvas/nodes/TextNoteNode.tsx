@@ -64,10 +64,16 @@ export default function TextNoteNode(props: NodeProps) {
         lineClassName="!border-primary/40"
         handleClassName="!w-2.5 !h-2.5 !bg-primary !border-background !border-2 !rounded-sm"
       />
-      {/* Single output handle — right center, animated */}
+      {/* Input handle — left center, animated */}
+      <Handle id="in" type="target" position={Position.Left}
+        className="node-handle-in"
+        style={{ width: 28, height: 28, borderRadius: 9999, background: '#374151', border: '3px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#9ca3af', top: '50%', zIndex: 30 }}>
+        <span className="pointer-events-none select-none leading-none">+</span>
+      </Handle>
+      {/* Output handle — right center, animated */}
       <Handle id="out" type="source" position={Position.Right}
         className="node-handle-out"
-        style={{ width: 28, height: 28, borderRadius: 9999, background: '#374151', border: '3px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#9ca3af' }}>
+        style={{ width: 28, height: 28, borderRadius: 9999, background: '#374151', border: '3px solid #1f2937', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: '#9ca3af', top: '50%', zIndex: 30 }}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
       <div

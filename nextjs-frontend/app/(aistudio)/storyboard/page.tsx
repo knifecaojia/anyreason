@@ -65,7 +65,7 @@ type StoryboardNodeData = {
 type StoryboardNodeType =
   | "assetNode"
   | "scriptNode"
-  | "generatorNode"
+  | "imageOutputNode"
   | "previewNode"
   | "slicerNode"
   | "candidateNode";
@@ -273,7 +273,7 @@ function ScriptNode({ data, selected }: NodeProps<StoryboardNodeData>) {
   );
 }
 
-function GeneratorNode({ data, selected }: NodeProps<StoryboardNodeData>) {
+function ImageOutputNodeLegacy({ data, selected }: NodeProps<StoryboardNodeData>) {
   const [collapsed, setCollapsed] = useState(data.collapsed || false);
   return (
     <div
@@ -302,7 +302,7 @@ function GeneratorNode({ data, selected }: NodeProps<StoryboardNodeData>) {
         onDoubleClick={() => setCollapsed(!collapsed)}
       >
         <span className="flex items-center gap-2 text-white">
-          <Cpu size={14} /> {collapsed ? "Sampler" : "生成节点"}
+          <Cpu size={14} /> {collapsed ? "Sampler" : "图像输出"}
         </span>
         <div className="flex items-center gap-2">
           {data.isProcessing && <Loader2 size={12} className="animate-spin text-purple-200" />}
@@ -445,7 +445,7 @@ function SlicerNode({ data, selected }: NodeProps<StoryboardNodeData>) {
 const nodeTypes = {
   assetNode: AssetNode,
   scriptNode: ScriptNode,
-  generatorNode: GeneratorNode,
+  imageOutputNode: ImageOutputNodeLegacy,
   previewNode: PreviewNode,
   slicerNode: SlicerNode,
   candidateNode: AssetCandidateNode,
@@ -463,7 +463,7 @@ const TEMPLATES = {
       },
       {
         id: "gen-1",
-        type: "generatorNode",
+        type: "imageOutputNode",
         position: { x: 400, y: 200 },
         data: { model: "gemini-2.5-flash-image", prompt: "Cinematic shot...", aspectRatio: "16:9" },
       },
@@ -506,7 +506,7 @@ const TEMPLATES = {
       },
       {
         id: "extractor-1",
-        type: "generatorNode",
+        type: "imageOutputNode",
         position: { x: 400, y: 200 },
         data: {
           model: "gemini-3-flash-preview",
@@ -581,7 +581,7 @@ function StoryboardContent() {
       },
       {
         id: "gen-main",
-        type: "generatorNode",
+        type: "imageOutputNode",
         position: { x: 450, y: 200 },
         data: {
           model: "gemini-2.5-flash-image",
@@ -680,7 +680,7 @@ function StoryboardContent() {
     return (
       type === "assetNode" ||
       type === "scriptNode" ||
-      type === "generatorNode" ||
+      type === "imageOutputNode" ||
       type === "previewNode" ||
       type === "slicerNode" ||
       type === "candidateNode"
@@ -721,7 +721,7 @@ function StoryboardContent() {
   }, []);
 
   const runWorkflow = async () => {
-    const generators = nodes.filter((n) => n.type === "generatorNode");
+    const generators = nodes.filter((n) => n.type === "imageOutputNode");
     if (generators.length === 0) return;
 
     setIsGlobalProcessing(true);
@@ -858,7 +858,7 @@ function StoryboardContent() {
             onChange={(e) => updateNodeData(selectedNode.id, { label: e.target.value })}
           />
         </div>
-        {selectedNode.type === "generatorNode" && (
+        {selectedNode.type === "imageOutputNode" && (
           <div className="space-y-2">
             <label className="text-xs text-textMuted">提示词 (Prompt)</label>
             <textarea
@@ -924,10 +924,10 @@ function StoryboardContent() {
             className="bg-background p-2 rounded cursor-grab border border-transparent hover:border-textMuted text-textMuted text-xs hover:text-textMain"
             draggable
             onDragStart={(e) =>
-              onDragStart(e, { type: "generatorNode", data: { model: "gemini-2.5-flash-image" } })
+              onDragStart(e, { type: "imageOutputNode", data: { model: "gemini-2.5-flash-image" } })
             }
           >
-            生成节点 (Generator)
+            图像输出 (Image Output)
           </div>
           <div
             className="bg-background p-2 rounded cursor-grab border border-transparent hover:border-textMuted text-textMuted text-xs hover:text-textMain"
