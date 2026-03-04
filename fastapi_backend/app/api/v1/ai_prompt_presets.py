@@ -37,6 +37,7 @@ async def create_prompt_preset(
         db=db,
         user_id=user.id,
         tool_key=body.tool_key,
+        group=body.group,
         name=body.name,
         provider=body.provider,
         model=body.model,
@@ -53,7 +54,9 @@ async def update_prompt_preset(
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ):
-    patch = body.model_dump(exclude_unset=True, exclude_none=True)
+    patch = body.model_dump(exclude_unset=True)
+    # Remove keys that are None, EXCEPT 'group' which may be intentionally set to null
+    patch = {k: v for k, v in patch.items() if v is not None or k == "group"}
     if not patch:
         raise AppError(msg="No fields to update", code=400, status_code=400)
     updated = await ai_prompt_preset_service.update_preset(db=db, user_id=user.id, preset_id=preset_id, patch=patch)

@@ -713,11 +713,14 @@ function StudioCanvasEditor() {
       }
       if ((e.key === "Delete" || e.key === "Backspace") && !isCtrl) {
         e.preventDefault();
-        const selIds = new Set(nodes.filter((n: any) => n.selected).map((n) => n.id));
-        if (selIds.size === 0) return;
+        const selNodeIds = new Set(nodes.filter((n: any) => n.selected).map((n) => n.id));
+        const selEdgeIds = new Set(edges.filter((ed: any) => ed.selected).map((ed) => ed.id));
+        if (selNodeIds.size === 0 && selEdgeIds.size === 0) return;
         pushUndo({ nodes: nodes as any, edges: edges as any });
-        setNodes((ns) => ns.filter((n) => !selIds.has(n.id)) as any);
-        setEdges((es) => es.filter((ed: any) => !selIds.has(ed.source) && !selIds.has(ed.target)) as any);
+        if (selNodeIds.size > 0) {
+          setNodes((ns) => ns.filter((n) => !selNodeIds.has(n.id)) as any);
+        }
+        setEdges((es) => es.filter((ed: any) => !selEdgeIds.has(ed.id) && !selNodeIds.has(ed.source) && !selNodeIds.has(ed.target)) as any);
         return;
       }
     };
@@ -870,6 +873,10 @@ function StudioCanvasEditor() {
               onPaneClick={closeContextMenu}
               nodeTypes={nodeTypes as any}
               edgeTypes={edgeTypes as any}
+              selectionOnDrag
+              selectionKeyCode="Control"
+              multiSelectionKeyCode="Control"
+              deleteKeyCode={null}
               minZoom={0.1}
               maxZoom={2}
               fitView

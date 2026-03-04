@@ -13,6 +13,7 @@ from app.tasks.handlers.user_app_run import UserAppRunHandler
 from app.tasks.handlers.ai_scene_test_chat import AiSceneTestChatHandler
 from app.tasks.handlers.episode_doc_backfill import EpisodeDocBackfillHandler
 from app.tasks.handlers.asset_image_generate import AssetImageGenerateHandler
+from app.tasks.handlers.asset_video_generate import AssetVideoGenerateHandler
 from app.tasks.handlers.shot_video_generate import ShotVideoGenerateHandler
 from app.tasks.handlers.apply_plan_execute import ApplyPlanExecuteHandler
 from app.tasks.handlers.model_test_image_generate import ModelTestImageGenerateHandler
@@ -38,6 +39,7 @@ TASK_HANDLER_REGISTRY = {
     "ai_assistant_chat": AiSceneTestChatHandler(),
     EpisodeDocBackfillHandler.task_type: EpisodeDocBackfillHandler(),
     AssetImageGenerateHandler.task_type: AssetImageGenerateHandler(),
+    AssetVideoGenerateHandler.task_type: AssetVideoGenerateHandler(),
     ShotVideoGenerateHandler.task_type: ShotVideoGenerateHandler(),
     ApplyPlanExecuteHandler.task_type: ApplyPlanExecuteHandler(),
     ModelTestImageGenerateHandler.task_type: ModelTestImageGenerateHandler(),

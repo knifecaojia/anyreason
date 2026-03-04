@@ -489,7 +489,7 @@ export default function TextGenNode(props: NodeProps) {
       {/* Prompt template modal */}
       <PromptTemplateModal
         open={showTemplateModal}
-        toolKey="canvas_text_gen"
+        toolKey="canvas"
         onClose={() => setShowTemplateModal(false)}
         onSelect={(preset: PromptPreset) => {
           updateNodeData(props.id, {

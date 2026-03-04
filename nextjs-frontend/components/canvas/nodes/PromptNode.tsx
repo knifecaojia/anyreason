@@ -15,6 +15,8 @@ import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow
 import type { PromptNodeData } from '@/lib/canvas/types';
 import { propagateData } from '@/lib/canvas/data-flow';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
+import PromptTemplateModal, { type PromptPreset } from '@/components/canvas/PromptTemplateModal';
+import { BookOpen } from 'lucide-react';
 
 // ===== Handle style constants =====
 const HANDLE_STYLE: React.CSSProperties = {
@@ -35,6 +37,7 @@ export default function PromptNode(props: NodeProps) {
   const getNodes = rf.getNodes as () => any[];
   const getEdges = rf.getEdges as () => any[];
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
 
   const content = data.content ?? '';
   const charCount = content.length;
@@ -97,7 +100,14 @@ export default function PromptNode(props: NodeProps) {
           <span className="text-[11px] text-textMuted flex items-center gap-1">
             <span>💬</span> 提示词
           </span>
-          <span className="text-[10px] text-textMuted/60 tabular-nums">{charCount}字</span>
+          <div className="flex items-center gap-2">
+            <button type="button" onClick={() => setShowTemplateModal(true)}
+              className="nodrag text-textMuted/50 hover:text-textMain transition-colors"
+              title="提示词模板">
+              <BookOpen size={11} />
+            </button>
+            <span className="text-[10px] text-textMuted/60 tabular-nums">{charCount}字</span>
+          </div>
         </div>
 
         {/* Editable textarea */}
@@ -108,6 +118,16 @@ export default function PromptNode(props: NodeProps) {
           onChange={(e) => handleContentChange(e.target.value)}
         />
       </div>
+
+      {/* Prompt template modal */}
+      <PromptTemplateModal
+        open={showTemplateModal}
+        toolKey="canvas"
+        onClose={() => setShowTemplateModal(false)}
+        onSelect={(preset: PromptPreset) => {
+          handleContentChange(preset.prompt_template);
+        }}
+      />
     </>
   );
 }

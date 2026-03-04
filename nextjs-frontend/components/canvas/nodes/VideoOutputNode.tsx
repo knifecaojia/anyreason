@@ -70,6 +70,7 @@ export default function VideoOutputNode(props: NodeProps) {
   const getNodes = rf.getNodes as () => any[];
   const getEdges = rf.getEdges as () => any[];
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollErrorCount = useRef(0);
   const dataRef = useRef(data);
   dataRef.current = data;
   const nodeIdRef = useRef(props.id);
@@ -109,9 +110,11 @@ export default function VideoOutputNode(props: NodeProps) {
 
   const startPolling = useCallback((taskId: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
+    pollErrorCount.current = 0;
     pollRef.current = setInterval(async () => {
       try {
         const t = await fetchTaskApi(taskId);
+        pollErrorCount.current = 0;
         const d = dataRef.current;
         if (t.status === 'succeeded') {
           if (pollRef.current) clearInterval(pollRef.current);
@@ -141,8 +144,20 @@ export default function VideoOutputNode(props: NodeProps) {
         } else {
           updateNodeData(nodeIdRef.current, { ...d, progress: t.progress });
         }
-      } catch {
-        // Network error, keep polling
+      } catch (err) {
+        pollErrorCount.current += 1;
+        console.error('[VideoOutputNode] poll error:', err);
+        if (pollErrorCount.current >= 15) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          updateNodeData(nodeIdRef.current, {
+            ...dataRef.current,
+            isProcessing: false,
+            progress: 0,
+            error: `轮询失败: ${String(err)}`,
+            taskId: undefined,
+          });
+        }
       }
     }, 2000);
   }, [updateNodeData]);
@@ -203,7 +218,7 @@ export default function VideoOutputNode(props: NodeProps) {
         className={`group relative w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors border ${
           selected ? 'border-primary/50' : 'border-border/70'
         } bg-background/95`}
-        title="视频生成"
+        title="视频节点"
       >
         <span className="text-base leading-none">🎬</span>
         <button type="button" onClick={(e) => { e.stopPropagation(); expand(); }}

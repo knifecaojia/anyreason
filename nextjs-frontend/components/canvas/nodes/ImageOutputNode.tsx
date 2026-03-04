@@ -15,7 +15,7 @@ import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow
 import type { ImageOutputNodeData } from '@/lib/canvas/types';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import { useAIModelList } from '@/hooks/useAIModelList';
-import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon } from 'lucide-react';
+import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon, Upload } from 'lucide-react';
 import { collectUpstreamData, fetchRefImagesAsBase64 } from '@/lib/canvas/image-utils';
 
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const;
@@ -83,6 +83,7 @@ export default function ImageOutputNode(props: NodeProps) {
   const getNodes = rf.getNodes as () => any[];
   const getEdges = rf.getEdges as () => any[];
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollErrorCount = useRef(0);
   const dataRef = useRef(data);
   dataRef.current = data;
   const nodeIdRef = useRef(props.id);
@@ -92,6 +93,8 @@ export default function ImageOutputNode(props: NodeProps) {
   const [showSizePicker, setShowSizePicker] = useState(false);
   const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const uploadInputRef = useRef<HTMLInputElement>(null);
   const { models: imageModels, selectedConfigId, selectModel } = useAIModelList('image', data.bindingKey ?? 'image-default', data.modelConfigId);
   const selectedModel = imageModels.find((m) => m.configId === selectedConfigId);
   const caps = selectedModel?.capabilities;
@@ -157,9 +160,11 @@ export default function ImageOutputNode(props: NodeProps) {
 
   const startPolling = useCallback((taskId: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
+    pollErrorCount.current = 0;
     pollRef.current = setInterval(async () => {
       try {
         const t = await fetchTaskApi(taskId);
+        pollErrorCount.current = 0;
         const d = dataRef.current;
         if (t.status === 'succeeded') {
           if (pollRef.current) clearInterval(pollRef.current);
@@ -193,8 +198,20 @@ export default function ImageOutputNode(props: NodeProps) {
         } else {
           updateNodeData(nodeIdRef.current, { ...d, progress: t.progress });
         }
-      } catch {
-        // Network error, keep polling
+      } catch (err) {
+        pollErrorCount.current += 1;
+        console.error('[ImageOutputNode] poll error:', err);
+        if (pollErrorCount.current >= 15) {
+          if (pollRef.current) clearInterval(pollRef.current);
+          pollRef.current = null;
+          updateNodeData(nodeIdRef.current, {
+            ...dataRef.current,
+            isProcessing: false,
+            progress: 0,
+            error: `轮询失败: ${String(err)}`,
+            taskId: undefined,
+          });
+        }
       }
     }, 2000);
   }, [updateNodeData]);
@@ -255,6 +272,33 @@ export default function ImageOutputNode(props: NodeProps) {
     updateNodeData(props.id, { ...dataRef.current, isProcessing: false, progress: 0, taskId: undefined });
   }, [props.id, updateNodeData]);
 
+  const handleUploadImage = useCallback(async (file: File) => {
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/vfs/files/upload', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error(await res.text());
+      const json = await res.json();
+      const nodeId = json?.data?.id as string | undefined;
+      if (!nodeId) throw new Error('上传失败');
+      const downloadUrl = `/api/vfs/nodes/${encodeURIComponent(nodeId)}/download`;
+      const thumbUrl = `/api/vfs/nodes/${encodeURIComponent(nodeId)}/thumbnail`;
+      updateNodeData(props.id, {
+        ...dataRef.current,
+        lastImage: thumbUrl,
+        lastImageFull: downloadUrl,
+        isProcessing: false,
+        progress: 100,
+        error: undefined,
+      });
+    } catch (err: any) {
+      updateNodeData(props.id, { ...dataRef.current, error: `上传失败: ${String(err?.message || err)}` });
+    } finally {
+      setUploading(false);
+    }
+  }, [props.id, updateNodeData]);
+
   // Icon mode
   if (renderLevel === 'icon') {
     return (
@@ -262,7 +306,7 @@ export default function ImageOutputNode(props: NodeProps) {
         className={`group relative w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors border ${
           selected ? 'border-primary/50' : 'border-border/70'
         } bg-background/95`}
-        title="图片生成"
+        title="图片节点"
       >
         <span className="text-base leading-none">🖼️</span>
         <button type="button" onClick={(e) => { e.stopPropagation(); expand(); }}
@@ -332,7 +376,13 @@ export default function ImageOutputNode(props: NodeProps) {
               {/* Title bar */}
               <div className="flex items-center justify-between px-3 py-1.5 shrink-0">
                 <span className="text-[11px] text-textMuted">图片</span>
-                <span className="text-[10px] text-textMuted/60 tabular-nums">{displaySizeStr}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-textMuted/60 tabular-nums">{displaySizeStr}</span>
+                  <button type="button" onClick={() => uploadInputRef.current?.click()} disabled={uploading}
+                    className="nodrag text-textMuted/50 hover:text-textMain transition-colors disabled:opacity-30" title="上传图片">
+                    {uploading ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                  </button>
+                </div>
               </div>
               {/* Image */}
               <div className="px-2 pb-1.5 flex items-center justify-center">
@@ -367,7 +417,13 @@ export default function ImageOutputNode(props: NodeProps) {
               {/* ── Title bar ── */}
               <div className="flex items-center justify-between px-3 py-1.5 shrink-0">
                 <span className="text-[11px] text-textMuted">图片</span>
-                <span className="text-[10px] text-textMuted/60 tabular-nums">{sizeStr}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] text-textMuted/60 tabular-nums">{sizeStr}</span>
+                  <button type="button" onClick={() => uploadInputRef.current?.click()} disabled={uploading}
+                    className="nodrag text-textMuted/50 hover:text-textMain transition-colors disabled:opacity-30" title="上传图片">
+                    {uploading ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                  </button>
+                </div>
               </div>
 
               {/* ── Body: prompt + ref images ── */}
@@ -490,6 +546,10 @@ export default function ImageOutputNode(props: NodeProps) {
           )}
         </div>
       </div>
+
+      {/* Hidden file input for image upload */}
+      <input ref={uploadInputRef} type="file" accept="image/*" className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUploadImage(f); e.target.value = ''; }} />
 
       {/* Full-size image preview lightbox */}
       {previewOpen && typeof document !== 'undefined' && createPortal(

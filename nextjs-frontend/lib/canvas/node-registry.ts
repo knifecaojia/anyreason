@@ -215,7 +215,7 @@ registerNodeType({
 
 registerNodeType({
   type: 'imageOutputNode',
-  label: '图像输出',
+  label: '图片节点',
   group: 'ai-generation',
   icon: ImageIcon,
   colorClass: GROUP_COLORS['ai-generation'],
@@ -240,7 +240,7 @@ registerNodeType({
 
 registerNodeType({
   type: 'videoOutputNode',
-  label: '视频输出',
+  label: '视频节点',
   group: 'ai-generation',
   icon: Film,
   colorClass: 'bg-green-500/20 text-green-400',

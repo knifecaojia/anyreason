@@ -481,6 +481,7 @@ class AISceneStoryboardApplyRequest(BaseModel):
 class AIPromptPresetRead(BaseModel):
     id: UUID
     tool_key: str
+    group: str | None = None
     name: str
     provider: str | None = None
     model: str | None = None
@@ -494,6 +495,7 @@ class AIPromptPresetRead(BaseModel):
 
 class AIPromptPresetCreateRequest(BaseModel):
     tool_key: str
+    group: str | None = None
     name: str
     provider: str | None = None
     model: str | None = None
@@ -502,6 +504,7 @@ class AIPromptPresetCreateRequest(BaseModel):
 
 
 class AIPromptPresetUpdateRequest(BaseModel):
+    group: str | None = None
     name: str | None = None
     provider: str | None = None
     model: str | None = None

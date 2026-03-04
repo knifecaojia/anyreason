@@ -258,17 +258,37 @@ class AliyunMediaProvider(MediaProvider):
         )
 
         is_kf2v = endpoint == "image2video/video-synthesis"
-        if first_frame:
-            input_block["first_frame_url" if is_kf2v else "img_url"] = first_frame
-        if last_frame:
-            input_block["last_frame_url"] = last_frame
+        is_r2v = "r2v" in request.model_key
+
+        if is_r2v:
+            # r2v 模型需要 reference_urls（列表），不接受 img_url / ref_image_urls
+            ref_urls: list[str] = []
+            if first_frame:
+                ref_urls.append(first_frame)
+            if last_frame:
+                ref_urls.append(last_frame)
+            if ref_urls:
+                input_block["reference_urls"] = ref_urls
+        else:
+            if first_frame:
+                input_block["first_frame_url" if is_kf2v else "img_url"] = first_frame
+            if last_frame:
+                input_block["last_frame_url"] = last_frame
 
         ref_images = params.pop("ref_image_urls", None)
         ref_videos = params.pop("ref_video_urls", None)
         if ref_images:
-            input_block["ref_image_urls"] = ref_images
+            if is_r2v:
+                existing = input_block.get("reference_urls", [])
+                input_block["reference_urls"] = existing + list(ref_images)
+            else:
+                input_block["ref_image_urls"] = list(ref_images)
         if ref_videos:
-            input_block["ref_video_urls"] = ref_videos
+            if is_r2v:
+                existing = input_block.get("reference_urls", [])
+                input_block["reference_urls"] = existing + list(ref_videos)
+            else:
+                input_block["ref_video_urls"] = ref_videos
 
         if request.negative_prompt:
             input_block["negative_prompt"] = request.negative_prompt

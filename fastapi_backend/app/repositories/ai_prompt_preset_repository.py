@@ -30,6 +30,7 @@ async def create_preset(
     db: AsyncSession,
     user_id: UUID,
     tool_key: str,
+    group: str | None,
     name: str,
     provider: str | None,
     model: str | None,
@@ -39,6 +40,7 @@ async def create_preset(
     preset = AIPromptPreset(
         user_id=user_id,
         tool_key=tool_key,
+        group=group,
         name=name,
         provider=provider,
         model=model,

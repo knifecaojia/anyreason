@@ -153,6 +153,7 @@ class AIPromptPreset(Base):
     user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
 
     tool_key = Column(String(64), nullable=False)
+    group = Column(String(64), nullable=True)
     name = Column(String(128), nullable=False)
     provider = Column(String(64), nullable=True)
     model = Column(String(128), nullable=True)
