@@ -15,8 +15,9 @@ import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow
 import type { ImageOutputNodeData } from '@/lib/canvas/types';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import { useAIModelList } from '@/hooks/useAIModelList';
-import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon, Upload } from 'lucide-react';
+import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon, Upload, Crop } from 'lucide-react';
 import { collectUpstreamData, fetchRefImagesAsBase64 } from '@/lib/canvas/image-utils';
+import ImageCropOverlay from './ImageCropOverlay';
 
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const;
 const RESOLUTIONS = [
@@ -89,12 +90,15 @@ export default function ImageOutputNode(props: NodeProps) {
   const nodeIdRef = useRef(props.id);
   nodeIdRef.current = props.id;
 
+  const rfAddNodes = rf.addNodes as (nodes: any[]) => void;
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showSizePicker, setShowSizePicker] = useState(false);
   const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
+  const [cropMode, setCropMode] = useState(false);
+  const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const { models: imageModels, selectedConfigId, selectModel } = useAIModelList('image', data.bindingKey ?? 'image-default', data.modelConfigId);
   const selectedModel = imageModels.find((m) => m.configId === selectedConfigId);
   const caps = selectedModel?.capabilities;
@@ -299,13 +303,75 @@ export default function ImageOutputNode(props: NodeProps) {
     }
   }, [props.id, updateNodeData]);
 
+  // --- Crop: right-click context menu handler ---
+  const handleImageContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCtxMenu({ x: e.clientX, y: e.clientY });
+  }, []);
+
+  // Close context menu on any click
+  useEffect(() => {
+    if (!ctxMenu) return;
+    const close = () => setCtxMenu(null);
+    window.addEventListener('click', close);
+    return () => window.removeEventListener('click', close);
+  }, [ctxMenu]);
+
+  // --- Crop confirm: upload cropped image to VFS + create new node ---
+  const handleCropConfirm = useCallback(async (blob: Blob, cropInfo: { x: number; y: number; w: number; h: number }) => {
+    setCropMode(false);
+    try {
+      // Upload cropped image to VFS
+      const formData = new FormData();
+      formData.append('file', blob, `crop_${Date.now()}.png`);
+      const res = await fetch('/api/vfs/files/upload', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error(await res.text());
+      const json = await res.json();
+      const fileNodeId = json?.data?.id as string | undefined;
+      if (!fileNodeId) throw new Error('上传裁切图片失败');
+      const downloadUrl = `/api/vfs/nodes/${encodeURIComponent(fileNodeId)}/download`;
+      const thumbUrl = `/api/vfs/nodes/${encodeURIComponent(fileNodeId)}/thumbnail`;
+
+      // Create new ImageOutputNode offset to the right of current node
+      const currentNode = getNodes().find((n: any) => n.id === props.id);
+      const offsetX = (currentNode?.measured?.width ?? currentNode?.width ?? 420) + 40;
+      const newPos = {
+        x: (currentNode?.position?.x ?? 0) + offsetX,
+        y: currentNode?.position?.y ?? 0,
+      };
+      const newId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      rfAddNodes([{
+        id: newId,
+        type: 'imageOutputNode',
+        position: newPos,
+        width: 400,
+        height: 260,
+        data: {
+          lastImage: thumbUrl,
+          lastImageFull: downloadUrl,
+          isProcessing: false,
+          progress: 100,
+          aspectRatio: ratio,
+          resolution: resolution,
+          model: data.model,
+          modelConfigId: data.modelConfigId,
+          bindingKey: data.bindingKey,
+        },
+      } as any]);
+    } catch (err: any) {
+      console.error('[ImageOutputNode] crop upload failed:', err);
+      updateNodeData(props.id, { ...dataRef.current, error: `截图失败: ${String(err?.message || err)}` });
+    }
+  }, [props.id, getNodes, rfAddNodes, ratio, resolution, data.model, data.modelConfigId, data.bindingKey, updateNodeData]);
+
   // Icon mode
   if (renderLevel === 'icon') {
     return (
       <div
         className={`group relative w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors border ${
           selected ? 'border-primary/50' : 'border-border/70'
-        } bg-background/95`}
+        } bg-canvasNode`}
         title="图片节点"
       >
         <span className="text-base leading-none">🖼️</span>
@@ -340,9 +406,14 @@ export default function ImageOutputNode(props: NodeProps) {
         {/* Floating toolbar — above card when image generated */}
         {hasImage && !isProcessing && (
           <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-surface/90 backdrop-blur rounded-full px-3 py-1.5 border border-border/30 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
-            <a href={fullImageUrl} download className="nodrag text-textMuted hover:text-textMain transition-colors">
+            <a href={fullImageUrl} download className="nodrag text-textMuted hover:text-textMain transition-colors" title="下载">
               <Download size={13} />
             </a>
+            <span className="text-textMuted/30">|</span>
+            <button type="button" onClick={() => setCropMode(true)}
+              className="nodrag text-textMuted hover:text-textMain transition-colors" title="截图 (框选裁切)">
+              <Crop size={13} />
+            </button>
             <span className="text-textMuted/30">|</span>
             <button type="button" onClick={handleGenerate}
               disabled={!upstream.hasTextSource}
@@ -356,7 +427,7 @@ export default function ImageOutputNode(props: NodeProps) {
         <div className={`rounded-xl border relative ${
           (isProcessing || hasImage) ? 'overflow-hidden' : ''
         } ${
-          isProcessing ? 'node-scanning-border border-transparent bg-background/80' : selected ? 'border-primary/50 bg-background/95' : 'border-border/70 bg-background/95'
+          isProcessing ? 'node-scanning-border border-transparent bg-surface/80' : selected ? 'border-primary/50 bg-canvasNode' : 'border-border bg-canvasNode'
         }`} style={isProcessing || !hasImage ? { height: props.height || 260 } : undefined}>
 
           {/* ===== PROCESSING STATE ===== */}
@@ -385,13 +456,39 @@ export default function ImageOutputNode(props: NodeProps) {
                 </div>
               </div>
               {/* Image */}
-              <div className="px-2 pb-1.5 flex items-center justify-center">
+              <div className="px-2 pb-1.5 flex items-center justify-center relative">
                 <img src={data.lastImage} alt="Generated"
                   className="w-full rounded-lg object-contain cursor-zoom-in"
                   style={{ maxHeight: 400 }}
                   onLoad={(e) => { const t = e.currentTarget; setImgDims({ w: t.naturalWidth, h: t.naturalHeight }); }}
                   onDoubleClick={() => setPreviewOpen(true)}
+                  onContextMenu={handleImageContextMenu}
                 />
+                {/* Right-click context menu */}
+                {ctxMenu && typeof document !== 'undefined' && createPortal(
+                  <div
+                    className="fixed z-[9999] bg-background border border-border/60 rounded-lg py-1 shadow-xl min-w-[140px]"
+                    style={{ left: ctxMenu.x, top: ctxMenu.y }}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button type="button"
+                      onClick={() => { setCtxMenu(null); setCropMode(true); }}
+                      className="w-full px-3 py-1.5 text-[12px] text-left text-textMain hover:bg-surfaceHighlight transition-colors flex items-center gap-2">
+                      <Crop size={13} /> 截图 (框选裁切)
+                    </button>
+                    <button type="button"
+                      onClick={() => { setCtxMenu(null); setPreviewOpen(true); }}
+                      className="w-full px-3 py-1.5 text-[12px] text-left text-textMain hover:bg-surfaceHighlight transition-colors flex items-center gap-2">
+                      <ImageIcon size={13} /> 查看大图
+                    </button>
+                    <a href={fullImageUrl} download
+                      onClick={() => setCtxMenu(null)}
+                      className="block w-full px-3 py-1.5 text-[12px] text-left text-textMain hover:bg-surfaceHighlight transition-colors flex items-center gap-2">
+                      <Download size={13} /> 下载原图
+                    </a>
+                  </div>,
+                  document.body
+                )}
               </div>
               {/* Bottom pill bar */}
               <div className="flex items-center justify-center px-3 pb-2 shrink-0">
@@ -480,7 +577,7 @@ export default function ImageOutputNode(props: NodeProps) {
                               selectModel(m.configId);
                               setShowModelMenu(false);
                             }}
-                            className={`nodrag block w-full px-3 py-1.5 text-[11px] text-left hover:bg-surfaceHighlight transition-colors ${
+                            className={`nodrag block w-full px-3 py-1.5 text-[11px] text-left hover:bg-canvasNode transition-colors ${
                               selectedConfigId === m.configId ? 'text-textMain font-medium' : 'text-textMuted'
                             }`}>{m.displayName}</button>
                         ))}
@@ -503,7 +600,7 @@ export default function ImageOutputNode(props: NodeProps) {
                             <button key={r} type="button"
                               onClick={() => updateNodeData(props.id, { ...data, aspectRatio: r })}
                               className={`px-2 py-0.5 rounded-md text-[10px] transition-colors ${
-                                ratio === r ? 'bg-accent/20 text-accent font-medium' : 'bg-surfaceHighlight/50 text-textMuted hover:text-textMain'
+                                ratio === r ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                               }`}>{r}</button>
                           ))}
                         </div>
@@ -515,7 +612,7 @@ export default function ImageOutputNode(props: NodeProps) {
                                 <button key={r.value} type="button"
                                   onClick={() => updateNodeData(props.id, { ...data, resolution: r.value })}
                                   className={`px-2 py-0.5 rounded-md text-[10px] transition-colors ${
-                                    resolution === r.value ? 'bg-accent/20 text-accent font-medium' : 'bg-surfaceHighlight/50 text-textMuted hover:text-textMain'
+                                    resolution === r.value ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                                   }`}>{r.label}</button>
                               ))}
                             </div>
@@ -558,6 +655,16 @@ export default function ImageOutputNode(props: NodeProps) {
           <img src={fullImageUrl} alt="Preview" className="max-w-[90vw] max-h-[90vh] object-contain rounded-lg shadow-2xl" />
         </div>,
         document.body
+      )}
+
+      {/* Crop overlay — full-screen portal for drag selection */}
+      {cropMode && hasImage && (
+        <ImageCropOverlay
+          thumbUrl={fullImageUrl || data.lastImage!}
+          fullUrl={fullImageUrl || data.lastImage!}
+          onConfirm={handleCropConfirm}
+          onCancel={() => setCropMode(false)}
+        />
       )}
     </>
   );

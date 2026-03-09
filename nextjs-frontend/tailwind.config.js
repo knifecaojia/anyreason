@@ -25,6 +25,7 @@ module.exports = {
         background: "rgb(var(--color-background) / <alpha-value>)",
         surface: "rgb(var(--color-surface) / <alpha-value>)",
         surfaceHighlight: "rgb(var(--color-surface-highlight) / <alpha-value>)",
+        canvasNode: "rgb(var(--color-canvas-node) / <alpha-value>)",
         primary: "rgb(var(--color-primary) / <alpha-value>)",
         accent: "rgb(var(--color-accent) / <alpha-value>)",
         textMain: "rgb(var(--color-text-main) / <alpha-value>)",

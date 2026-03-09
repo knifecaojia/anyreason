@@ -37,6 +37,7 @@ from app.api.v1.apply_plans import router as apply_plans_router
 from app.api.v1.ai_chat_sessions import router as ai_chat_sessions_router
 from app.api.v1.storyboards import router as storyboards_router
 from app.api.v1.canvases import router as canvases_router
+from app.api.v1.ai_video_models import router as ai_video_models_router
 
 
 v1_router = APIRouter()
@@ -77,5 +78,6 @@ v1_router.include_router(user_agents_router, tags=["user_agents"])
 v1_router.include_router(user_apps_router, tags=["user_apps"])
 v1_router.include_router(ai_chat_sessions_router, tags=["ai_chat"])
 v1_router.include_router(canvases_router, prefix="/canvases", tags=["canvases"])
+v1_router.include_router(ai_video_models_router, tags=["ai"])
 
 __all__ = ["v1_router"]

@@ -217,7 +217,7 @@ export default function VideoOutputNode(props: NodeProps) {
       <div
         className={`group relative w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors border ${
           selected ? 'border-primary/50' : 'border-border/70'
-        } bg-background/95`}
+        } bg-canvasNode`}
         title="视频节点"
       >
         <span className="text-base leading-none">🎬</span>
@@ -266,7 +266,7 @@ export default function VideoOutputNode(props: NodeProps) {
 
         {/* Visible card */}
         <div className={`rounded-xl border overflow-hidden relative ${
-          isProcessing ? 'node-scanning-border border-transparent bg-background/80' : selected ? 'border-primary/50 bg-background/95' : 'border-border/70 bg-background/95'
+          isProcessing ? 'node-scanning-border border-transparent bg-surface/80' : selected ? 'border-primary/50 bg-canvasNode' : 'border-border bg-canvasNode'
         }`} style={{ height: props.height || 225 }}>
 
           {/* ===== PROCESSING STATE ===== */}
@@ -365,7 +365,7 @@ export default function VideoOutputNode(props: NodeProps) {
                                 selectModel(m.configId);
                                 setShowModelMenu(false);
                               }}
-                              className={`nodrag block w-full px-3 py-1.5 text-[11px] text-left hover:bg-surfaceHighlight transition-colors ${
+                              className={`nodrag block w-full px-3 py-1.5 text-[11px] text-left hover:bg-canvasNode transition-colors ${
                                 selectedConfigId === m.configId ? 'text-textMain font-medium' : 'text-textMuted'
                               }`}>{m.displayName}</button>
                           ))}
@@ -390,7 +390,7 @@ export default function VideoOutputNode(props: NodeProps) {
                                   <button key={r} type="button"
                                     onClick={() => updateNodeData(props.id, { ...data, aspectRatio: r })}
                                     className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
-                                      ratio === r ? 'bg-accent/20 text-accent font-medium' : 'bg-surfaceHighlight/50 text-textMuted hover:text-textMain'
+                                      ratio === r ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                                     }`}>{r}</button>
                                 ))}
                               </div>
@@ -403,7 +403,7 @@ export default function VideoOutputNode(props: NodeProps) {
                                 <button key={d} type="button"
                                   onClick={() => updateNodeData(props.id, { ...data, duration: d })}
                                   className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
-                                    duration === d ? 'bg-accent/20 text-accent font-medium' : 'bg-surfaceHighlight/50 text-textMuted hover:text-textMain'
+                                    duration === d ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                                   }`}>{d}s</button>
                               ))}
                             </div>

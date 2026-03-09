@@ -104,6 +104,31 @@ type WorkshopEdge = {
   data?: { relation?: "reference"; portType?: string };
 };
 
+// ===== Default node dimensions =====
+// Prevents ReactFlow measurement → props.width feedback loop.
+// When node.width is set explicitly, ReactFlow uses it directly
+// instead of feeding measured.width back into props.width.
+const DEFAULT_NODE_DIMENSIONS: Record<string, { width: number; height: number }> = {
+  videoOutputNode: { width: 400, height: 225 },
+  imageOutputNode: { width: 400, height: 260 },
+  textGenNode:     { width: 400, height: 225 },
+  promptNode:      { width: 340, height: 180 },
+  textNoteNode:    { width: 240, height: 120 },
+  assetNode:       { width: 400, height: 300 },
+};
+
+/** Ensure node has explicit width/height to prevent measurement feedback loop */
+function ensureNodeDimensions(node: any): any {
+  if (typeof node.width === 'number' && typeof node.height === 'number') return node;
+  const defaults = DEFAULT_NODE_DIMENSIONS[node.type];
+  if (!defaults) return node;
+  return {
+    ...node,
+    width: node.width ?? defaults.width,
+    height: node.height ?? defaults.height,
+  };
+}
+
 // ===== VFS helpers =====
 
 async function vfsListNodes(params: { parent_id?: string | null }): Promise<VfsNode[]> {
@@ -457,7 +482,7 @@ function StudioCanvasEditor() {
           try {
             const parsed = JSON.parse(draft);
             if (!cancelled && parsed?.reactflow?.nodes && parsed?.reactflow?.edges) {
-              setNodes(parsed.reactflow.nodes);
+              setNodes(parsed.reactflow.nodes.map(ensureNodeDimensions));
               setEdges(parsed.reactflow.edges);
               if (parsed.reactflow.viewport) setViewport(parsed.reactflow.viewport);
               if (parsed.name) setCanvasName(parsed.name);
@@ -474,7 +499,7 @@ function StudioCanvasEditor() {
       }
       if (!cancelled) {
         if (parsed?.reactflow?.nodes && parsed?.reactflow?.edges) {
-          setNodes(parsed.reactflow.nodes);
+          setNodes(parsed.reactflow.nodes.map(ensureNodeDimensions));
           setEdges(parsed.reactflow.edges);
           if (parsed.reactflow.viewport) setViewport(parsed.reactflow.viewport);
           // M3.4: Startup sync validation — repair VFS/DB drift (fire-and-forget)
@@ -586,7 +611,7 @@ function StudioCanvasEditor() {
       const slicerPos = node.position ?? { x: 0, y: 0 };
       const result = createStoryboardNodesFromSlicerOutput(node.id, items, { x: slicerPos.x, y: slicerPos.y + 200 });
       if (result.nodes.length > 0) {
-        setNodes((ns) => ns.concat(result.nodes as any));
+        setNodes((ns) => ns.concat(result.nodes.map(ensureNodeDimensions) as any));
         if (result.edges.length > 0) setEdges((es) => es.concat(result.edges as any));
       }
     }
@@ -651,7 +676,7 @@ function StudioCanvasEditor() {
         const newNodes = imported.reactflow.nodes.map((n) => {
           const newId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
           idMap.set(n.id, newId);
-          return { id: newId, type: n.type, position: { x: n.position.x + 100, y: n.position.y + 100 }, data: n.data };
+          return ensureNodeDimensions({ id: newId, type: n.type, position: { x: n.position.x + 100, y: n.position.y + 100 }, data: n.data, width: (n as any).width, height: (n as any).height });
         });
         const newEdges = imported.reactflow.edges
           .filter((e) => idMap.has(e.source) && idMap.has(e.target))
@@ -661,7 +686,7 @@ function StudioCanvasEditor() {
             sourceHandle: e.sourceHandle, targetHandle: e.targetHandle,
             type: TYPED_EDGE_TYPE, data: e.data,
           }));
-        setNodes((ns) => ns.concat(newNodes as any));
+        setNodes((ns) => ns.concat(newNodes.map(ensureNodeDimensions) as any));
         setEdges((es) => es.concat(newEdges as any));
       } else { alert(`导入失败：${result.errors.join(", ")}`); }
     };
@@ -702,7 +727,7 @@ function StudioCanvasEditor() {
         const newNodes = clipboardRef.current.nodes.map((n: any) => {
           const newId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
           idMap.set(n.id, newId);
-          return { ...n, id: newId, position: { x: n.position.x + 50, y: n.position.y + 50 }, selected: false };
+          return ensureNodeDimensions({ ...n, id: newId, position: { x: n.position.x + 50, y: n.position.y + 50 }, selected: false });
         });
         const newEdges = clipboardRef.current.edges
           .filter((ed: any) => idMap.has(ed.source) && idMap.has(ed.target))
@@ -785,7 +810,7 @@ function StudioCanvasEditor() {
       console.log('[onDrop] step3: pos=', pos);
       const id = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
       pushUndo({ nodes: nodes as any, edges: edges as any });
-      const newNode = { id, type: reg.type, position: pos, data: reg.defaultData() };
+      const newNode = ensureNodeDimensions({ id, type: reg.type, position: pos, data: reg.defaultData() });
       console.log('[onDrop] step4: adding node via rfAddNodes', newNode);
       rfAddNodes([newNode as any]);
       return;
@@ -800,36 +825,36 @@ function StudioCanvasEditor() {
     if (payload.kind === "reference") {
       // M1.2: referenceNode merged into storyboardNode
       pushUndo({ nodes: nodes as any, edges: edges as any });
-      rfAddNodes([{ id, type: "storyboardNode", position: pos, data: {
+      rfAddNodes([ensureNodeDimensions({ id, type: "storyboardNode", position: pos, data: {
         kind: "storyboard", shotNumber: 0,
         sceneDescription: payload.description ? String(payload.description) : String(payload.title || ""),
         dialogue: payload.dialogue ? String(payload.dialogue) : undefined,
         sourceStoryboardId: payload.sourceInfo?.shotCode ? undefined : undefined,
-      } as StoryboardNodeData } as any]);
+      } as StoryboardNodeData }) as any]);
       return;
     }
     if (payload.kind === "storyboard") {
       const shotCodeStr = String(payload.shotCode || "");
       const shotNumMatch = shotCodeStr.match(/(\d+)\s*$/);
       pushUndo({ nodes: nodes as any, edges: edges as any });
-      rfAddNodes([{ id, type: "storyboardNode", position: pos, data: {
+      rfAddNodes([ensureNodeDimensions({ id, type: "storyboardNode", position: pos, data: {
         kind: "storyboard", shotNumber: shotNumMatch ? parseInt(shotNumMatch[1], 10) : 1,
         sceneDescription: payload.description ? String(payload.description) : "",
         dialogue: payload.dialogue ? String(payload.dialogue) : undefined,
         sourceStoryboardId: payload.storyboardId ? String(payload.storyboardId) : undefined,
         episodeId: payload.episodeId ? String(payload.episodeId) : undefined,
-      } as StoryboardNodeData } as any]);
+      } as StoryboardNodeData }) as any]);
       return;
     }
     if (payload.kind === "asset") {
       pushUndo({ nodes: nodes as any, edges: edges as any });
-      rfAddNodes([{ id, type: "assetNode", position: pos, data: {
+      rfAddNodes([ensureNodeDimensions({ id, type: "assetNode", position: pos, data: {
         kind: "asset", assetId: String(payload.assetId || ""),
         name: String(payload.name || "资产"), assetType: String(payload.assetType || ""),
         thumbnail: payload.thumbnail ? String(payload.thumbnail) : undefined,
         resources: Array.isArray(payload.resources) ? payload.resources : undefined,
         activeResourceIndex: 0,
-      } as AssetNodeData } as any]);
+      } as AssetNodeData }) as any]);
       return;
     }
   }, [screenToFlowPosition, rfAddNodes, pushUndo, nodes, edges]);
@@ -848,11 +873,11 @@ function StudioCanvasEditor() {
 
       <div className="flex flex-1 overflow-hidden">
         {/* Canvas area */}
-        <div className="flex-1 relative" ref={wrapperRef} style={{ backgroundColor: 'rgb(16, 14, 26)' }}>
+        <div className="flex-1 relative" ref={wrapperRef} style={{ backgroundColor: 'rgb(12, 10, 28)' }}>
           <div
             className="absolute inset-0"
             style={{
-              backgroundImage: "radial-gradient(circle, rgba(160,160,160,0.12) 1px, transparent 1px)",
+              backgroundImage: "radial-gradient(circle, rgba(140,130,200,0.15) 1px, transparent 1px)",
               backgroundSize: "20px 20px",
               pointerEvents: "none",
             }}
@@ -970,7 +995,7 @@ function StudioCanvasEditor() {
                     })),
                   }, { x: 100, y: 100 });
                   pushUndo({ nodes: nodes as any, edges: edges as any });
-                  setNodes((ns) => ns.concat(result.nodes as any));
+                  setNodes((ns) => ns.concat(result.nodes.map(ensureNodeDimensions) as any));
                   setEdges((es) => es.concat(result.edges as any));
                 }} className="w-full h-8 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium transition-colors">
                   一键生成工作流

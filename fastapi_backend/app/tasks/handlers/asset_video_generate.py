@@ -92,12 +92,24 @@ class AssetVideoGenerateHandler(BaseTaskHandler):
 
         await reporter.progress(progress=5)
 
-        param_json: dict[str, Any] = {
-            "duration": int(duration) if duration else 5,
-            "aspect_ratio": str(aspect_ratio) if aspect_ratio else "16:9",
-        }
-        if isinstance(images, list) and images:
+        param_json: dict[str, Any] = dict(payload.get("param_json") or {})
+        if "duration" not in param_json:
+            param_json["duration"] = int(duration) if duration else 5
+        if "aspect_ratio" not in param_json:
+            param_json["aspect_ratio"] = str(aspect_ratio) if aspect_ratio else "16:9"
+        if isinstance(images, list) and images and "image_data_urls" not in param_json:
             param_json["image_data_urls"] = list(images)
+        # mode 兜底推断
+        if "mode" not in param_json:
+            img_count = len(images) if isinstance(images, list) else 0
+            if img_count == 0:
+                param_json["mode"] = "text2video"
+            elif img_count == 1:
+                param_json["mode"] = "image2video"
+            elif img_count == 2:
+                param_json["mode"] = "start_end"
+            else:
+                param_json["mode"] = "multi_frame"
 
         media_resp = await ai_gateway_service.generate_media(
             db=db,

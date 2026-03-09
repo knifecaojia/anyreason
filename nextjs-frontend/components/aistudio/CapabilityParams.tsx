@@ -7,6 +7,7 @@ const INPUT_MODE_LABELS: Record<string, string> = {
   first_frame: "首帧生视频",
   first_last_frame: "首尾帧生视频",
   reference_to_video: "参考生视频",
+  multi_frame: "智能多帧",
 };
 
 export function CapabilityParams({

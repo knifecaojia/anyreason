@@ -153,6 +153,8 @@ export function ModelSelector({
       if (lastFrameFile) filesToConvert.push(lastFrameFile.file);
     } else if (currentInputMode === "reference_to_video" && referenceFiles.length > 0) {
       referenceFiles.forEach((rf) => filesToConvert.push(rf.file));
+    } else if (currentInputMode === "multi_frame" && referenceFiles.length > 0) {
+      referenceFiles.forEach((rf) => filesToConvert.push(rf.file));
     }
 
     if (filesToConvert.length === 0) {
@@ -387,6 +389,37 @@ export function ModelSelector({
             </div>
           )}
           {referenceFiles.length < (caps?.max_reference_images ?? 10) && (
+            <Input type="file" accept="image/*" multiple onChange={handleReferenceUpload} />
+          )}
+        </div>
+      )}
+
+      {currentInputMode === "multi_frame" && (
+        <div className="space-y-2" data-testid="upload-multi-frame">
+          <Label>关键帧图片</Label>
+          <p className="text-xs text-muted-foreground">
+            最多 {caps?.max_frames ?? 6} 帧，按时间顺序排列
+          </p>
+          {referenceFiles.length > 0 && (
+            <div className="grid grid-cols-3 gap-2 mb-2">
+              {referenceFiles.map((rf, idx) => (
+                <div key={idx} className="relative h-24 rounded-md overflow-hidden border">
+                  <div className="absolute top-1 left-1 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded">
+                    帧 {idx + 1}
+                  </div>
+                  <img src={rf.url} alt={`帧 ${idx + 1}`} className="object-cover w-full h-full" />
+                  <button
+                    type="button"
+                    onClick={() => removeReferenceFile(idx)}
+                    className="absolute top-1 right-1 bg-black/60 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs hover:bg-black/80"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {referenceFiles.length < (caps?.max_frames ?? 6) && (
             <Input type="file" accept="image/*" multiple onChange={handleReferenceUpload} />
           )}
         </div>
@@ -666,4 +699,5 @@ const INPUT_MODE_LABELS: Record<string, string> = {
   first_frame: "首帧生视频",
   first_last_frame: "首尾帧生视频",
   reference_to_video: "参考生视频",
+  multi_frame: "智能多帧",
 };

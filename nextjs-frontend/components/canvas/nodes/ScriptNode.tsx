@@ -5,7 +5,6 @@ import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow } from '@/lib/canvas/xyflow-compat';
 import type { ScriptNodeData } from '@/lib/canvas/types';
 import { getNodeType } from '@/lib/canvas/node-registry';
-import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import NodeShell from './NodeShell';
 
 const MAX_TEXT_LENGTH = 10000;
@@ -18,14 +17,11 @@ export default function ScriptNode(props: NodeProps) {
   const [collapsed, setCollapsed] = useState(data.collapsed ?? false);
   const reg = getNodeType('scriptNode');
   const ports = reg?.ports ?? [];
-  const { expand, collapse, resolveLevel } = useNodeIconMode();
-  const renderLevel = resolveLevel();
   const text = data.text ?? '';
   const isOverLimit = text.length > MAX_TEXT_LENGTH;
 
   const handleTextChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const newText = e.target.value.slice(0, MAX_TEXT_LENGTH);
-    updateNodeData(props.id, { ...data, text: newText });
+    updateNodeData(props.id, { ...data, text: e.target.value });
   };
 
   return (
@@ -33,28 +29,26 @@ export default function ScriptNode(props: NodeProps) {
       nodeId={props.id}
       title="剧本节点"
       icon={reg?.icon}
-      iconEmoji="📄"
       colorClass={reg?.colorClass}
       collapsed={collapsed}
       onToggleCollapse={() => setCollapsed((c) => !c)}
-      renderLevel={renderLevel}
-      onExpand={expand}
-      onCollapse={collapse}
       ports={ports}
       selected={selected}
     >
-      <div className="space-y-2">
+      <div className="relative">
         <textarea
-          className="nodrag w-full bg-transparent border border-border rounded-lg p-2 text-xs text-textMain resize-none focus:outline-none focus:ring-1 focus:ring-primary"
-          rows={4}
-          value={text}
+          className="nodrag w-full bg-transparent text-xs text-textMain resize-none focus:outline-none min-h-[8rem] p-1"
+          value={data.text || ''}
           onChange={handleTextChange}
-          placeholder="在此输入剧本文本..."
-          style={{ minHeight: '4.5rem', maxHeight: '18rem', overflow: 'auto' }}
+          placeholder="暂无剧本内容。请在右侧面板选择分集以自动加载..."
         />
-        <div className={`text-[10px] ${isOverLimit ? 'text-red-400' : 'text-textMuted'}`}>
-          {text.length} / {MAX_TEXT_LENGTH} 字符
-        </div>
+        {!data.text && (
+          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <span className="text-[10px] text-textMuted bg-surface/80 px-2 py-1 rounded">
+              等待分集选择...
+            </span>
+          </div>
+        )}
       </div>
     </NodeShell>
   );

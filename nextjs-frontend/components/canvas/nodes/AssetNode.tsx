@@ -98,7 +98,7 @@ export default function AssetNode(props: NodeProps) {
       <div
         className={`group relative w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors border ${
           selected ? 'border-primary/50' : 'border-border/70'
-        } bg-background/95`}
+        } bg-canvasNode`}
         title={data.name || '资产'}
       >
         <span className="text-base leading-none">📦</span>
@@ -124,7 +124,7 @@ export default function AssetNode(props: NodeProps) {
       <div className="group relative" style={{ width: props.width || 400 }}>
         {/* Visible card */}
         <div className={`rounded-xl border overflow-hidden relative ${
-          selected ? 'border-primary/50 bg-background/95' : 'border-border/70 bg-background/95'
+          selected ? 'border-primary/50 bg-canvasNode' : 'border-border bg-canvasNode'
         }`}>
 
           {/* Title bar */}

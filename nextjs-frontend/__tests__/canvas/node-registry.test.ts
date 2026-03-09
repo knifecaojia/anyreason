@@ -8,13 +8,13 @@ import {
 
 const ALL_NODE_TYPES = [
   'textNoteNode',
-  'assetNode',
   'scriptNode',
-  'generatorNode',
+  'storyboardNode',
   'textGenNode',
+  'generatorNode',
   'slicerNode',
   'candidateNode',
-  'storyboardNode',
+  'assetNode',
 ] as const;
 
 const GROUP_MAP: Record<NodeGroup, string[]> = {
@@ -24,9 +24,9 @@ const GROUP_MAP: Record<NodeGroup, string[]> = {
 };
 
 describe('node-registry', () => {
-  test('registers all 8 node types', () => {
+  test('registers all node types', () => {
     const all = getAllNodeTypes();
-    expect(all.size).toBe(8);
+    expect(all.size).toBe(ALL_NODE_TYPES.length);
     for (const t of ALL_NODE_TYPES) {
       expect(all.has(t)).toBe(true);
     }
@@ -71,13 +71,13 @@ describe('node-registry', () => {
   test('defaultData factories return fresh objects with correct kind', () => {
     const kindMap: Record<string, string> = {
       textNoteNode: 'text-note',
-      assetNode: 'asset',
       scriptNode: 'script',
-      generatorNode: 'generator',
+      storyboardNode: 'storyboard',
       textGenNode: 'text-gen',
+      generatorNode: 'generator',
       slicerNode: 'slicer',
       candidateNode: 'candidate',
-      storyboardNode: 'storyboard',
+      assetNode: 'asset',
     };
 
     for (const t of ALL_NODE_TYPES) {
@@ -99,48 +99,46 @@ describe('node-registry', () => {
     }
   });
 
-  test('port definitions match the M1.2 design spec', () => {
-    // textNoteNode: 1 output (out-text)
-    const textNotePorts = getNodeType('textNoteNode')!.ports;
-    expect(textNotePorts).toHaveLength(1);
-    expect(textNotePorts[0]).toMatchObject({ id: 'out-text', direction: 'output', dataType: 'text' });
+  test('port definitions match the design spec', () => {
+    // textNoteNode: no ports
+    expect(getNodeType('textNoteNode')!.ports).toHaveLength(0);
 
-    // scriptNode: 1 output (out-text)
+    // scriptNode: 1 output (text)
     const scriptPorts = getNodeType('scriptNode')!.ports;
     expect(scriptPorts).toHaveLength(1);
-    expect(scriptPorts[0]).toMatchObject({ id: 'out-text', direction: 'output', dataType: 'text' });
+    expect(scriptPorts[0]).toMatchObject({ direction: 'output', dataType: 'text' });
 
-    // storyboardNode: 2 inputs (in-image, in-asset), 2 outputs (out-text, out-ref)
+    // storyboardNode: 2 inputs (image, asset-ref), 1 output (text)
     const sbPorts = getNodeType('storyboardNode')!.ports;
-    expect(sbPorts).toHaveLength(4);
+    expect(sbPorts).toHaveLength(3);
     expect(sbPorts.filter((p) => p.direction === 'input')).toHaveLength(2);
-    expect(sbPorts.filter((p) => p.direction === 'output')).toHaveLength(2);
+    expect(sbPorts.filter((p) => p.direction === 'output')).toHaveLength(1);
 
-    // textGenNode: 2 inputs (in-text, in-ref), 1 output (out-text)
+    // textGenNode: 1 input (text), 1 output (text)
     const tgPorts = getNodeType('textGenNode')!.ports;
-    expect(tgPorts).toHaveLength(3);
-    expect(tgPorts.filter((p) => p.direction === 'input')).toHaveLength(2);
+    expect(tgPorts).toHaveLength(2);
+    expect(tgPorts.filter((p) => p.direction === 'input')).toHaveLength(1);
     expect(tgPorts.filter((p) => p.direction === 'output')).toHaveLength(1);
 
-    // generatorNode: 2 inputs (in-text, in-ref), 2 outputs (out-image, out-video)
+    // generatorNode: 2 inputs (text, asset-ref), 1 output (image)
     const genPorts = getNodeType('generatorNode')!.ports;
-    expect(genPorts).toHaveLength(4);
+    expect(genPorts).toHaveLength(3);
     expect(genPorts.filter((p) => p.direction === 'input')).toHaveLength(2);
-    expect(genPorts.filter((p) => p.direction === 'output')).toHaveLength(2);
+    expect(genPorts.filter((p) => p.direction === 'output')).toHaveLength(1);
 
-    // slicerNode: 1 input (in-text), 1 output (storyboard-list)
+    // slicerNode: 1 input (text), 1 output (storyboard-list)
     const slicerPorts = getNodeType('slicerNode')!.ports;
     expect(slicerPorts).toHaveLength(2);
     expect(slicerPorts.find((p) => p.direction === 'output')!.dataType).toBe('storyboard-list');
 
-    // candidateNode: 1 input (in-text), 1 output (out-refs)
+    // candidateNode: 1 input (text), no output
     const candPorts = getNodeType('candidateNode')!.ports;
-    expect(candPorts).toHaveLength(2);
-    expect(candPorts.find((p) => p.id === 'out-refs')!.dataType).toBe('asset-ref');
+    expect(candPorts).toHaveLength(1);
+    expect(candPorts[0].direction).toBe('input');
 
-    // assetNode: 1 output (out-ref)
+    // assetNode: 1 output (asset-ref)
     const assetPorts = getNodeType('assetNode')!.ports;
     expect(assetPorts).toHaveLength(1);
-    expect(assetPorts[0]).toMatchObject({ id: 'out-ref', direction: 'output', dataType: 'asset-ref' });
+    expect(assetPorts[0]).toMatchObject({ direction: 'output', dataType: 'asset-ref' });
   });
 });

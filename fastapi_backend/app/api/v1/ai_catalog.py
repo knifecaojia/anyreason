@@ -4,10 +4,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
 
 from app.audit import write_audit_log
 from app.database import User, get_async_session
+from app.models import AIModelConfig
 from app.rbac import require_permissions
+from app.users import current_active_user
 from app.schemas_ai_catalog import (
     AIManufacturerCreate,
     AIManufacturerRead,
@@ -302,4 +305,29 @@ async def get_models_with_capabilities(
         db=db, category=category, enabled_only=enabled_only,
     )
     data = [ManufacturerWithModels(**r) for r in rows]
+    return ResponseBase(code=200, msg="OK", data=data)
+
+
+@router.get("/ai/catalog/configs")
+async def get_available_configs(
+    category: str = "text",
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+) -> ResponseBase[list[dict]]:
+    rows = (
+        await db.execute(
+            select(AIModelConfig)
+            .where(AIModelConfig.enabled == True)
+            .where(AIModelConfig.category == category)
+            .order_by(AIModelConfig.sort_order.desc())
+        )
+    ).scalars().all()
+    
+    data = []
+    for r in rows:
+        data.append({
+            "id": str(r.id),
+            "name": f"{r.manufacturer}/{r.model}" if r.manufacturer else r.model,
+            "model": r.model,
+        })
     return ResponseBase(code=200, msg="OK", data=data)

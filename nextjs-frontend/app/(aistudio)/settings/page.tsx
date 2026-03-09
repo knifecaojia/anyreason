@@ -1243,15 +1243,24 @@ export default function Page() {
         category === "video"
           ? `/api/ai/admin/model-configs/${modelTestModelConfigId}/test-video`
           : `/api/ai/admin/model-configs/${modelTestModelConfigId}/test-image`;
+      const INPUT_MODE_TO_VIDEO_MODE: Record<string, string> = {
+        text_to_video: "text2video",
+        first_frame: "image2video",
+        first_last_frame: "start_end",
+        reference_to_video: "reference",
+        multi_frame: "multi_frame",
+      };
+      const videoMode = INPUT_MODE_TO_VIDEO_MODE[modelTestCapParams.input_mode] || "text2video";
       const payload =
         category === "video"
           ? {
               prompt,
               duration: modelTestCapParams.duration ?? null,
               aspect_ratio: modelTestCapParams.aspect_ratio ?? null,
+              mode: videoMode,
               attachment_file_node_ids: attachmentIds.length ? attachmentIds : null,
               session_id: sid,
-              param_json: modelTestCapParams,
+              param_json: { ...modelTestCapParams, mode: videoMode },
             }
           : {
               prompt,

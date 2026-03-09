@@ -596,7 +596,9 @@ function PlanCard(props: { plan: ApplyPlan }) {
           ? renderAssetDocUpsert()
           : plan.kind === "storyboard_apply"
             ? renderStoryboardApply()
-            : renderAssetBind();
+            : plan.kind === "asset_bind"
+              ? renderAssetBind()
+              : <div className="text-sm text-textMuted">暂不支持预览此类计划 ({plan.kind})</div>;
 
   return (
     <details className="px-3 py-2 rounded-md bg-surfaceHighlight/40 border border-border">

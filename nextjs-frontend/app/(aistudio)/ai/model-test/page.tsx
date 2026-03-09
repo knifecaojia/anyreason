@@ -989,11 +989,19 @@ function VideoPanel({
       await new Promise((r) => setTimeout(r, 500));
       setTaskStatus("generating");
 
+      const INPUT_MODE_TO_VIDEO_MODE: Record<string, string> = {
+        text_to_video: "text2video",
+        first_frame: "image2video",
+        first_last_frame: "start_end",
+        reference_to_video: "reference",
+        multi_frame: "multi_frame",
+      };
+      const videoMode = INPUT_MODE_TO_VIDEO_MODE[capParams.input_mode] || "text2video";
       const res = await generateMedia({
         model_key: selectedModelCode,
         prompt,
         negative_prompt: negativePrompt || undefined,
-        param_json: capParams,
+        param_json: { ...capParams, mode: videoMode },
         category: "video",
       });
 

@@ -310,11 +310,14 @@ async def admin_test_model_config_video(
         merged_param_json["duration"] = duration
     if aspect_ratio and "aspect_ratio" not in merged_param_json:
         merged_param_json["aspect_ratio"] = aspect_ratio
+    if body.mode and "mode" not in merged_param_json:
+        merged_param_json["mode"] = body.mode
 
     input_json = {
         "prompt": prompt,
         "duration": duration,
         "aspect_ratio": aspect_ratio,
+        "mode": body.mode,
         "model_config_id": str(model_config_id),
         "session_id": str(session.id),
         "image_data_urls": image_data_urls_to_send,

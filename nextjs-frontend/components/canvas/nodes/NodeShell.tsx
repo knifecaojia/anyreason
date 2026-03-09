@@ -173,7 +173,7 @@ export default function NodeShell({
   if (renderLevel === 'placeholder') {
     return (
       <div
-        className={`rounded-2xl min-w-[220px] relative ${colorClass ?? 'bg-background/90'} ${
+        className={`rounded-2xl min-w-[220px] max-w-[480px] relative ${colorClass ?? 'bg-canvasNode'} ${
           selected ? 'ring-2 ring-primary' : ''
         }`}
         style={{ minHeight: 40 }}
@@ -191,7 +191,7 @@ export default function NodeShell({
   if (renderLevel === 'simplified') {
     return (
       <div
-        className={`rounded-2xl border border-border/70 bg-background/90 backdrop-blur shadow-lg min-w-[220px] relative ${
+        className={`rounded-2xl border border-border bg-canvasNode backdrop-blur shadow-lg min-w-[220px] max-w-[480px] relative ${
           selected ? 'ring-2 ring-primary' : ''
         }`}
       >
@@ -211,7 +211,7 @@ export default function NodeShell({
   // Full: everything
   return (
     <div
-      className={`rounded-2xl border border-border/70 bg-background/90 backdrop-blur shadow-lg min-w-[220px] relative ${
+      className={`rounded-2xl border border-border bg-canvasNode backdrop-blur shadow-lg min-w-[220px] max-w-[480px] relative ${
         selected ? 'ring-2 ring-primary' : ''
       }`}
     >

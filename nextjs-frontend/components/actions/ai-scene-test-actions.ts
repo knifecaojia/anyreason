@@ -54,7 +54,7 @@ export type AISceneTestOptions = { agents: AISceneTestAgentOption[]; tools: AISc
 
 export type ApplyPlan = {
   id: string;
-  kind: "episode_save" | "asset_create" | "asset_bind" | "asset_doc_upsert" | "storyboard_apply";
+  kind: "episode_save" | "asset_create" | "asset_bind" | "asset_doc_upsert" | "storyboard_apply" | "image_prompt_upsert" | "video_prompt_upsert";
   tool_id: string;
   inputs: Record<string, unknown>;
   preview: Record<string, unknown>;

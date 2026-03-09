@@ -92,6 +92,18 @@ class ModelTestVideoGenerateHandler(BaseTaskHandler):
                 param_json["aspect_ratio"] = str(aspect_ratio)
             if image_data_urls and "image_data_urls" not in param_json:
                 param_json["image_data_urls"] = list(image_data_urls)
+            # mode 兜底推断：前端未传 mode 时根据图片数量推断
+            if "mode" not in param_json:
+                img_count = len(image_data_urls) if image_data_urls else 0
+                if img_count == 0:
+                    param_json["mode"] = "text2video"
+                elif img_count == 1:
+                    param_json["mode"] = "image2video"
+                elif img_count == 2:
+                    param_json["mode"] = "start_end"
+                else:
+                    param_json["mode"] = "multi_frame"
+                logger.info("[video-handler] task=%s inferred mode=%s from %d images", task.id, param_json["mode"], img_count)
 
             media_resp = await ai_gateway_service.generate_media(
                 db=db,

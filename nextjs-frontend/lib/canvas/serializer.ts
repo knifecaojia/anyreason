@@ -52,6 +52,8 @@ export function serializeCanvas(
       position: { x: node.position.x, y: node.position.y },
       data: { ...(node.data as Record<string, unknown>) },
     };
+    if (typeof (node as any).width === 'number') serialized.width = (node as any).width;
+    if (typeof (node as any).height === 'number') serialized.height = (node as any).height;
     const data = node.data as Record<string, unknown> | undefined;
     if (data && typeof data.collapsed === 'boolean') {
       serialized.collapsed = data.collapsed;

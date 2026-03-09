@@ -282,7 +282,15 @@ class AIGatewayService:
         )
 
         param_json = param_json or {}
-        
+
+        # Video: validate against hardcoded registry (skip for unknown models)
+        if category == "video":
+            from app.ai_gateway.video_registry import get_video_model_spec
+            from app.ai_gateway.video_validator import validate_video_request
+            spec = get_video_model_spec(cfg.manufacturer, cfg.model)
+            if spec:
+                param_json = validate_video_request(spec, param_json)
+
         # Calculate cost (TODO: Dynamic pricing based on model metadata)
         credits_cost = 10 if category == "video" else 5
         

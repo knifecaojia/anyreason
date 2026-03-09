@@ -69,6 +69,7 @@ export interface ModelCapabilities {
   supports_guidance_scale?: boolean;
   guidance_scale_range?: { min: number; max: number; default?: number };
   max_reference_images?: number;
+  max_frames?: number;
   special_features?: string[];
   [key: string]: any;
 }

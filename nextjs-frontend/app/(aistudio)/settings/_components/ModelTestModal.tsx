@@ -316,7 +316,9 @@ export function ModelTestModal(props: {
                           {modelTestSessionId && modelTestVideoRuns.length === 0 && !modelTestSubmitting ? <div className="text-sm text-textMuted">该会话暂无记录。</div> : null}
                           {modelTestVideoRuns.map((r: any) => {
                             const refCount = r.input_file_node_ids.length || 0;
-                            const meta = `${r.aspect_ratio || "auto"} · 参考图 ${refCount}`;
+                            const VIDEO_MODE_LABELS: Record<string, string> = { text2video: "文生视频", image2video: "首帧生视频", start_end: "首尾帧", reference: "参考生视频", multi_frame: "智能多帧" };
+                            const modeLabel = VIDEO_MODE_LABELS[r.raw_payload?.mode || r.raw_payload?.param_json?.mode || ""] || "";
+                            const meta = `${modeLabel ? modeLabel + " · " : ""}${r.aspect_ratio || "auto"} · 参考图 ${refCount}`;
                             const outUrl = r.output_file_node_id ? `/api/vfs/nodes/${encodeURIComponent(r.output_file_node_id)}/download` : null;
                             const isVideoOut = Boolean(outUrl && (r.output_content_type || "").toLowerCase().startsWith("video/"));
                             return (

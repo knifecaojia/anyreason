@@ -90,6 +90,7 @@ class AdminAIModelConfigTestVideoRequest(BaseModel):
     prompt: str = Field(min_length=1)
     duration: int | None = None
     aspect_ratio: str | None = None
+    mode: str | None = None
     attachment_file_node_ids: list[UUID] | None = None
     session_id: UUID | None = None
     param_json: dict[str, Any] | None = None

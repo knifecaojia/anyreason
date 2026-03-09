@@ -16,32 +16,32 @@ import {
 
 const ALL_NODE_TYPES = [
   'textNoteNode',
-  'assetNode',
   'scriptNode',
-  'generatorNode',
+  'storyboardNode',
   'textGenNode',
+  'generatorNode',
   'slicerNode',
   'candidateNode',
-  'storyboardNode',
+  'assetNode',
 ] as const;
 
-const ALL_GROUPS: NodeGroup[] = ['creation', 'ai-generation', 'reference'];
+const ALL_GROUPS: NodeGroup[] = ['ai-generation', 'creation', 'reference'];
 
 const GROUP_MAP: Record<NodeGroup, string[]> = {
-  creation: ['textNoteNode', 'scriptNode', 'storyboardNode'],
   'ai-generation': ['textGenNode', 'generatorNode', 'slicerNode', 'candidateNode'],
+  creation: ['textNoteNode', 'scriptNode', 'storyboardNode'],
   reference: ['assetNode'],
 };
 
 const KIND_MAP: Record<string, string> = {
   textNoteNode: 'text-note',
-  assetNode: 'asset',
   scriptNode: 'script',
-  generatorNode: 'generator',
+  storyboardNode: 'storyboard',
   textGenNode: 'text-gen',
+  generatorNode: 'generator',
   slicerNode: 'slicer',
   candidateNode: 'candidate',
-  storyboardNode: 'storyboard',
+  assetNode: 'asset',
 };
 
 // ===== Generators =====
@@ -78,7 +78,7 @@ function batchCollapse(
 describe('Feature: infinite-canvas-storyboard-fusion, Property 1: Node registry group completeness', () => {
   /**
    * Property 1: 节点注册表分组完整性
-   * Every node type belongs to exactly one of 4 groups,
+   * Every node type belongs to exactly one of 3 groups,
    * and the group mapping matches the predefined spec.
    *
    * **Validates: Requirements 1.2**
@@ -109,7 +109,7 @@ describe('Feature: infinite-canvas-storyboard-fusion, Property 1: Node registry 
     );
   });
 
-  it('all 4 groups are covered and contain the correct node types', () => {
+  it('all 3 groups are covered and contain the correct node types', () => {
     fc.assert(
       fc.property(fc.constantFrom(...ALL_GROUPS), (group) => {
         const groupTypes = getNodeTypesByGroup(group).map((r) => r.type).sort();

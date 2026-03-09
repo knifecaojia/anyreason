@@ -60,7 +60,7 @@ export default function PromptNode(props: NodeProps) {
       <div
         className={`group relative w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors border ${
           selected ? 'border-primary/50' : 'border-border/70'
-        } bg-background/95`}
+        } bg-canvasNode`}
         title="提示词"
       >
         <span className="text-base leading-none">💬</span>
@@ -90,8 +90,8 @@ export default function PromptNode(props: NodeProps) {
       </Handle>
 
       <div
-        className={`rounded-xl border bg-background/95 overflow-hidden flex flex-col relative ${
-          selected ? 'border-primary/50' : 'border-border/70'
+        className={`rounded-xl border bg-canvasNode overflow-hidden flex flex-col relative ${
+          selected ? 'border-primary/50' : 'border-border'
         }`}
         style={{ width: props.width || 340, height: props.height || 180 }}
       >

@@ -4,6 +4,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from uuid import UUID
 import logging
+import re
 
 from app.database import User, get_async_session
 from app.models import BuiltinAgent, BuiltinAgentPromptVersion, Scene, AIChatSessionTask
@@ -15,6 +16,7 @@ from app.schemas_response import ResponseBase
 from app.users import current_active_user
 from app.ai_scene_test.tool_registry import TOOL_REGISTRY
 from app.api.v1.ai_scene_test import _resolve_default_version as _resolve_default_version_test
+from app.ai_scene_test.runner import run_scene_test_chat
 
 logger = logging.getLogger(__name__)
 
@@ -30,66 +32,23 @@ class AISceneRunChatRequest(BaseModel):
     tool_ids: list[str] | None = None
 
 async def _resolve_default_version(*, db: AsyncSession, agent_code: str) -> int:
-    # Deprecated: use _resolve_default_version_test from ai_scene_test
     return 1
 
 router = APIRouter()
 
-
 def _tool_ids_for_scene(row: Scene) -> list[str]:
-    # 优先使用场景配置的工具
     if row.required_tools:
         if isinstance(row.required_tools, list):
             return [str(t) for t in row.required_tools]
-        # 如果是其他格式（如 dict），尝试提取 ids
-        # 目前假定为 list[str]
-    
-    # 回退到默认逻辑（或者如果 required_tools 为空）
-    # 但根据用户反馈，如果没有配置工具，就不应该有工具。
-    # 之前的逻辑可能过于宽泛，包含了所有脚本工具。
-    # 我们保留之前的逻辑作为兜底，但仅当 required_tools 确实未配置时？
-    # 不，如果 required_tools 是空列表 []，那应该就是不需要工具。
-    # 只有当 required_tools 为 None 时才使用默认逻辑？
-    # 在 SQLAlchemy 模型中，required_tools 是 nullable=False, server_default='[]'
-    # 所以它通常是 [] 而不是 None。
-    
-    # 如果是空列表，那就返回空列表。
-    # 之前的逻辑会导致所有场景都有脚本工具，这可能是用户觉得“不一致”的原因。
-    # 让我们完全信任 required_tools。
     if isinstance(row.required_tools, list):
         return [str(t) for t in row.required_tools]
-        
     return []
 
-
-@router.post("/ai/scenes/{scene_code}/chat/stream")
-async def ai_scene_chat_stream(
+async def _build_scene_request(
+    db: AsyncSession,
     scene_code: str,
-    body: AISceneRunChatRequest,
-    db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
-):
-    # This endpoint is deprecated in favor of the async task version
-    # But we keep it for backward compatibility if needed, or redirect to task creation
-    # For "full async", we should probably make this create a task too, 
-    # but the frontend expects SSE. 
-    # Let's return 410 Gone or similar to force frontend update?
-    # Or just reuse the logic above to create a task and return it?
-    # The user asked for "全面异步化", so we should guide frontend to use the task API.
-    # However, changing the return type from StreamingResponse to JSON might break clients.
-    # We will just implement the same logic as the non-stream version (create task)
-    # and let the frontend handle the response change.
-    
-    return await ai_scene_chat(scene_code, body, db, user)
-
-
-@router.post("/ai/scenes/{scene_code}/chat", response_model=ResponseBase[TaskRead])
-async def ai_scene_chat(
-    scene_code: str,
-    body: AISceneRunChatRequest,
-    db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
-) -> ResponseBase[TaskRead]:
+    body: AISceneRunChatRequest
+) -> tuple[Scene, AISceneTestChatRequest]:
     row = (
         await db.execute(
             select(Scene)
@@ -115,46 +74,15 @@ async def ai_scene_chat(
         
         script_content = []
         for ep in ep_rows:
-            # Check if user script text implies a specific episode
-            # E.g. [当前剧集：第X集 - Title]
-            # But the user might also want to select a specific episode in the UI
-            # We don't have episode_id in the request body yet.
-            # But if we did, we could filter here.
-            # For now, let's include all episodes unless the prompt seems to be specific?
-            # Actually, including all is safer for "context".
-            
-            # However, if the user explicitly selected one episode in UI, 
-            # the frontend sends: `[当前剧集：第${selectedEpisode.episode_number}集...]\n\n`
-            # We can try to parse that or just rely on the full context.
-            # But wait, if we include ALL episodes, it might be too long.
-            
-            # Let's see if we can extract the episode number from the script_text prefix?
-            # Or better, let's update the request model to accept episode_ids list?
-            # But for now, let's just use a simple heuristic:
-            # If the script_text starts with "[当前剧集：第X集", we ONLY include that episode?
-            # No, maybe the user wants to reference previous episodes too.
-            
-            # Let's filter if we can find a match in the prefix
-            import re
-            
-            # Priority: explicit episode_ids in body > prefix match in script_text
             target_ep_nums: list[int] | None = None
             
             if body.episode_ids:
-                # If explicit IDs provided, use them directly
-                # We need to map UUIDs to episode numbers or just check ID equality
                 if ep.id not in body.episode_ids:
                     continue
             else:
-                # Fallback to prefix matching
-                # Support multiple episodes selection in context prefix
-                # E.g. [选定剧集范围：第1集、第2集]
-                # or [当前剧集：第1集 - Title]
-                
                 prefix_match = re.match(r"\[(当前剧集|选定剧集范围)：(.+?)\]", final_script_text)
                 if prefix_match:
-                    range_str = prefix_match.group(2) # "第1集 - Title" or "第1集、第2集"
-                    # Extract all numbers from range_str
+                    range_str = prefix_match.group(2)
                     target_ep_nums = [int(n) for n in re.findall(r"第(\d+)集", range_str)]
                     
                     if target_ep_nums:
@@ -203,6 +131,46 @@ async def ai_scene_chat(
         context_exclude_types=list(body.context_exclude_types or []),
         scene_code=scene_code,
     )
+    
+    return row, req
+
+async def _save_user_message(db: AsyncSession, body: AISceneRunChatRequest):
+    if not body.session_id:
+        return
+        
+    msg_content = ""
+    if body.messages and body.messages[-1].role == "user":
+        msg_content = body.messages[-1].content
+    else:
+        msg_content = body.script_text
+        
+    if msg_content:
+         await ai_chat_session_service.add_message(
+            db=db,
+            session_id=body.session_id,
+            role="user",
+            content=msg_content,
+        )
+         await ai_chat_session_service.touch_session(db=db, session_id=body.session_id)
+         await db.commit()
+
+@router.post("/ai/scenes/{scene_code}/chat/stream")
+async def ai_scene_chat_stream(
+    scene_code: str,
+    body: AISceneRunChatRequest,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+):
+    return await ai_scene_chat(scene_code, body, db, user)
+
+@router.post("/ai/scenes/{scene_code}/chat", response_model=ResponseBase[TaskRead])
+async def ai_scene_chat(
+    scene_code: str,
+    body: AISceneRunChatRequest,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+) -> ResponseBase[TaskRead]:
+    row, req = await _build_scene_request(db, scene_code, body)
 
     task = await task_service.create_task(
         db=db,
@@ -215,56 +183,53 @@ async def ai_scene_chat(
         ),
     )
 
-    logger.info(
-        "[ai-scene-runner] created task=%s session_id=%s input_json.session_id=%s",
-        task.id, body.session_id, req.model_dump(mode='json').get('session_id'),
-    )
+    logger.info("[ai-scene-runner] created task=%s", task.id)
 
     if body.session_id:
-        # Link task to session
         try:
-            session_task = AIChatSessionTask(
-                session_id=body.session_id,
-                task_id=task.id,
-            )
+            session_task = AIChatSessionTask(session_id=body.session_id, task_id=task.id)
             db.add(session_task)
-            # We don't commit here yet, let the next block handle commit or do it explicitly if needed
-            # But the next block (user message) also commits.
-            # To be safe and ensure task link is saved even if user message fails (unlikely),
-            # or to bundle them?
-            # Let's commit here to ensure the link exists before we return.
             await db.commit()
-        except Exception as e:
-            logger.error("[ai-scene-runner] failed to link task=%s to session=%s: %s", task.id, body.session_id, e)
-            # Rollback only the current transaction part?
-            # If create_task already committed, we are in a new transaction?
-            # If create_task didn't commit, we might rollback the task too?
-            # Assuming create_task commits.
+        except Exception:
             pass
-
-        # Save user message immediately to session
-        msg_content = ""
-        if body.messages and body.messages[-1].role == "user":
-            msg_content = body.messages[-1].content
-        else:
-            msg_content = body.script_text
-            
-        if msg_content:
-             logger.info("[ai-scene-runner] saving user message to session=%s len=%d", body.session_id, len(msg_content))
-             await ai_chat_session_service.add_message(
-                db=db,
-                session_id=body.session_id,
-                role="user",
-                content=msg_content,
-            )
-             await ai_chat_session_service.touch_session(db=db, session_id=body.session_id)
-             
-             # Must commit to persist the message and session update
-             await db.commit()
-             logger.info("[ai-scene-runner] committed user message to session=%s", body.session_id)
-        else:
-             logger.warning("[ai-scene-runner] no msg_content to save, session_id=%s", body.session_id)
-    else:
-        logger.info("[ai-scene-runner] no session_id in request, skipping user message save")
+        
+        await _save_user_message(db, body)
 
     return ResponseBase(code=200, msg="OK", data=TaskRead.model_validate(task))
+
+@router.post("/ai/scenes/{scene_code}/chat/sync", response_model=ResponseBase[dict])
+async def ai_scene_chat_sync(
+    scene_code: str,
+    body: AISceneRunChatRequest,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_active_user),
+) -> ResponseBase[dict]:
+    # 1. Build Request
+    row, req = await _build_scene_request(db, scene_code, body)
+    
+    # 2. Save User Message (Optional, if session provided)
+    if body.session_id:
+        await _save_user_message(db, body)
+
+    # 3. Run Sync
+    output_text, plans, trace_events, archive = await run_scene_test_chat(
+        body=req,
+        db=db,
+        user_id=user.id,
+    )
+    
+    # 4. Save Assistant Message (Optional)
+    if body.session_id:
+        await ai_chat_session_service.add_message(
+            db=db,
+            session_id=body.session_id,
+            role="assistant",
+            content=output_text,
+        )
+        await db.commit()
+
+    return ResponseBase(code=200, msg="OK", data={
+        "result": output_text,
+        "plans": [p.model_dump(mode="json") for p in plans],
+        "trace_events": trace_events[-50:], # limit size
+    })

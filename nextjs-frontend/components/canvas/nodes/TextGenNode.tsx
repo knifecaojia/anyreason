@@ -150,13 +150,13 @@ function TextGenPreviewModal({ text, onClose, onSave }: { text: string; onClose:
           <div className="flex items-center gap-2">
             {!editing ? (
               <button type="button" onClick={() => { setDraft(text); setEditing(true); }}
-                className="text-xs text-textMuted hover:text-textMain transition-colors px-2 py-1 rounded hover:bg-surfaceHighlight">
+                className="text-xs text-textMuted hover:text-textMain transition-colors px-2 py-1 rounded hover:bg-canvasNode">
                 ✏️ 编辑
               </button>
             ) : (
               <>
                 <button type="button" onClick={() => setEditing(false)}
-                  className="text-xs text-textMuted hover:text-textMain transition-colors px-2 py-1 rounded hover:bg-surfaceHighlight">
+                  className="text-xs text-textMuted hover:text-textMain transition-colors px-2 py-1 rounded hover:bg-canvasNode">
                   取消
                 </button>
                 <button type="button" onClick={() => onSave(draft)}
@@ -315,7 +315,7 @@ export default function TextGenNode(props: NodeProps) {
       <div
         className={`group relative w-10 h-10 rounded-lg flex items-center justify-center cursor-pointer transition-colors border ${
           selected ? 'border-primary/50' : 'border-border/70'
-        } bg-background/95`}
+        } bg-canvasNode`}
         title="文本生成"
       >
         <span className="text-base leading-none">📝</span>
@@ -344,8 +344,8 @@ export default function TextGenNode(props: NodeProps) {
     </Handle>
 
     <div
-      className={`rounded-xl border bg-background/95 overflow-hidden flex flex-col relative ${
-        selected ? 'border-primary/50' : 'border-border/70'
+      className={`rounded-xl border bg-canvasNode overflow-hidden flex flex-col relative ${
+        selected ? 'border-primary/50' : 'border-border'
       }`}
       style={{ width: props.width || 400, height: props.height || 225 }}
     >
@@ -437,7 +437,7 @@ export default function TextGenNode(props: NodeProps) {
                         selectModel(m.configId);
                         setShowModelMenu(false);
                       }}
-                      className={`nodrag block w-full px-3 py-1.5 text-[10px] text-left hover:bg-surfaceHighlight transition-colors ${
+                      className={`nodrag block w-full px-3 py-1.5 text-[10px] text-left hover:bg-canvasNode transition-colors ${
                         selectedConfigId === m.configId ? 'text-textMain' : 'text-textMuted'
                       }`}>
                       {m.displayName}

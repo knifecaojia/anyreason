@@ -250,6 +250,8 @@ export interface SerializedNode {
   position: { x: number; y: number };
   data: Record<string, unknown>;
   collapsed?: boolean;
+  width?: number;
+  height?: number;
 }
 
 export interface SerializedEdge {

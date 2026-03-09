@@ -77,9 +77,10 @@ export default function TextNoteNode(props: NodeProps) {
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
       <div
-        className={`rounded-xl ${noteColor.bg} ${noteColor.border} border backdrop-blur min-w-[140px] min-h-[60px] w-full h-full relative ${
+        className={`rounded-xl ${noteColor.bg} ${noteColor.border} border backdrop-blur min-w-[140px] min-h-[60px] relative ${
           selected ? 'ring-2 ring-primary' : ''
         }`}
+        style={{ width: props.width || 240, height: props.height || 120 }}
       >
         {/* Content area — directly editable */}
         <div
