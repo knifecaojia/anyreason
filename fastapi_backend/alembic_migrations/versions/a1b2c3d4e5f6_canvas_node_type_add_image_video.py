@@ -25,10 +25,6 @@ def upgrade() -> None:
         "'imageOutputNode', 'videoOutputNode', 'groupNode'"
         ")",
     )
-    op.add_column(
-        "canvas_nodes",
-        sa.Column("updated_at", sa.DateTime(timezone=True), nullable=False, server_default=sa.text("now()")),
-    )
 
 
 def downgrade() -> None:
