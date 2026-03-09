@@ -206,6 +206,10 @@ export interface StoryboardNodeData extends BaseNodeData {
   referenceImageUrl?: string; // 画面参考缩略图
   sourceStoryboardId?: string; // 关联后端 Storyboard 记录 ID
   episodeId?: string; // 关联分集 ID
+  sourceInfo?: {
+    shotCode?: string;
+    sceneCode?: string;
+  };
 }
 
 // ===== 联合类型 =====
