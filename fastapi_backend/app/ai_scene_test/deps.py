@@ -25,3 +25,5 @@ class SceneTestDeps:
     run_id: str | None = None
     debug_log_path: str | None = None
     episode_ids: list[UUID] | None = None
+    context_snapshot_md: str | None = None
+    context_refs: list[str] = field(default_factory=list)
