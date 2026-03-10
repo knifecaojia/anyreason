@@ -18,11 +18,14 @@ import { ChevronDown, Loader2, Square, Download, ImageIcon } from 'lucide-react'
 import { collectUpstreamData, fetchRefImagesAsBase64 } from '@/lib/canvas/image-utils';
 
 const ASPECT_RATIOS = ['16:9', '9:16', '1:1', '4:3', '3:4'] as const;
-const DURATIONS = [
-  { label: '2秒', value: 2 },
-  { label: '4秒', value: 4 },
-  { label: '6秒', value: 6 },
-] as const;
+
+const INPUT_MODE_LABELS: Record<string, string> = {
+  text_to_video: '文生视频',
+  first_frame: '图生视频',
+  first_last_frame: '首尾帧',
+  reference_to_video: '参考图生视频',
+  multi_frame: '多图合成',
+};
 
 async function createTaskApi(payload: { type: string; input_json: Record<string, unknown> }) {
   const res = await fetch('/api/tasks', {
@@ -84,7 +87,9 @@ export default function VideoOutputNode(props: NodeProps) {
   const supportsRatio = !caps || !!caps.aspect_ratios?.length;
   const modelDisplayName = selectedModel?.displayName ?? data.model ?? '模型';
   const ratio = data.aspectRatio ?? '16:9';
-  const duration = data.duration ?? 4;
+  const duration = data.duration ?? (caps?.duration_options?.[0] ?? caps?.duration_range?.min ?? 4);
+  const resolution = data.resolution ?? caps?.resolutions?.[0] ?? '1080p';
+  const inputMode = data.inputMode ?? caps?.input_modes?.[0] ?? 'text_to_video';
   const isProcessing = !!data.isProcessing;
   const hasVideo = !!data.lastVideo;
 
@@ -184,6 +189,8 @@ export default function VideoOutputNode(props: NodeProps) {
         binding_key: data.bindingKey || 'video-default',
         aspect_ratio: ratio,
         duration,
+        resolution,
+        mode: inputMode,
       };
 
       // Collect upstream reference images → base64 data URIs (preserves @N order)
@@ -203,7 +210,7 @@ export default function VideoOutputNode(props: NodeProps) {
     } catch (err: any) {
       updateNodeData(props.id, { ...dataRef.current, isProcessing: false, error: String(err?.message || err) });
     }
-  }, [data, isProcessing, props.id, ratio, duration, selectedConfigId, startPolling, updateNodeData, getNodes, getEdges]);
+  }, [data, isProcessing, props.id, ratio, duration, resolution, inputMode, selectedConfigId, startPolling, updateNodeData, getNodes, getEdges]);
 
   const handleStop = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -289,7 +296,7 @@ export default function VideoOutputNode(props: NodeProps) {
                 <div className="flex items-center gap-2 bg-surface/80 backdrop-blur rounded-full px-3 py-1 border border-border/30 text-[11px]">
                   <span className="text-textMuted truncate max-w-[120px]">{modelDisplayName}</span>
                   <span className="text-textMuted/20">·</span>
-                  <span className="text-textMuted">{ratio} {duration}s</span>
+                  <span className="text-textMuted">{inputMode !== 'text_to_video' ? (INPUT_MODE_LABELS[inputMode] || inputMode) + ' · ' : ''}{ratio} {duration}s</span>
                   {upstream.refImages.length > 0 && (
                     <>
                       <span className="text-textMuted/20">·</span>
@@ -307,8 +314,8 @@ export default function VideoOutputNode(props: NodeProps) {
             <div className="flex flex-col h-full">
               {/* Top bar */}
               <div className="flex items-center justify-between px-3 py-1.5 shrink-0">
-                <span className="text-[11px] text-textMuted">视频</span>
-                <span className="text-[10px] text-textMuted/60 tabular-nums">{duration}s · {ratio}</span>
+                <span className="text-[11px] text-textMuted">视频 {inputMode !== 'text_to_video' ? `· ${INPUT_MODE_LABELS[inputMode] || inputMode}` : ''}</span>
+                <span className="text-[10px] text-textMuted/60 tabular-nums">{caps?.resolutions?.length ? resolution + ' · ' : ''}{duration}s · {ratio}</span>
               </div>
 
               {/* Body — upstream text preview + ref image list */}
@@ -382,6 +389,34 @@ export default function VideoOutputNode(props: NodeProps) {
                       </button>
                       {showSizePicker && (
                         <div className="nodrag absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 bg-background border border-border/40 rounded-xl p-3 z-20 min-w-[220px] shadow-lg">
+                          {caps?.input_modes && caps.input_modes.length > 1 && (
+                            <div className="mb-2">
+                              <div className="text-[10px] text-textMuted/60 mb-1.5">生成模式</div>
+                              <div className="flex flex-wrap gap-1">
+                                {caps.input_modes.map((m: string) => (
+                                  <button key={m} type="button"
+                                    onClick={() => updateNodeData(props.id, { ...data, inputMode: m })}
+                                    className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
+                                      inputMode === m ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
+                                    }`}>{INPUT_MODE_LABELS[m] || m}</button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {caps?.resolutions && caps.resolutions.length > 0 && (
+                            <div className="mb-2">
+                              <div className="text-[10px] text-textMuted/60 mb-1.5">分辨率</div>
+                              <div className="flex flex-wrap gap-1">
+                                {caps.resolutions.map((res: string) => (
+                                  <button key={res} type="button"
+                                    onClick={() => updateNodeData(props.id, { ...data, resolution: res })}
+                                    className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
+                                      resolution === res ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
+                                    }`}>{res}</button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                           {supportsRatio && (
                             <div className="mb-2">
                               <div className="text-[10px] text-textMuted/60 mb-1.5">宽高比</div>
@@ -397,16 +432,34 @@ export default function VideoOutputNode(props: NodeProps) {
                             </div>
                           )}
                           <div>
-                            <div className="text-[10px] text-textMuted/60 mb-1.5">时长</div>
-                            <div className="flex flex-wrap gap-1">
-                              {(caps?.duration_options ?? [2, 4, 6, 8]).map((d: number) => (
-                                <button key={d} type="button"
-                                  onClick={() => updateNodeData(props.id, { ...data, duration: d })}
-                                  className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
-                                    duration === d ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
-                                  }`}>{d}s</button>
-                              ))}
+                            <div className="text-[10px] text-textMuted/60 mb-1.5 flex justify-between">
+                              <span>时长</span>
+                              {caps?.duration_range && <span>{duration}s</span>}
                             </div>
+                            {caps?.duration_range ? (
+                              <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-textMuted/50">{caps.duration_range.min}s</span>
+                                <input 
+                                  type="range" 
+                                  min={caps.duration_range.min} 
+                                  max={caps.duration_range.max} 
+                                  value={duration}
+                                  onChange={(e) => updateNodeData(props.id, { ...data, duration: parseInt(e.target.value) })}
+                                  className="flex-1 accent-accent text-accent bg-background"
+                                />
+                                <span className="text-[10px] text-textMuted/50">{caps.duration_range.max}s</span>
+                              </div>
+                            ) : (
+                              <div className="flex flex-wrap gap-1">
+                                {(caps?.duration_options ?? [2, 4, 6, 8]).map((d: number) => (
+                                  <button key={d} type="button"
+                                    onClick={() => updateNodeData(props.id, { ...data, duration: d })}
+                                    className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
+                                      duration === d ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
+                                    }`}>{d}s</button>
+                                  ))}
+                              </div>
+                            )}
                           </div>
                         </div>
                       )}

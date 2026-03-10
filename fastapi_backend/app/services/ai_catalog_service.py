@@ -213,6 +213,17 @@ class AIModelService:
                 "enabled": m.enabled,
             })
 
+        # For video category, fill in capabilities from hardcoded registry
+        # when the DB record has no model_capabilities.
+        if category == "video":
+            from app.ai_gateway.video_registry import get_video_model_spec, to_model_capabilities
+            for mfr_data in grouped.values():
+                for model_data in mfr_data["models"]:
+                    if not model_data["model_capabilities"]:
+                        spec = get_video_model_spec(mfr_data["code"], model_data["code"])
+                        if spec:
+                            model_data["model_capabilities"] = to_model_capabilities(spec)
+
         return list(grouped.values())
 
     async def get(

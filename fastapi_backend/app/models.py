@@ -945,6 +945,11 @@ class Task(Base):
     result_json = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     error = Column(Text, nullable=True)
 
+    external_task_id = Column(String(256), nullable=True)
+    external_provider = Column(String(64), nullable=True)
+    external_meta = Column(JSONB, nullable=True)
+    next_poll_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -960,7 +965,7 @@ class Task(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'succeeded', 'failed', 'canceled')",
+            "status IN ('queued', 'running', 'succeeded', 'failed', 'canceled', 'waiting_external')",
             name="ck_tasks_status",
         ),
         CheckConstraint("progress >= 0 AND progress <= 100", name="ck_tasks_progress"),
@@ -968,6 +973,7 @@ class Task(Base):
         Index("idx_tasks_user_status", "user_id", "status"),
         Index("idx_tasks_entity", "entity_type", "entity_id"),
         Index("idx_tasks_created_at", "created_at"),
+        Index("idx_tasks_waiting_poll", "status", "next_poll_at", postgresql_where=text("status = 'waiting_external'")),
     )
 
 

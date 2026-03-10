@@ -34,6 +34,7 @@ limiter = Limiter(key_func=get_remote_address)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    from app.tasks.external_poller import run_external_poller
     from app.tasks.realtime import TaskWebSocketManager, redis_event_forwarder
 
     if settings.AUTO_DB_INIT_ON_STARTUP:
@@ -47,15 +48,22 @@ async def lifespan(app: FastAPI):
     manager = TaskWebSocketManager()
     stop_event = asyncio.Event()
     forwarder = asyncio.create_task(redis_event_forwarder(manager=manager, stop_event=stop_event))
+    poller = asyncio.create_task(run_external_poller(stop_event=stop_event))
     app.state.task_ws_manager = manager
     app.state.task_ws_stop_event = stop_event
     app.state.task_ws_forwarder = forwarder
+    app.state.external_poller = poller
     yield
 
     stop_event.set()
     forwarder.cancel()
+    poller.cancel()
     try:
         await forwarder
+    except BaseException:
+        pass
+    try:
+        await poller
     except BaseException:
         pass
     await manager.close_all()

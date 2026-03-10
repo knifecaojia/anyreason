@@ -52,6 +52,7 @@ const CATEGORY_PROVIDER_HINTS: Record<Category, string[]> = {
     "VolcengineVideoProvider",
     "KlingVideoProvider",
     "ViduMediaProvider",
+    "GrokProxyProvider",
   ],
 };
 

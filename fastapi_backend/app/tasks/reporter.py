@@ -130,6 +130,30 @@ class TaskReporter:
             )
         )
 
+    async def publish_event(self, *, event_type: str, payload: dict[str, Any] | None = None) -> None:
+        """Publish a custom event (e.g. waiting_external) to both DB and WebSocket."""
+        data: dict[str, Any] = {"status": self._task.status, "progress": int(self._task.progress or 0)}
+        if payload:
+            data.update(jsonable_encoder(payload))
+        await task_repository.create_task_event(
+            db=self._db,
+            task_id=self._task.id,
+            event_type=event_type,
+            payload=jsonable_encoder(data),
+        )
+        asyncio.create_task(
+            publish_task_event(
+                payload={
+                    "user_id": str(self._task.user_id),
+                    "task_id": str(self._task.id),
+                    "event_type": event_type,
+                    "status": self._task.status,
+                    "progress": int(self._task.progress or 0),
+                    "payload": jsonable_encoder(data),
+                }
+            )
+        )
+
     async def fail(self, *, error: str, details: dict[str, Any] | None = None) -> None:
         now = datetime.now(timezone.utc)
         self._task.status = "failed"

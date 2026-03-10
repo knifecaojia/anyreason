@@ -13,7 +13,7 @@ import httpx
 
 from app.ai_gateway.providers.base_media import MediaProvider
 from app.core.exceptions import AppError
-from app.schemas_media import MediaRequest, MediaResponse
+from app.schemas_media import ExternalTaskRef, ExternalTaskStatus, MediaRequest, MediaResponse
 
 logger = logging.getLogger(__name__)
 
@@ -423,3 +423,155 @@ class AliyunMediaProvider(MediaProvider):
             duration = float(output["duration"])
 
         return MediaResponse(url=url, duration=duration, usage_id=task_id, meta=task_data)
+
+    # ------------------------------------------------------------------
+    # Two-phase async interface (video only)
+    # ------------------------------------------------------------------
+
+    @property
+    def supports_async(self) -> bool:
+        return True
+
+    def _build_video_payload(self, request: MediaRequest) -> tuple[str, dict, dict]:
+        """Build the submit URL, headers, and payload for a video request.
+        Returns (url, headers, payload)."""
+        endpoint = self._get_endpoint(request.model_key)
+        url = f"{self.base_url}/services/aigc/{endpoint}"
+        headers = self._build_headers(async_mode=True)
+
+        params = dict(request.param_json)
+
+        if request.model_key in self._VIDEO_RESOLUTION_TIER_ONLY:
+            raw_res = params.pop("resolution", None)
+            tier = params.pop("resolution_tier", None)
+            if not tier and raw_res:
+                tier = self._PIXEL_TO_TIER.get(raw_res, "720P")
+            if tier:
+                if tier not in ("720P", "1080P"):
+                    tier = "720P"
+                params["resolution"] = tier
+
+        input_block: Dict[str, Any] = {"prompt": request.prompt}
+
+        image_data_urls = params.pop("image_data_urls", None) or []
+        images = [i for i in image_data_urls if (i or "").strip()]
+
+        first_frame = (
+            params.pop("first_frame_image", None)
+            or params.pop("first_frame_url", None)
+            or params.pop("img_url", None)
+            or (images[0] if len(images) > 0 else None)
+        )
+        last_frame = (
+            params.pop("last_frame_image", None)
+            or params.pop("last_frame_url", None)
+            or (images[1] if len(images) > 1 else None)
+        )
+
+        is_kf2v = endpoint == "image2video/video-synthesis"
+        is_r2v = "r2v" in request.model_key
+
+        if is_r2v:
+            ref_urls: list[str] = []
+            if first_frame:
+                ref_urls.append(first_frame)
+            if last_frame:
+                ref_urls.append(last_frame)
+            if ref_urls:
+                input_block["reference_urls"] = ref_urls
+        else:
+            if first_frame:
+                input_block["first_frame_url" if is_kf2v else "img_url"] = first_frame
+            if last_frame:
+                input_block["last_frame_url"] = last_frame
+
+        ref_images = params.pop("ref_image_urls", None)
+        ref_videos = params.pop("ref_video_urls", None)
+        if ref_images:
+            if is_r2v:
+                existing = input_block.get("reference_urls", [])
+                input_block["reference_urls"] = existing + list(ref_images)
+            else:
+                input_block["ref_image_urls"] = list(ref_images)
+        if ref_videos:
+            if is_r2v:
+                existing = input_block.get("reference_urls", [])
+                input_block["reference_urls"] = existing + list(ref_videos)
+            else:
+                input_block["ref_video_urls"] = ref_videos
+
+        if request.negative_prompt:
+            input_block["negative_prompt"] = request.negative_prompt
+
+        payload: dict = {
+            "model": request.model_key,
+            "input": input_block,
+            "parameters": params,
+        }
+        return url, headers, payload
+
+    async def submit_async(self, request: MediaRequest) -> ExternalTaskRef:
+        if not self._is_video_model(request.model_key):
+            raise NotImplementedError("submit_async only supports video models")
+
+        url, headers, payload = self._build_video_payload(request)
+
+        logger.info("[aliyun-async] submitting video to %s model=%s", url, request.model_key)
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(url, json=payload, headers=headers, timeout=httpx.Timeout(60.0, write=120.0))
+            if resp.status_code != 200:
+                body = resp.text[:2000]
+                err_msg = f"Aliyun submit error: HTTP {resp.status_code}"
+                try:
+                    err_data = resp.json()
+                    err_msg = f"Aliyun: {err_data.get('message') or err_data.get('msg') or body[:300]}"
+                except Exception:
+                    if body:
+                        err_msg = f"Aliyun submit error: HTTP {resp.status_code} - {body[:300]}"
+                raise AppError(msg=err_msg, data={"raw": body}, code=502, status_code=502)
+
+            data = resp.json()
+            output = data.get("output", {})
+            task_id = output.get("task_id")
+            if not task_id:
+                raise AppError(msg="Aliyun: 未返回 task_id", data=data, code=502, status_code=502)
+
+        logger.info("[aliyun-async] submitted task_id=%s", task_id)
+        return ExternalTaskRef(
+            external_task_id=str(task_id),
+            provider="aliyun",
+            meta={"api_key": self.api_key, "base_url": self.base_url},
+        )
+
+    async def query_status(self, ref: ExternalTaskRef) -> ExternalTaskStatus:
+        base_url = ref.meta.get("base_url", self.base_url)
+        api_key = ref.meta.get("api_key", self.api_key)
+        task_url = f"{base_url}/tasks/{ref.external_task_id}"
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.get(task_url, headers=headers, timeout=10.0)
+            except httpx.HTTPError:
+                return ExternalTaskStatus(state="running")  # transient
+            if resp.status_code == 404:
+                return ExternalTaskStatus(state="failed", error=f"Aliyun task not found (404): {ref.external_task_id}")
+            if 400 <= resp.status_code < 500:
+                return ExternalTaskStatus(state="failed", error=f"Aliyun query error {resp.status_code}: {resp.text[:500]}")
+            if resp.status_code >= 500:
+                return ExternalTaskStatus(state="running")  # transient, will retry
+            task_data = resp.json()
+
+        status = task_data.get("output", {}).get("task_status")
+
+        if status == "SUCCEEDED":
+            try:
+                result = self._parse_success(ref.external_task_id, task_data)
+                return ExternalTaskStatus(state="succeeded", progress=100, result=result)
+            except Exception as e:
+                return ExternalTaskStatus(state="failed", error=str(e))
+        if status in ("FAILED", "CANCELED"):
+            msg = task_data.get("output", {}).get("message", "unknown error")
+            return ExternalTaskStatus(state="failed", error=f"Aliyun task {status}: {msg}")
+        return ExternalTaskStatus(state="running")

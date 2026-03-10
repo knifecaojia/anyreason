@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { CheckCircle, CircleDashed, Loader2, XCircle, ChevronDown, ChevronRight, Terminal } from "lucide-react";
+import { CheckCircle, CircleDashed, Cloud, Loader2, XCircle, ChevronDown, ChevronRight, Terminal } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTasks } from "@/components/tasks/TaskProvider";
 import type { Task } from "@/lib/tasks/types";
@@ -74,6 +74,8 @@ export function TaskProgressMonitor({ taskId, title = "AI 处理中", onComplete
         return <CircleDashed className="h-5 w-5 text-yellow-500 animate-pulse" />;
       case "running":
         return <Loader2 className="h-5 w-5 text-blue-500 animate-spin" />;
+      case "waiting_external":
+        return <Cloud className="h-5 w-5 text-purple-500 animate-pulse" />;
       case "succeeded":
         return <CheckCircle className="h-5 w-5 text-green-500" />;
       case "failed":
@@ -84,7 +86,7 @@ export function TaskProgressMonitor({ taskId, title = "AI 处理中", onComplete
   };
 
   // 渲染进度条颜色
-  const progressColor = effectiveStatus === "failed" ? "bg-red-500" : effectiveStatus === "succeeded" ? "bg-green-500" : "bg-blue-500";
+  const progressColor = effectiveStatus === "failed" ? "bg-red-500" : effectiveStatus === "succeeded" ? "bg-green-500" : effectiveStatus === "waiting_external" ? "bg-purple-500" : "bg-blue-500";
 
   return (
     <div className={cn("rounded-xl border border-border bg-surface/50 p-4 shadow-sm transition-all", className)}>
@@ -97,6 +99,7 @@ export function TaskProgressMonitor({ taskId, title = "AI 处理中", onComplete
             <p className="text-xs text-textMuted mt-0.5">
               {effectiveStatus === "queued" && "排队等待中..."}
               {effectiveStatus === "running" && `正在执行... ${effectiveProgress}%`}
+              {effectiveStatus === "waiting_external" && "云端生成中，请耐心等待..."}
               {effectiveStatus === "succeeded" && "执行完成"}
               {effectiveStatus === "failed" && "执行失败"}
             </p>

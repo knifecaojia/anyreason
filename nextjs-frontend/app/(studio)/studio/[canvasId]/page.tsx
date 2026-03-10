@@ -472,6 +472,17 @@ function StudioCanvasEditor() {
     if (!canvasId) return;
     let cancelled = false;
     (async () => {
+      // Always fetch canvas name from DB first as the authoritative source
+      try {
+        const dbRes = await fetch(`/api/canvases/${encodeURIComponent(canvasId)}`, { cache: 'no-store' });
+        if (dbRes.ok) {
+          const dbJson = (await dbRes.json()) as { data?: { name?: string } };
+          if (!cancelled && dbJson.data?.name) {
+            setCanvasName(dbJson.data.name);
+          }
+        }
+      } catch { /* best-effort */ }
+
       const folderId = await ensureCanvasFolder();
       const existing = await vfsListNodes({ parent_id: folderId });
       const filename = `${canvasId}.json`;
@@ -485,6 +496,7 @@ function StudioCanvasEditor() {
               setNodes(parsed.reactflow.nodes.map(ensureNodeDimensions));
               setEdges(parsed.reactflow.edges);
               if (parsed.reactflow.viewport) setViewport(parsed.reactflow.viewport);
+              // VFS name overrides DB name if present in draft
               if (parsed.name) setCanvasName(parsed.name);
             }
           } catch { /* ignore */ }
@@ -505,6 +517,7 @@ function StudioCanvasEditor() {
           // M3.4: Startup sync validation — repair VFS/DB drift (fire-and-forget)
           void startupSyncValidation(canvasId, parsed.reactflow.nodes);
         }
+        // VFS name overrides DB name if present
         if (parsed.name) setCanvasName(parsed.name);
       }
     })().catch(() => {});
@@ -707,8 +720,14 @@ function StudioCanvasEditor() {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
-      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       const isCtrl = e.ctrlKey || e.metaKey;
+      // Ctrl+S: manual save (works even in input fields)
+      if (isCtrl && (e.key === "s" || e.key === "S")) {
+        e.preventDefault();
+        void saveToVfs();
+        return;
+      }
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
       if (isCtrl && (e.key === "a" || e.key === "A") && !e.shiftKey) {
         e.preventDefault(); setNodes((ns) => ns.map((n) => ({ ...n, selected: true })) as any); return;
       }
@@ -751,7 +770,7 @@ function StudioCanvasEditor() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [nodes, edges, setNodes, setEdges, pushUndo]);
+  }, [nodes, edges, setNodes, setEdges, pushUndo, saveToVfs]);
 
   // --- Alignment guides ---
   const onNodeDrag = useCallback((_event: React.MouseEvent, dragNode: any) => {
@@ -862,10 +881,16 @@ function StudioCanvasEditor() {
   const nodeTypes = useMemo(() => buildReactFlowNodeTypes(), []);
   const edgeTypes = useMemo(() => ({ [TYPED_EDGE_TYPE]: TypedEdge }), []);
 
-  // Canvas name change handler
+  // Canvas name change handler — also syncs to DB immediately
   const handleCanvasNameChange = useCallback((name: string) => {
     setCanvasName(name);
-  }, []);
+    // Sync name to DB immediately so list page reflects the change
+    void fetch(`/api/canvases/${encodeURIComponent(canvasId)}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name }),
+    }).catch(() => {});
+  }, [canvasId]);
 
   return (
     <div className="flex flex-col h-screen w-screen">
@@ -911,21 +936,10 @@ function StudioCanvasEditor() {
             </ReactFlow>
             <NodeLibrary />
             <CanvasToolbar
-              onRunAll={handleRunAll}
-              onRunSelected={handleRunSelected}
-              onStopAll={handleStopAll}
-              queueState={queueState}
               onExportWorkflow={handleExportWorkflow}
               onImportWorkflow={handleImportWorkflow}
-              onExportSelected={handleExportSelected}
-              hasSelection={selectedNodeIds.length > 0}
-              hasStoryboardSelection={hasStoryboardSelection}
-              onBatchGenerateImage={handleBatchGenerateImage}
-              onBatchGenerateVideo={handleBatchGenerateVideo}
-              performanceMode={perfMode}
-              onPerformanceModeChange={setPerfMode}
-              layoutMode={layoutMode}
-              onLayoutModeChange={handleLayoutModeChange}
+              onSave={saveToVfs}
+              saveStatus={saveStatus}
             />
           </div>
 

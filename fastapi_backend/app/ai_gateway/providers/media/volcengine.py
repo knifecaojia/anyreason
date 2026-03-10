@@ -4,7 +4,7 @@ import httpx
 from typing import Any, Dict
 from volcenginesdkarkruntime import AsyncArk
 from app.ai_gateway.providers.base_media import MediaProvider
-from app.schemas_media import MediaRequest, MediaResponse
+from app.schemas_media import ExternalTaskRef, ExternalTaskStatus, MediaRequest, MediaResponse
 from app.core.exceptions import AppError
 
 def _resolve_volcengine_size(
@@ -212,3 +212,58 @@ class VolcengineVideoProvider(MediaProvider):
         data = resp.json()
         status = data.get("status", "PENDING")
         return status, data
+
+    # ------------------------------------------------------------------
+    # Two-phase async interface
+    # ------------------------------------------------------------------
+
+    @property
+    def supports_async(self) -> bool:
+        return True
+
+    async def submit_async(self, request: MediaRequest) -> ExternalTaskRef:
+        task_id = await self._submit_task(request)
+        return ExternalTaskRef(
+            external_task_id=task_id,
+            provider="volcengine_video",
+            meta={"api_key": self.api_key, "base_url": self.base_url},
+        )
+
+    async def query_status(self, ref: ExternalTaskRef) -> ExternalTaskStatus:
+        base_url = ref.meta.get("base_url", self.base_url)
+        api_key = ref.meta.get("api_key", self.api_key)
+        url = f"{base_url}/video/generations/{ref.external_task_id}"
+        headers = {"Authorization": f"Bearer {api_key}"}
+
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.get(url, headers=headers, timeout=10.0)
+            except httpx.HTTPError:
+                return ExternalTaskStatus(state="running")  # transient
+            if resp.status_code == 404:
+                return ExternalTaskStatus(state="failed", error=f"Volcengine task not found (404): {ref.external_task_id}")
+            if 400 <= resp.status_code < 500:
+                return ExternalTaskStatus(state="failed", error=f"Volcengine query error {resp.status_code}: {resp.text[:500]}")
+            if resp.status_code >= 500:
+                return ExternalTaskStatus(state="running")  # transient, will retry
+            data = resp.json()
+
+        status = data.get("status", "PENDING")
+        if status == "SUCCEEDED":
+            video_url = data.get("video_url", "")
+            return ExternalTaskStatus(
+                state="succeeded",
+                progress=100,
+                result=MediaResponse(
+                    url=video_url,
+                    duration=data.get("duration"),
+                    usage_id=ref.external_task_id,
+                    meta=data,
+                ),
+            )
+        if status in ("FAILED", "CANCELED"):
+            return ExternalTaskStatus(
+                state="failed",
+                error=f"Volcengine video task {status}: {data.get('message', '')}",
+            )
+        return ExternalTaskStatus(state="running")

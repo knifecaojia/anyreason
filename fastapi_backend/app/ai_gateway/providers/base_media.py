@@ -1,10 +1,25 @@
 from abc import ABC, abstractmethod
-from app.schemas_media import MediaRequest, MediaResponse
+from app.schemas_media import ExternalTaskRef, ExternalTaskStatus, MediaRequest, MediaResponse
 
 class MediaProvider(ABC):
     def __init__(self, api_key: str, base_url: str = "", **kwargs: object) -> None: ...
 
     @abstractmethod
     async def generate(self, request: MediaRequest) -> MediaResponse:
-        """Execute media generation request"""
+        """Execute media generation request (blocking: submit + poll until done)"""
         pass
+
+    @property
+    def supports_async(self) -> bool:
+        """Return True if this provider supports two-phase submit/poll."""
+        return False
+
+    async def submit_async(self, request: MediaRequest) -> ExternalTaskRef:
+        """Submit a generation task and return immediately with external task reference.
+        Override in subclass and set supports_async=True to enable."""
+        raise NotImplementedError
+
+    async def query_status(self, ref: ExternalTaskRef) -> ExternalTaskStatus:
+        """Query the status of a previously submitted external task.
+        Override in subclass and set supports_async=True to enable."""
+        raise NotImplementedError

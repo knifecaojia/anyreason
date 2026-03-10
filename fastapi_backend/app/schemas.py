@@ -512,7 +512,7 @@ class AIPromptPresetUpdateRequest(BaseModel):
     is_default: bool | None = None
 
 
-TaskStatus = Literal["queued", "running", "succeeded", "failed", "canceled"]
+TaskStatus = Literal["queued", "running", "succeeded", "failed", "canceled", "waiting_external"]
 
 
 class TaskCreateRequest(BaseModel):

@@ -123,7 +123,10 @@ export function ModelTestModal(props: {
 
   // 切换模型时重置参数为默认值（与 ModelSelector 逻辑一致）
   useEffect(() => {
-    if (!hasCaps) return;
+    if (!hasCaps) {
+      onCapParamsChange({});
+      return;
+    }
     const defaults: Record<string, any> = {};
     if (Array.isArray(selectedCaps.resolution_tiers) && selectedCaps.resolution_tiers.length > 0) {
       // 简单档位数组（如 ["1K", "2K", "4K"]），默认选 "2K" 或第一个

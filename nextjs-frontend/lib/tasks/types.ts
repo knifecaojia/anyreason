@@ -1,4 +1,4 @@
-export type TaskStatus = "queued" | "running" | "succeeded" | "failed" | "canceled";
+export type TaskStatus = "queued" | "running" | "succeeded" | "failed" | "canceled" | "waiting_external";
 
 export type Task = {
   id: string;

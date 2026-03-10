@@ -1061,21 +1061,10 @@ function StudioCanvasInner() {
           </ReactFlow>
           <NodeLibrary />
           <CanvasToolbar
-            onRunAll={handleRunAll}
-            onRunSelected={handleRunSelected}
-            onStopAll={handleStopAll}
-            queueState={queueState}
             onExportWorkflow={handleExportWorkflow}
             onImportWorkflow={handleImportWorkflow}
-            onExportSelected={handleExportSelected}
-            hasSelection={selectedNodeIds.length > 0}
-            hasStoryboardSelection={hasStoryboardSelection}
-            onBatchGenerateImage={handleBatchGenerateImage}
-            onBatchGenerateVideo={handleBatchGenerateVideo}
-            performanceMode={perfMode}
-            onPerformanceModeChange={setPerfMode}
-            layoutMode={layoutMode}
-            onLayoutModeChange={handleLayoutModeChange}
+            onSave={saveToVfs}
+            saveStatus={saveStatus}
           />
         </div>
 

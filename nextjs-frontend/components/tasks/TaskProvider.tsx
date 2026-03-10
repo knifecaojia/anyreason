@@ -21,7 +21,8 @@ export function shouldRefetchTaskOnEvent(eventType: string) {
     eventType === "succeeded" ||
     eventType === "failed" ||
     eventType === "canceled" ||
-    eventType === "retried"
+    eventType === "retried" ||
+    eventType === "waiting_external"
   );
 }
 

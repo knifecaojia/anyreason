@@ -8,8 +8,12 @@ from __future__ import annotations
 
 from typing import Any
 
+import logging
+
 from app.ai_gateway.video_registry import VideoMode, VideoModelSpec
 from app.core.exceptions import AppError
+
+logger = logging.getLogger(__name__)
 
 
 def validate_video_request(
@@ -21,7 +25,14 @@ def validate_video_request(
     Returns a cleaned copy of param_json ready for the provider.
     Raises ``AppError(400)`` on constraint violations.
     """
+    images: list[str] = param_json.get("image_data_urls") or []
+    img_count = len(images)
+
     mode_str = param_json.get("mode", "text2video")
+    logger.info(
+        "validate_video_request: spec=%s mode=%s img_count=%d",
+        spec.code, mode_str, img_count,
+    )
     try:
         vm = VideoMode(mode_str)
     except ValueError:
@@ -76,33 +87,45 @@ def validate_video_request(
             status_code=400,
         )
 
-    # Image count vs mode
-    images: list[str] = param_json.get("image_data_urls") or []
-    img_count = len(images)
+    # Image count vs mode — fallback to text2video when images are missing
+    # but the model supports it, instead of raising an error.
+    _can_fallback_t2v = VideoMode.TEXT2VIDEO in spec.modes
 
     if vm == VideoMode.TEXT2VIDEO:
         pass  # images ignored for text2video
     elif vm == VideoMode.IMAGE2VIDEO:
         if img_count < 1:
-            raise AppError(
-                msg="image2video mode requires at least 1 image (first frame)",
-                code=400,
-                status_code=400,
-            )
+            if _can_fallback_t2v:
+                logger.info("image2video requested without images; falling back to text2video for %s", spec.code)
+                vm = VideoMode.TEXT2VIDEO
+            else:
+                raise AppError(
+                    msg="image2video mode requires at least 1 image (first frame)",
+                    code=400,
+                    status_code=400,
+                )
     elif vm == VideoMode.START_END:
         if img_count < 2:
-            raise AppError(
-                msg="start_end mode requires exactly 2 images (first + last frame)",
-                code=400,
-                status_code=400,
-            )
+            if _can_fallback_t2v and img_count == 0:
+                logger.info("start_end requested without images; falling back to text2video for %s", spec.code)
+                vm = VideoMode.TEXT2VIDEO
+            else:
+                raise AppError(
+                    msg="start_end mode requires exactly 2 images (first + last frame)",
+                    code=400,
+                    status_code=400,
+                )
     elif vm == VideoMode.REFERENCE:
         if img_count < 1:
-            raise AppError(
-                msg="reference mode requires at least 1 reference image",
-                code=400,
-                status_code=400,
-            )
+            if _can_fallback_t2v:
+                logger.info("reference requested without images; falling back to text2video for %s", spec.code)
+                vm = VideoMode.TEXT2VIDEO
+            else:
+                raise AppError(
+                    msg="reference mode requires at least 1 reference image",
+                    code=400,
+                    status_code=400,
+                )
         if spec.max_ref_images and img_count > spec.max_ref_images:
             raise AppError(
                 msg=f"reference mode accepts max {spec.max_ref_images} images, got {img_count}",

@@ -130,6 +130,7 @@ async def _build_scene_request(
         session_id=body.session_id,
         context_exclude_types=list(body.context_exclude_types or []),
         scene_code=scene_code,
+        episode_ids=body.episode_ids,
     )
     
     return row, req

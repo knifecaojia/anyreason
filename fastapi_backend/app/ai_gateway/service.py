@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_gateway.factory import provider_factory
 from app.ai_gateway.providers.media_factory import media_provider_factory
-from app.schemas_media import MediaRequest, MediaResponse
+from app.schemas_media import ExternalTaskRef, ExternalTaskStatus, MediaRequest, MediaResponse
 from app.ai_gateway.types import ResolvedModelConfig
 from app.config import settings
 from app.core.exceptions import AppError
@@ -401,6 +401,124 @@ class AIGatewayService:
                 await db.commit()
             except Exception:
                 await db.rollback()
+
+    async def submit_media_async(
+        self,
+        *,
+        db: AsyncSession,
+        user_id: UUID,
+        binding_key: str | None,
+        model_config_id: UUID | None,
+        prompt: str,
+        negative_prompt: str | None = None,
+        param_json: dict[str, Any] | None = None,
+        callback_url: str | None = None,
+        category: str = "video",
+    ) -> ExternalTaskRef:
+        """Phase 1 of two-phase async: submit to external provider and return immediately."""
+        cfg, cfg_id, resolved_binding_key = await self._resolve_model_config(
+            db=db,
+            category=category,
+            binding_key=binding_key,
+            model_config_id=model_config_id,
+            default_binding_key=category,
+        )
+
+        param_json = param_json or {}
+
+        if category == "video":
+            from app.ai_gateway.video_registry import get_video_model_spec
+            from app.ai_gateway.video_validator import validate_video_request
+            spec = get_video_model_spec(cfg.manufacturer, cfg.model)
+            if spec:
+                param_json = validate_video_request(spec, param_json)
+
+        credits_cost = 10 if category == "video" else 5
+        consumed_credits = 0
+        if credits_cost > 0:
+            await credit_service.adjust_balance(
+                db=db,
+                user_id=user_id,
+                delta=-credits_cost,
+                reason="ai.consume",
+                actor_user_id=None,
+                meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                allow_negative=False,
+            )
+            await db.commit()
+            consumed_credits = credits_cost
+
+        try:
+            from app.models import AIManufacturer
+            mfr_row = (await db.execute(
+                select(AIManufacturer.provider_class).where(
+                    AIManufacturer.code == cfg.manufacturer,
+                    AIManufacturer.category == category,
+                )
+            )).scalar_one_or_none()
+
+            provider = media_provider_factory.get_provider(
+                manufacturer=cfg.manufacturer,
+                api_key=cfg.api_key,
+                base_url=cfg.base_url,
+                provider_class=mfr_row,
+            )
+
+            if not provider.supports_async:
+                raise AppError(msg=f"Provider {cfg.manufacturer} does not support async submit", code=400, status_code=400)
+
+            request = MediaRequest(
+                model_key=cfg.model,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                param_json=param_json,
+                callback_url=callback_url,
+            )
+
+            ref = await provider.submit_async(request)
+            return ref
+
+        except AppError:
+            if consumed_credits > 0:
+                await credit_service.adjust_balance(
+                    db=db, user_id=user_id, delta=consumed_credits,
+                    reason="ai.refund", actor_user_id=None,
+                    meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    allow_negative=False,
+                )
+                await db.commit()
+            raise
+        except Exception as e:
+            friendly_msg = _extract_api_error(e)
+            if consumed_credits > 0:
+                await credit_service.adjust_balance(
+                    db=db, user_id=user_id, delta=consumed_credits,
+                    reason="ai.refund", actor_user_id=None,
+                    meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    allow_negative=False,
+                )
+                await db.commit()
+            if isinstance(e, AppError):
+                raise e
+            raise AppError(msg=f"AI {category} submit failed: {friendly_msg}", code=502, status_code=502, data={"raw": str(e), "friendly": friendly_msg})
+
+    async def query_media_status(
+        self,
+        *,
+        ref: ExternalTaskRef,
+    ) -> ExternalTaskStatus:
+        """Query the status of a previously submitted external task.
+        Uses the provider info stored in the ExternalTaskRef to find the right provider."""
+        provider_key = ref.provider
+        api_key = ref.meta.get("api_key", "")
+        base_url = ref.meta.get("base_url")
+
+        provider = media_provider_factory.get_provider(
+            manufacturer=provider_key,
+            api_key=api_key,
+            base_url=base_url,
+        )
+        return await provider.query_status(ref)
 
     async def chat_text_stream(
         self,
