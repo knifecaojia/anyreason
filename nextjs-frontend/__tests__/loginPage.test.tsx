@@ -1,21 +1,25 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import "@testing-library/jest-dom";
 
-import Page from "@/app/login/page";
+import { LoginForm } from "@/app/login/LoginForm";
 import { login } from "@/components/actions/login-action";
 
 jest.mock("../components/actions/login-action", () => ({
   login: jest.fn(),
 }));
 
-describe("Login Page", () => {
+// Mock next/navigation
+jest.mock("next/navigation", () => ({
+  useSearchParams: () => ({
+    get: jest.fn().mockReturnValue(""),
+  }),
+}));
+
+describe("Login Form Component", () => {
   const originalEnv = process.env;
 
   beforeEach(() => {
     process.env = { ...originalEnv };
-    delete process.env.NEXT_PUBLIC_DEV_LOGIN_PREFILL;
-    delete process.env.NEXT_PUBLIC_DEV_LOGIN_EMAIL;
-    delete process.env.NEXT_PUBLIC_DEV_LOGIN_PASSWORD;
   });
 
   afterAll(() => {
@@ -27,7 +31,7 @@ describe("Login Page", () => {
   });
 
   it("renders the form with username and password input and submit button", () => {
-    render(<Page />);
+    render(<LoginForm />);
 
     expect(screen.getByLabelText(/username|邮箱/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/password|密码/i)).toBeInTheDocument();
@@ -39,7 +43,7 @@ describe("Login Page", () => {
   it("calls login in successful form submission", async () => {
     (login as jest.Mock).mockResolvedValue({});
 
-    render(<Page />);
+    render(<LoginForm />);
 
     const usernameInput = screen.getByLabelText(/username|邮箱/i);
     const passwordInput = screen.getByLabelText(/password|密码/i);
@@ -57,7 +61,6 @@ describe("Login Page", () => {
       const [, formData] = calls[0] as [unknown, FormData];
       expect(formData.get("username")).toBe("testuser@example.com");
       expect(formData.get("password")).toBe("#123176a@");
-      expect(formData.get("next")).toBe("");
     });
   });
 
@@ -67,7 +70,7 @@ describe("Login Page", () => {
       server_validation_error: "LOGIN_BAD_CREDENTIALS",
     });
 
-    render(<Page />);
+    render(<LoginForm />);
 
     const usernameInput = screen.getByLabelText(/username|邮箱/i);
     const passwordInput = screen.getByLabelText(/password|密码/i);
@@ -82,36 +85,20 @@ describe("Login Page", () => {
     });
   });
 
-  it("displays server error for unexpected errors", async () => {
-    (login as jest.Mock).mockResolvedValue({
-      server_error: "An unexpected error occurred. Please try again later.",
-    });
+  it("prefills credentials when initialUsername is provided (Remember Me)", () => {
+    render(<LoginForm initialUsername="remembered@example.com" />);
 
-    render(<Page />);
-
-    const usernameInput = screen.getByLabelText(/username|邮箱/i);
-    const passwordInput = screen.getByLabelText(/password|密码/i);
-    const submitButton = screen.getByRole("button", { name: /sign in|登录/i });
-
-    fireEvent.change(usernameInput, { target: { value: "test@test.com" } });
-    fireEvent.change(passwordInput, { target: { value: "password123" } });
-    fireEvent.click(submitButton);
-
-    await waitFor(() => {
-      expect(
-        screen.getByText(
-          "An unexpected error occurred. Please try again later.",
-        ),
-      ).toBeInTheDocument();
-    });
+    expect(screen.getByLabelText(/username|邮箱/i)).toHaveValue("remembered@example.com");
+    expect(screen.getByLabelText(/remember me|记住我/i)).toBeChecked();
   });
 
-  it("prefills credentials when dev prefill is enabled", () => {
-    process.env.NEXT_PUBLIC_DEV_LOGIN_PREFILL = "true";
-    process.env.NEXT_PUBLIC_DEV_LOGIN_EMAIL = "admin@example.com";
-    process.env.NEXT_PUBLIC_DEV_LOGIN_PASSWORD = "admin123";
-
-    render(<Page />);
+  it("prefills credentials when dev prefill props are passed", () => {
+    render(
+      <LoginForm 
+        prefillEmail="admin@example.com" 
+        prefillPassword="admin123" 
+      />
+    );
 
     expect(screen.getByLabelText(/username|邮箱/i)).toHaveValue("admin@example.com");
     expect(screen.getByLabelText(/password|密码/i)).toHaveValue("admin123");

@@ -1668,3 +1668,29 @@ class CanvasExecution(Base):
         Index("idx_canvas_executions_canvas_status", "canvas_id", "status"),
         Index("idx_canvas_executions_created", "created_at"),
     )
+
+
+# ---------------------------------------------------------------------------
+# API Keys — M2.1 Spec09
+# ---------------------------------------------------------------------------
+
+class APIKey(Base):
+    __tablename__ = "api_keys"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    key = Column(String(255), unique=True, nullable=False)
+    name = Column(String(64), nullable=True)
+    is_active = Column(Boolean, nullable=False, server_default=text("true"), default=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User", backref=backref("api_keys", cascade="all, delete-orphan", passive_deletes=True))
+
+    __table_args__ = (
+        Index("idx_api_keys_user", "user_id"),
+        Index("idx_api_keys_key", "key"),
+    )

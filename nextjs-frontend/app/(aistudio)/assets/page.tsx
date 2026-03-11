@@ -938,6 +938,38 @@ export default function Page() {
 
   const mentionTabs = useMemo(() => [], []); // Simplified for now
 
+  const handleDeleteSelectedMaterials = async (ids: string[]) => {
+    let successCount = 0;
+    let failCount = 0;
+    
+    // We iterate for now as there's no batch VFS delete API
+    for (const id of ids) {
+      try {
+        const res = await fetch(`/api/vfs/nodes/${encodeURIComponent(id)}`, {
+          method: 'DELETE',
+        });
+        if (res.ok) successCount++;
+        else failCount++;
+      } catch (err) {
+        console.error(err);
+        failCount++;
+      }
+    }
+    
+    if (successCount > 0) {
+      setMaterials(prev => prev.filter(m => !ids.includes(m.id)));
+      toast.success(`成功删除 ${successCount} 个素材${failCount > 0 ? `，${failCount} 个失败` : ""}`);
+    } else if (failCount > 0) {
+      toast.error(`删除失败: ${failCount} 个素材删除遇到问题`);
+    }
+  };
+
+  const handleDeleteAllMaterials = async () => {
+    const ids = materials.map(m => m.id);
+    if (ids.length === 0) return;
+    await handleDeleteSelectedMaterials(ids);
+  };
+
   return (
     <div className="h-full flex flex-col space-y-6 animate-fade-in">
       <div className="flex justify-between items-center border-b border-border pb-4">
@@ -1068,6 +1100,8 @@ export default function Page() {
           setSelectedMaterialIds={setSelectedMaterialIds}
           setLightboxUrl={(url) => { setLightboxUrl(url); setLightboxIsVideo(false); }}
           setLightboxVideo={(url) => { setLightboxUrl(url); setLightboxIsVideo(true); }}
+          onDeleteSelected={handleDeleteSelectedMaterials}
+          onDeleteAll={handleDeleteAllMaterials}
         />
       )}
 

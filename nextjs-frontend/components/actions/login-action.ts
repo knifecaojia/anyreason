@@ -89,6 +89,19 @@ export async function login(prevState: unknown, formData: FormData) {
       path: "/",
       maxAge: maxAge,
     });
+
+    // Set or clear rememberedUsername cookie
+    if (remember) {
+      cookieStore.set("rememberedUsername", username, {
+        httpOnly: false, // Accessible from client if needed, but we'll use it on server
+        sameSite: "lax",
+        secure: process.env.NODE_ENV === "production",
+        path: "/",
+        maxAge: 60 * 60 * 24 * 30, // Always 30 days if remember is checked
+      });
+    } else {
+      cookieStore.delete("rememberedUsername");
+    }
   } catch (err) {
     const msg = getErrorMessage(err);
     // Skip noisy debug dump for server infrastructure errors (500/503)

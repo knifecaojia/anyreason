@@ -163,6 +163,18 @@ async function vfsDeleteNode(nodeId: string, opts: { recursive?: boolean } = {})
   if (!res.ok) throw new Error(await res.text());
 }
 
+async function vfsUpsertFile(payload: { name: string; content: string; parent_id: string }): Promise<VfsNode> {
+  const res = await fetch("/api/vfs/files", {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const json = (await res.json()) as { data?: VfsNode };
+  if (!json.data?.id) throw new Error("保存文件失败");
+  return json.data;
+}
+
 async function vfsDownloadText(nodeId: string): Promise<string> {
   const res = await fetch(`/api/vfs/nodes/${encodeURIComponent(nodeId)}/download`, { cache: "no-store" });
   if (!res.ok) throw new Error(await res.text());
@@ -344,6 +356,7 @@ function StudioCanvasEditor() {
   const [canvasName, setCanvasName] = useState("未命名画布");
   const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
   // Reference data states
   const [scripts, setScripts] = useState<ScriptItem[]>([]);
@@ -431,17 +444,13 @@ function StudioCanvasEditor() {
   }, [canvasId, edges, nodes, viewport, canvasName]);
 
   const saveToVfs = useCallback(async () => {
-    if (!canvasId) return;
+    if (!canvasId || !isLoaded) return;
     setSaveStatus("saving");
     setSaveError(null);
     try {
       const folderId = await ensureCanvasFolder();
-      const existing = await vfsListNodes({ parent_id: folderId });
-      const filename = `${canvasId}.json`;
-      const old = existing.find((n) => !n.is_folder && n.name === filename);
-      if (old) await vfsDeleteNode(old.id);
       const content = JSON.stringify(getSnapshot(), null, 2);
-      await vfsCreateFile({ name: filename, content, parent_id: folderId });
+      await vfsUpsertFile({ name: `${canvasId}.json`, content, parent_id: folderId });
       localStorage.removeItem(`studio_canvas_draft_${canvasId}`);
       setSaveStatus("saved");
       // M2.5: Fire-and-forget DB sync after VFS save
@@ -465,60 +474,64 @@ function StudioCanvasEditor() {
       setSaveStatus("error");
       setSaveError(String(e?.message || e));
     }
-  }, [canvasId, getSnapshot]);
+  }, [canvasId, getSnapshot, isLoaded, canvasName, nodes]);
 
   // Load canvas on mount
   useEffect(() => {
     if (!canvasId) return;
     let cancelled = false;
     (async () => {
-      // Always fetch canvas name from DB first as the authoritative source
       try {
-        const dbRes = await fetch(`/api/canvases/${encodeURIComponent(canvasId)}`, { cache: 'no-store' });
-        if (dbRes.ok) {
-          const dbJson = (await dbRes.json()) as { data?: { name?: string } };
-          if (!cancelled && dbJson.data?.name) {
-            setCanvasName(dbJson.data.name);
-          }
-        }
-      } catch { /* best-effort */ }
-
-      const folderId = await ensureCanvasFolder();
-      const existing = await vfsListNodes({ parent_id: folderId });
-      const filename = `${canvasId}.json`;
-      const node = existing.find((n) => !n.is_folder && n.name === filename);
-      if (!node) {
-        const draft = localStorage.getItem(`studio_canvas_draft_${canvasId}`);
-        if (draft) {
-          try {
-            const parsed = JSON.parse(draft);
-            if (!cancelled && parsed?.reactflow?.nodes && parsed?.reactflow?.edges) {
-              setNodes(parsed.reactflow.nodes.map(ensureNodeDimensions));
-              setEdges(parsed.reactflow.edges);
-              if (parsed.reactflow.viewport) setViewport(parsed.reactflow.viewport);
-              // VFS name overrides DB name if present in draft
-              if (parsed.name) setCanvasName(parsed.name);
+        // Always fetch canvas name from DB first as the authoritative source
+        try {
+          const dbRes = await fetch(`/api/canvases/${encodeURIComponent(canvasId)}`, { cache: 'no-store' });
+          if (dbRes.ok) {
+            const dbJson = (await dbRes.json()) as { data?: { name?: string } };
+            if (!cancelled && dbJson.data?.name) {
+              setCanvasName(dbJson.data.name);
             }
-          } catch { /* ignore */ }
+          }
+        } catch { /* best-effort */ }
+
+        const folderId = await ensureCanvasFolder();
+        const existing = await vfsListNodes({ parent_id: folderId });
+        const filename = `${canvasId}.json`;
+        const node = existing.find((n) => !n.is_folder && n.name === filename);
+        if (!node) {
+          const draft = localStorage.getItem(`studio_canvas_draft_${canvasId}`);
+          if (draft) {
+            try {
+              const parsed = JSON.parse(draft);
+              if (!cancelled && parsed?.reactflow?.nodes && parsed?.reactflow?.edges) {
+                setNodes(parsed.reactflow.nodes.map(ensureNodeDimensions));
+                setEdges(parsed.reactflow.edges);
+                if (parsed.reactflow.viewport) setViewport(parsed.reactflow.viewport);
+                // VFS name overrides DB name if present in draft
+                if (parsed.name) setCanvasName(parsed.name);
+              }
+            } catch { /* ignore */ }
+          }
+          return;
         }
-        return;
-      }
-      const txt = await vfsDownloadText(node.id);
-      let parsed = JSON.parse(txt);
-      // M1.2: Lazy migration for deprecated node types & old port names
-      if (parsed?.reactflow && needsMigration(parsed)) {
-        parsed = migrateCanvasSnapshot(parsed);
-      }
-      if (!cancelled) {
-        if (parsed?.reactflow?.nodes && parsed?.reactflow?.edges) {
-          setNodes(parsed.reactflow.nodes.map(ensureNodeDimensions));
-          setEdges(parsed.reactflow.edges);
-          if (parsed.reactflow.viewport) setViewport(parsed.reactflow.viewport);
-          // M3.4: Startup sync validation — repair VFS/DB drift (fire-and-forget)
-          void startupSyncValidation(canvasId, parsed.reactflow.nodes);
+        const txt = await vfsDownloadText(node.id);
+        let parsed = JSON.parse(txt);
+        // M1.2: Lazy migration for deprecated node types & old port names
+        if (parsed?.reactflow && needsMigration(parsed)) {
+          parsed = migrateCanvasSnapshot(parsed);
         }
-        // VFS name overrides DB name if present
-        if (parsed.name) setCanvasName(parsed.name);
+        if (!cancelled) {
+          if (parsed?.reactflow?.nodes && parsed?.reactflow?.edges) {
+            setNodes(parsed.reactflow.nodes.map(ensureNodeDimensions));
+            setEdges(parsed.reactflow.edges);
+            if (parsed.reactflow.viewport) setViewport(parsed.reactflow.viewport);
+            // M3.4: Startup sync validation — repair VFS/DB drift (fire-and-forget)
+            void startupSyncValidation(canvasId, parsed.reactflow.nodes);
+          }
+          // VFS name overrides DB name if present
+          if (parsed.name) setCanvasName(parsed.name);
+        }
+      } finally {
+        if (!cancelled) setIsLoaded(true);
       }
     })().catch(() => {});
     return () => { cancelled = true; };

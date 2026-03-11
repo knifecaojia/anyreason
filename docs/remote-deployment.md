@@ -58,17 +58,21 @@ ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@172.245.56.55 << 'EOF'
 EOF
 ```
 
-### 方案二：仅更新后端服务
+### 方案二：仅更新应用服务（保留数据库数据）
 
-适用于仅修改后端代码，不涉及数据库变更。
+适用于更新前后端和 Worker，但不希望停止 PostgreSQL/Redis/MinIO 等基础设施容器（保留数据）。
 
 ```bash
 ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@172.245.56.55 << 'EOF'
   cd /root/anyreason
   git pull
   cd docker-deploy
-  docker compose build --no-cache backend
-  docker compose up -d backend task-worker
+  # 停止并移除旧容器（不影响数据库）
+  docker compose stop frontend backend task-worker
+  docker compose rm -f frontend backend task-worker
+  # 重新构建并启动
+  docker compose build --no-cache frontend backend task-worker
+  docker compose up -d frontend backend task-worker
 EOF
 ```
 
@@ -132,6 +136,21 @@ ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@172.245.56.55 "docker exec -i
 
 # 执行 SQL 查询
 ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@172.245.56.55 "docker exec -i docker-deploy-postgres-1 psql -U postgres -d anyreason -c 'SELECT * FROM users LIMIT 5;'"
+
+### Alembic 数据库迁移
+
+如果代码中有新的迁移文件，需要手动执行更新：
+
+```bash
+# 查看当前迁移版本
+ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@172.245.56.55 "docker exec docker-deploy-backend-1 alembic current"
+
+# 执行迁移到最新版本
+ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@172.245.56.55 "docker exec docker-deploy-backend-1 alembic upgrade head"
+
+# 查看迁移历史
+ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@172.245.56.55 "docker exec docker-deploy-backend-1 alembic history"
+```
 ```
 
 ### 重启服务
@@ -198,6 +217,22 @@ ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@172.245.56.55 "curl -I https:
 # 测试容器内网络
 ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@172.245.56.55 "docker exec docker-deploy-backend-1 curl -I https://api.openai.com"
 ```
+
+### 5. 前端构建失败 (pnpm lockfile 错误)
+
+**现象**：`ERR_PNPM_OUTDATED_LOCKFILE`
+
+**解决方法**：
+在本地执行 `pnpm install` 更新 `pnpm-lock.yaml`，提交并 push，然后在远程 `git pull` 后重新构建。
+> [!TIP]
+> 也可以临时修改 `nextjs-frontend/Dockerfile.prod`，将 `pnpm install --frozen-lockfile` 改为 `pnpm install --no-frozen-lockfile`，但建议在本地维护好 lockfile。
+
+### 6. 容器状态显示 (unhealthy)
+
+**现象**：`docker ps` 中显示 `Up XX minutes (unhealthy)`
+
+**原因**：通常是因为 Dockerfile 中的 `HEALTHCHECK` 路径与应用实际路径不匹配（例如后端设置了 `/health` 但应用中没有该路由，或者端口不通）。
+**排查**：只要服务日志正常且外部 Nginx 能正常转发，通常不影响业务运行。
 
 ## 登录凭据
 

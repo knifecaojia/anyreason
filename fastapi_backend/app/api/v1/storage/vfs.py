@@ -111,6 +111,28 @@ async def create_text_file(
     return ResponseBase(code=200, msg="OK", data=FileNodeRead.model_validate(node))
 
 
+@router.put("/files", response_model=ResponseBase[FileNodeRead])
+async def upsert_text_file(
+    body: VfsCreateFileRequest,
+    user: User = Depends(current_active_user),
+    db: AsyncSession = Depends(get_async_session),
+):
+    if body.parent_id is None:
+        raise AppError(msg="parent_id is required for upsert", code=400, status_code=400)
+
+    node = await vfs_service.upsert_text_file(
+        db=db,
+        user_id=user.id,
+        name=body.name,
+        content=body.content,
+        parent_id=body.parent_id,
+        workspace_id=body.workspace_id,
+        project_id=body.project_id,
+        content_type=body.content_type or "text/markdown; charset=utf-8",
+    )
+    return ResponseBase(code=200, msg="OK", data=FileNodeRead.model_validate(node))
+
+
 @router.get("/nodes/{node_id}/download")
 async def download_node(
     node_id: UUID,
