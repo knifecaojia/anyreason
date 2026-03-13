@@ -25,3 +25,23 @@ export async function POST(request: Request) {
   });
 }
 
+export async function PUT(request: Request) {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("accessToken")?.value;
+  if (!token) return new NextResponse("unauthorized", { status: 401 });
+
+  const body = await request.text();
+  const upstream = await fetch(new URL("/api/v1/vfs/files", getApiBaseUrl()).toString(), {
+    method: "PUT",
+    headers: { Authorization: `Bearer ${token}`, "content-type": request.headers.get("content-type") || "application/json" },
+    body,
+    cache: "no-store",
+  });
+
+  const upstreamBody = await upstream.text();
+  return new NextResponse(upstreamBody || upstream.statusText, {
+    status: upstream.status,
+    headers: { "content-type": upstream.headers.get("content-type") || "application/json" },
+  });
+}
+

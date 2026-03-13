@@ -249,11 +249,14 @@ export default function TextGenNode(props: NodeProps) {
     updateNodeData(props.id, { ...data, status: 'streaming', error: undefined });
 
     let fullText = '';
+    let success = false;
     try {
-      for await (const chunk of streamChat(bindingKey, messages, abortController.signal, effectiveConfigId ?? undefined)) {
+      const stream = streamChat(bindingKey, messages, abortController.signal, effectiveConfigId ?? undefined);
+      for await (const chunk of stream) {
         fullText += chunk;
         setStreamingText(fullText);
       }
+      success = true;
 
       updateNodeData(props.id, {
         ...data,
@@ -267,6 +270,7 @@ export default function TextGenNode(props: NodeProps) {
       const currentEdges = getEdges();
       propagateData(props.id, 'out', fullText, currentNodes, currentEdges, rf.setNodes);
     } catch (err: any) {
+      console.error('[TextGenNode] generation failed:', err);
       if (err?.name === 'AbortError') {
         updateNodeData(props.id, {
           ...data,
@@ -284,6 +288,10 @@ export default function TextGenNode(props: NodeProps) {
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
+      // Safety: If not success and not failed/idle, reset to idle
+      if (!success && status === 'streaming') {
+         updateNodeData(props.id, { ...data, status: 'idle' });
+      }
     }
   }, [isStreaming, data, props.id, updateNodeData, getNodes, getEdges, rf.setNodes, lastOutput]);
 

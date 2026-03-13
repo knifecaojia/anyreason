@@ -388,15 +388,15 @@ export default function VideoOutputNode(props: NodeProps) {
                         <ChevronDown size={10} />
                       </button>
                       {showSizePicker && (
-                        <div className="nodrag absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 bg-background border border-border/40 rounded-xl p-3 z-20 min-w-[220px] shadow-lg">
+                        <div className="nodrag absolute bottom-full left-1/2 -translate-x-1/2 mb-1.5 bg-background border border-border/40 rounded-xl p-2.5 z-20 min-w-[200px] shadow-lg">
                           {caps?.input_modes && caps.input_modes.length > 1 && (
-                            <div className="mb-2">
-                              <div className="text-[10px] text-textMuted/60 mb-1.5">生成模式</div>
+                            <div className="mb-1.5">
+                              <div className="text-[9px] text-textMuted/60 mb-1">生成模式</div>
                               <div className="flex flex-wrap gap-1">
                                 {caps.input_modes.map((m: string) => (
                                   <button key={m} type="button"
                                     onClick={() => updateNodeData(props.id, { ...data, inputMode: m })}
-                                    className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
+                                    className={`px-1.5 py-0.5 rounded-md text-[10px] transition-colors ${
                                       inputMode === m ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                                     }`}>{INPUT_MODE_LABELS[m] || m}</button>
                                 ))}
@@ -404,13 +404,13 @@ export default function VideoOutputNode(props: NodeProps) {
                             </div>
                           )}
                           {caps?.resolutions && caps.resolutions.length > 0 && (
-                            <div className="mb-2">
-                              <div className="text-[10px] text-textMuted/60 mb-1.5">分辨率</div>
+                            <div className="mb-1.5">
+                              <div className="text-[9px] text-textMuted/60 mb-1">分辨率</div>
                               <div className="flex flex-wrap gap-1">
                                 {caps.resolutions.map((res: string) => (
                                   <button key={res} type="button"
                                     onClick={() => updateNodeData(props.id, { ...data, resolution: res })}
-                                    className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
+                                    className={`px-1.5 py-0.5 rounded-md text-[10px] transition-colors ${
                                       resolution === res ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                                     }`}>{res}</button>
                                 ))}
@@ -418,13 +418,13 @@ export default function VideoOutputNode(props: NodeProps) {
                             </div>
                           )}
                           {supportsRatio && (
-                            <div className="mb-2">
-                              <div className="text-[10px] text-textMuted/60 mb-1.5">宽高比</div>
+                            <div className="mb-1.5">
+                              <div className="text-[9px] text-textMuted/60 mb-1">宽高比</div>
                               <div className="flex flex-wrap gap-1">
                                 {(caps?.aspect_ratios ?? ASPECT_RATIOS).map((r: string) => (
                                   <button key={r} type="button"
                                     onClick={() => updateNodeData(props.id, { ...data, aspectRatio: r })}
-                                    className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
+                                    className={`px-1.5 py-0.5 rounded-md text-[10px] transition-colors ${
                                       ratio === r ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                                     }`}>{r}</button>
                                 ))}
@@ -432,13 +432,13 @@ export default function VideoOutputNode(props: NodeProps) {
                             </div>
                           )}
                           <div>
-                            <div className="text-[10px] text-textMuted/60 mb-1.5 flex justify-between">
+                            <div className="text-[9px] text-textMuted/60 mb-1 flex justify-between">
                               <span>时长</span>
                               {caps?.duration_range && <span>{duration}s</span>}
                             </div>
                             {caps?.duration_range ? (
                               <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-textMuted/50">{caps.duration_range.min}s</span>
+                                <span className="text-[9px] text-textMuted/50">{caps.duration_range.min}s</span>
                                 <input 
                                   type="range" 
                                   min={caps.duration_range.min} 
@@ -447,14 +447,14 @@ export default function VideoOutputNode(props: NodeProps) {
                                   onChange={(e) => updateNodeData(props.id, { ...data, duration: parseInt(e.target.value) })}
                                   className="flex-1 accent-accent text-accent bg-background"
                                 />
-                                <span className="text-[10px] text-textMuted/50">{caps.duration_range.max}s</span>
+                                <span className="text-[9px] text-textMuted/50">{caps.duration_range.max}s</span>
                               </div>
                             ) : (
                               <div className="flex flex-wrap gap-1">
                                 {(caps?.duration_options ?? [2, 4, 6, 8]).map((d: number) => (
                                   <button key={d} type="button"
                                     onClick={() => updateNodeData(props.id, { ...data, duration: d })}
-                                    className={`px-2 py-0.5 rounded-md text-[11px] transition-colors ${
+                                    className={`px-1.5 py-0.5 rounded-md text-[10px] transition-colors ${
                                       duration === d ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                                     }`}>{d}s</button>
                                   ))}
