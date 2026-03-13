@@ -46,14 +46,18 @@ class ViduMediaProvider(MediaProvider):
         payload = self._build_payload(mode, request)
         headers = self._headers()
 
+        import json
+        payload_str = json.dumps(payload)
         logger.info(
-            "[vidu] submit mode=%s model=%s endpoint=%s payload_keys=%s",
-            mode, request.model_key, endpoint, list(payload.keys()),
+            "[vidu] submit mode=%s model=%s endpoint=%s payload_size=%d bytes",
+            mode, request.model_key, endpoint, len(payload_str),
         )
 
         async with httpx.AsyncClient() as client:
             # 1. Submit task
-            resp = await client.post(url, json=payload, headers=headers, timeout=30.0)
+            # Increase timeout to 120s to handle large base64 payloads
+            timeout = httpx.Timeout(120.0, connect=10.0, write=90.0)
+            resp = await client.post(url, data=payload_str, headers=headers, timeout=timeout)
             if resp.status_code not in (200, 201):
                 raise AppError(
                     msg=f"Vidu Submit Error: {resp.status_code}",
@@ -248,10 +252,17 @@ class ViduMediaProvider(MediaProvider):
         payload = self._build_payload(mode, request)
         headers = self._headers()
 
-        logger.info("[vidu-async] submit mode=%s model=%s endpoint=%s", mode, request.model_key, endpoint)
+        import json
+        payload_str = json.dumps(payload)
+        logger.info(
+            "[vidu-async] submit mode=%s model=%s endpoint=%s payload_size=%d bytes",
+            mode, request.model_key, endpoint, len(payload_str),
+        )
 
         async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, headers=headers, timeout=30.0)
+            # Increase timeout to 120s to handle large base64 payloads
+            timeout = httpx.Timeout(120.0, connect=10.0, write=90.0)
+            resp = await client.post(url, data=payload_str, headers=headers, timeout=timeout)
             if resp.status_code not in (200, 201):
                 logger.error("[vidu-async] Vidu Submit Error HTTP %d: %s", resp.status_code, resp.text)
                 raise AppError(

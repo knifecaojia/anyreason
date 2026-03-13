@@ -10,15 +10,90 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import AppError
 from app.database import User, get_async_session
-from app.models import Episode, FileNode, Project, Script
-from app.schemas import EpisodeCreateRequest, EpisodeMutateRead, EpisodeUpdateRequest
+from app.models import Episode, FileNode, Project, Script, Storyboard
+from app.schemas import (
+    EpisodeCreateRequest, 
+    EpisodeMutateRead, 
+    EpisodeUpdateRequest,
+    StoryboardRead,
+    StoryboardCreateRequest
+)
 from app.schemas_response import ResponseBase
 from app.services.storage.vfs_service import vfs_service
-from app.users import current_active_user
+from app.users import current_user_via_any
 from app.vfs_layout import EPISODES_FOLDER_NAME, episode_filename
-
+from sqlalchemy import func
 
 router = APIRouter()
+
+
+@router.post("/{episode_id}/storyboards", response_model=ResponseBase[StoryboardRead])
+async def create_storyboard(
+    episode_id: UUID,
+    body: StoryboardCreateRequest,
+    db: AsyncSession = Depends(get_async_session),
+    user: User = Depends(current_user_via_any),
+):
+    """
+    Create a new storyboard for a specific episode.
+
+    - **episode_id**: The UUID of the episode.
+    - **shot_code**: A unique code for the shot (e.g., 'S01').
+    - **shot_number**: Optional sequence number. If not provided, it will be automatically incremented.
+    - **description**: Visual description of the shot.
+    - **dialogue**: Optional lines spoken in the shot.
+    - **shot_type**: Camera framing (e.g., 'Long Shot', 'Close-up').
+    - **active_assets**: List of asset UUIDs involved in this shot.
+
+    Returns the created storyboard details.
+    """
+    # Check if episode exists and belongs to user
+    res = await db.execute(
+        select(Episode)
+        .join(Project)
+        .where(Episode.id == episode_id, Project.owner_id == user.id)
+    )
+    ep = res.scalars().first()
+    if not ep:
+        raise AppError(msg="Episode not found or not authorized", code=404, status_code=404)
+
+    # Check for duplicate shot_code in the same episode
+    res = await db.execute(
+        select(Storyboard).where(Storyboard.episode_id == episode_id, Storyboard.shot_code == body.shot_code)
+    )
+    if res.scalars().first():
+        raise AppError(msg=f"Shot code {body.shot_code} already exists in this episode", code=400, status_code=400)
+
+    # If shot_number is not provided, use max + 1
+    shot_number = body.shot_number
+    if shot_number is None:
+        res = await db.execute(
+            select(func.max(Storyboard.shot_number)).where(Storyboard.episode_id == episode_id)
+        )
+        max_num = res.scalar() or 0
+        shot_number = int(max_num) + 1
+
+    sb = Storyboard(
+        episode_id=episode_id,
+        shot_code=body.shot_code,
+        shot_number=shot_number,
+        scene_code=body.scene_code,
+        scene_number=body.scene_number,
+        shot_type=body.shot_type,
+        camera_move=body.camera_move,
+        narrative_function=body.narrative_function,
+        location=body.location,
+        location_type=body.location_type,
+        time_of_day=body.time_of_day,
+        description=body.description,
+        dialogue=body.dialogue,
+        duration_estimate=body.duration_estimate,
+        active_assets=body.active_assets or [],
+    )
+    db.add(sb)
+    await db.commit()
+    await db.refresh(sb)
+    return ResponseBase(code=200, msg="OK", data=StoryboardRead.model_validate(sb))
 
 
 def _episode_code(episode_number: int) -> str:
@@ -140,7 +215,7 @@ class EpisodeDocUpdateRequest(BaseModel):
 async def get_episode_doc(
     episode_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
     ep = await _get_owned_episode(db=db, user_id=user.id, episode_id=episode_id)
     if not ep.project_id:
@@ -194,7 +269,7 @@ async def put_episode_doc(
     episode_id: UUID,
     body: EpisodeDocUpdateRequest,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
     ep = await _get_owned_episode(db=db, user_id=user.id, episode_id=episode_id)
     if not ep.project_id:
@@ -270,8 +345,18 @@ async def create_episode(
     script_id: UUID,
     body: EpisodeCreateRequest,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
+    """
+    Create a new episode for a script.
+
+    - **script_id**: The UUID of the script.
+    - **title**: Title of the episode.
+    - **script_full_text**: Optional full text content for the episode.
+    - **after_episode_id**: Optional UUID of an existing episode. If provided, the new episode will be inserted after it.
+
+    Returns the created episode metadata.
+    """
     project = await _ensure_script_project(db=db, user_id=user.id, script_id=script_id)
 
     after_episode: Episode | None = None
@@ -326,8 +411,17 @@ async def update_episode(
     episode_id: UUID,
     body: EpisodeUpdateRequest,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
+    """
+    Update an episode's title or text content.
+
+    - **episode_id**: The UUID of the episode to update.
+    - **title**: New title for the episode.
+    - **script_full_text**: Updated text content.
+
+    Returns the updated episode metadata.
+    """
     ep = await _get_owned_episode(db=db, user_id=user.id, episode_id=episode_id)
     patch = body.model_dump(exclude_unset=True)
     if "title" in patch:
@@ -343,8 +437,15 @@ async def update_episode(
 async def delete_episode(
     episode_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
+    """
+    Permanently delete an episode and shift the numbers of subsequent episodes.
+
+    - **episode_id**: The UUID of the episode to delete.
+
+    Returns a success confirmation.
+    """
     ep = await _get_owned_episode(db=db, user_id=user.id, episode_id=episode_id)
     project_id = ep.project_id
     deleted_number = int(ep.episode_number)
@@ -371,7 +472,7 @@ UNASSIGNED_EPISODE_CODE = "UNASSIGNED"
 async def get_or_create_unassigned_episode(
     script_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
     project = await _ensure_script_project(db=db, user_id=user.id, script_id=script_id)
     

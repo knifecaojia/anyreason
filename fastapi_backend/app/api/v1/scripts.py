@@ -19,7 +19,7 @@ from app.services.script_parse_service import script_parse_service
 from app.services.script_service import script_service
 from app.services.script_structure_service import script_structure_service
 from app.storage import get_minio_client
-from app.users import current_active_user
+from app.users import current_user_via_any
 from app.repositories import asset_repository
 
 
@@ -32,10 +32,18 @@ ASPECT_RATIO_CHOICES = {"16:9", "9:16", "4:3", "3:4", "1:1", "21:9"}
 @router.get("", response_model=ResponseBase[Page[ScriptRead]])
 async def list_scripts(
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
     page: int = Query(1, ge=1),
     size: int = Query(10, ge=1, le=100),
 ):
+    """
+    List scripts belonging to the authenticated user.
+
+    - **page**: Page number (starts from 1).
+    - **size**: Number of scripts per page (max 100).
+
+    Returns a paginated list of script summaries.
+    """
     params = Params(page=page, size=size)
     data = await script_service.list_user_scripts(db=db, user_id=user.id, params=params)
     return ResponseBase(code=200, msg="OK", data=data)
@@ -51,8 +59,21 @@ async def create_script(
     file: UploadFile | None = File(None),
     panorama_image: UploadFile | None = File(None),
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
+    """
+    Create a new script. This endpoint accepts multipart/form-data.
+
+    - **title**: Title of the script.
+    - **description**: Optional summary of the story.
+    - **aspect_ratio**: Target display ratio (e.g., '16:9', '9:16').
+    - **animation_style**: Optional style description (e.g., 'Anime', 'Realism').
+    - **text**: Raw script text. (Required if 'file' is not provided).
+    - **file**: Script file upload (.txt, .md, .doc, .docx). (Required if 'text' is not provided).
+    - **panorama_image**: Optional reference image for visual style.
+
+    The backend parses the uploaded file or raw text and initializes the script structure.
+    """
     if not file and not text:
         raise AppError(msg="必须提供 text 或 file", code=400, status_code=400)
 
@@ -130,8 +151,15 @@ async def create_script(
 async def delete_script(
     script_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
+    """
+    Permanently remove a script and its associated episodes and assets.
+
+    - **script_id**: The UUID of the script to delete.
+
+    Note: This is a soft delete from the user's perspective but potentially removes related storage data.
+    """
     deleted = await script_service.soft_delete_script(db=db, user_id=user.id, script_id=script_id)
     if not deleted:
         raise AppError(msg="Script not found or not authorized", code=404, status_code=404)
@@ -142,7 +170,7 @@ async def delete_script(
 async def download_script(
     script_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
     script = await script_service.get_user_script(db=db, user_id=user.id, script_id=script_id)
     if not script:
@@ -178,7 +206,7 @@ async def download_script(
 async def get_script_panorama(
     script_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
     script = await script_service.get_user_script(db=db, user_id=user.id, script_id=script_id)
     if not script:
@@ -216,7 +244,7 @@ async def get_script_panorama(
 async def get_script_panorama_thumbnail(
     script_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
     script = await script_service.get_user_script(db=db, user_id=user.id, script_id=script_id)
     if not script:
@@ -320,7 +348,7 @@ async def _build_script_hierarchy(*, db: AsyncSession, script: Script) -> Script
 async def get_script_hierarchy(
     script_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
     script = await script_service.get_user_script(db=db, user_id=user.id, script_id=script_id)
     if not script:
@@ -333,7 +361,7 @@ async def get_script_hierarchy(
 async def get_script_stats(
     script_id: UUID,
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
     script = await script_service.get_user_script(db=db, user_id=user.id, script_id=script_id)
     if not script:
@@ -446,7 +474,7 @@ async def structure_script(
     script_id: UUID,
     force: bool = Query(False),
     db: AsyncSession = Depends(get_async_session),
-    user: User = Depends(current_active_user),
+    user: User = Depends(current_user_via_any),
 ):
     script = await script_service.get_user_script(db=db, user_id=user.id, script_id=script_id)
     if not script:

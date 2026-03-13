@@ -87,6 +87,12 @@ async def get_user_manager(user_db: SQLAlchemyUserDatabase = Depends(get_user_db
     yield UserManager(user_db)
 
 
+from fastapi.security import APIKeyHeader
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from .database import get_async_session
+from .models import APIKey
+
 bearer_transport = BearerTransport(tokenUrl=f"{AUTH_URL_PATH}/jwt/login")
 
 
@@ -107,3 +113,41 @@ fastapi_users = FastAPIUsers[User, uuid.UUID](get_user_manager, [auth_backend])
 
 current_active_user = fastapi_users.current_user(active=True)
 current_active_superuser = fastapi_users.current_user(active=True, superuser=True)
+
+
+# --- API Key Authentication ---
+
+api_key_header = APIKeyHeader(name="X-API-KEY", auto_error=False)
+
+
+async def get_current_api_user(
+    api_key: str | None = Depends(api_key_header),
+    db: AsyncSession = Depends(get_async_session),
+) -> User | None:
+    if not api_key:
+        return None
+
+    res = await db.execute(
+        select(User)
+        .join(APIKey)
+        .where(APIKey.key == api_key, APIKey.is_active.is_(True))
+    )
+    user = res.scalars().first()
+    if user and not user.is_active:
+        return None
+    if user and getattr(user, "is_disabled", False):
+        return None
+    return user
+
+
+async def current_user_via_any(
+    user_jwt: User | None = Depends(fastapi_users.current_user(active=True, optional=True)),
+    user_api: User | None = Depends(get_current_api_user),
+) -> User:
+    user = user_jwt or user_api
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+        )
+    return user

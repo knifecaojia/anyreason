@@ -101,32 +101,56 @@ def register_routes(app: FastAPI) -> None:
         await handle_task_ws(websocket=websocket, manager=app.state.task_ws_manager)
 
 
+from app.users import current_user_via_any
+
+
 def register_docs(app: FastAPI) -> None:
     @app.get("/docs", include_in_schema=False)
     async def custom_swagger_ui_html(
-        _: object = Depends(current_active_superuser),
+        _: object = Depends(current_user_via_any),
     ):
         return get_swagger_ui_html(
             openapi_url=settings.OPENAPI_URL,
             title=app.title + " - Swagger UI",
+            swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
+            swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
         )
 
     @app.get("/redoc", include_in_schema=False)
     async def redoc_html(
-        _: object = Depends(current_active_superuser),
+        _: object = Depends(current_user_via_any),
     ):
         return get_redoc_html(openapi_url=settings.OPENAPI_URL, title=app.title + " - ReDoc")
 
     @app.get(settings.OPENAPI_URL, include_in_schema=False)
     async def openapi_endpoint(
-        _: object = Depends(current_active_superuser),
+        _: object = Depends(current_user_via_any),
     ):
-        return get_openapi(
+        if app.openapi_schema:
+            return app.openapi_schema
+        
+        openapi_schema = get_openapi(
             title=app.title,
             version=app.version,
             description=app.description,
             routes=app.routes,
         )
+        
+        # Ensure X-API-KEY is in security schemes if not auto-detected
+        if "components" not in openapi_schema:
+            openapi_schema["components"] = {}
+        if "securitySchemes" not in openapi_schema["components"]:
+            openapi_schema["components"]["securitySchemes"] = {}
+        
+        openapi_schema["components"]["securitySchemes"]["ApiKeyHeader"] = {
+            "type": "apiKey",
+            "in": "header",
+            "name": "X-API-KEY",
+            "description": "Admin-issued API Key for external access"
+        }
+        
+        app.openapi_schema = openapi_schema
+        return app.openapi_schema
 
 
 def create_app() -> FastAPI:

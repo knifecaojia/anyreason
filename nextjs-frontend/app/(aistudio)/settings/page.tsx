@@ -44,6 +44,7 @@ import { AgentsSection } from "./_components/AgentsSection";
 import { ModelsSection } from "./_components/ModelsSection";
 import { CreditsAdjustModal } from "./_components/CreditsAdjustModal";
 import { BuiltinDiffModal } from "./_components/BuiltinDiffModal";
+import { ApiKeysSection } from "./_components/ApiKeysSection";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { AvatarCropDialog } from "@/components/ui/avatar-crop-dialog";
@@ -234,7 +235,7 @@ const MENU_PERMISSION_LOOKUP = new Map<
   ),
 );
 
-type Section = "models" | "users" | "roles" | "permissions" | "audit" | "credits" | "agents";
+type Section = "models" | "users" | "roles" | "permissions" | "audit" | "credits" | "agents" | "apikeys";
 
 /** 从后端 JSON 错误响应中提取友好的错误信息 */
 function extractApiErrorMessage(raw: string, fallback: string): string {
@@ -2119,6 +2120,7 @@ export default function Page() {
     { key: "audit", label: "审计日志", icon: FileClock },
     { key: "credits", label: "积分管理", icon: Zap },
     { key: "agents", label: "Agent 管理", icon: Bot },
+    { key: "apikeys", label: "API 密钥", icon: Key },
   ];
 
   return (
@@ -2244,6 +2246,10 @@ export default function Page() {
           onTogglePermission={togglePermission}
           onAddPermission={handleAddPermission}
         />
+      )}
+
+      {(activeSection as Section) === "apikeys" && (
+        <ApiKeysSection />
       )}
 
       {createRoleOpen && (

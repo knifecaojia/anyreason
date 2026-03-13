@@ -24,9 +24,9 @@ logger = logging.getLogger(__name__)
 TASK_TIMEOUT_MAP: dict[str, int] = {
     "model_test_image_generate": 300,   # 5 分钟
     "asset_image_generate": 300,        # 5 分钟
-    "model_test_video_generate": 120,   # 2 分钟（仅提交阶段）
-    "asset_video_generate": 120,        # 2 分钟（仅提交阶段）
-    "shot_video_generate": 120,         # 2 分钟（仅提交阶段）
+    "model_test_video_generate": 300,   # 5 分钟（提交阶段）
+    "asset_video_generate": 300,        # 5 分钟（提交阶段）
+    "shot_video_generate": 300,         # 5 分钟（提交阶段）
 }
 # 走旧 run() 阻塞路径时的超时（兜底）
 LEGACY_VIDEO_TIMEOUT: dict[str, int] = {

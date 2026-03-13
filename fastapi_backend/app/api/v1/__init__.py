@@ -38,6 +38,7 @@ from app.api.v1.ai_chat_sessions import router as ai_chat_sessions_router
 from app.api.v1.storyboards import router as storyboards_router
 from app.api.v1.canvases import router as canvases_router
 from app.api.v1.ai_video_models import router as ai_video_models_router
+from app.api.v1.api_keys import router as api_keys_router
 
 
 v1_router = APIRouter()
@@ -69,7 +70,6 @@ v1_router.include_router(users_router, prefix="/users", tags=["users"])
 v1_router.include_router(credits_router, tags=["credits"])
 v1_router.include_router(agents_router, tags=["agents"])
 v1_router.include_router(episodes_router, tags=["episodes"])
-v1_router.include_router(storyboards_router, prefix="/storyboards", tags=["storyboards"])
 v1_router.include_router(vfs_router, prefix="/vfs", tags=["vfs"])
 v1_router.include_router(scenes_router, tags=["scenes"])
 v1_router.include_router(apply_plans_router, tags=["apply_plans"])
@@ -79,5 +79,7 @@ v1_router.include_router(user_apps_router, tags=["user_apps"])
 v1_router.include_router(ai_chat_sessions_router, tags=["ai_chat"])
 v1_router.include_router(canvases_router, prefix="/canvases", tags=["canvases"])
 v1_router.include_router(ai_video_models_router, tags=["ai"])
+v1_router.include_router(api_keys_router, prefix="/api-keys", tags=["admin"])
+v1_router.include_router(storyboards_router, prefix="/storyboards", tags=["storyboards"])
 
 __all__ = ["v1_router"]

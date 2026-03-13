@@ -92,12 +92,37 @@ class StoryboardRead(BaseModel):
 
 
 class StoryboardUpdate(BaseModel):
-    episode_id: UUID | None = None
     shot_code: str | None = None
     shot_number: int | None = None
     scene_code: str | None = None
     scene_number: int | None = None
+    shot_type: str | None = None
+    camera_move: str | None = None
+    narrative_function: str | None = None
+    location: str | None = None
+    location_type: str | None = None
+    time_of_day: str | None = None
     description: str | None = None
+    dialogue: str | None = None
+    duration_estimate: Decimal | None = None
+    active_assets: list[str] | None = None
+
+
+class StoryboardCreateRequest(BaseModel):
+    shot_code: str
+    shot_number: int | None = None
+    scene_code: str | None = None
+    scene_number: int | None = None
+    shot_type: str | None = None
+    camera_move: str | None = None
+    narrative_function: str | None = None
+    location: str | None = None
+    location_type: str | None = None
+    time_of_day: str | None = None
+    description: str | None = None
+    dialogue: str | None = None
+    duration_estimate: Decimal | None = None
+    active_assets: list[str] | None = None
 
 
 class SceneCreate(BaseModel):
@@ -625,3 +650,29 @@ class CanvasExecutionRead(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# API Keys — M2.1 Spec09
+# ---------------------------------------------------------------------------
+
+class APIKeyRead(BaseModel):
+    id: UUID
+    user_id: UUID
+    key: str
+    name: str | None = None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class APIKeyCreateRequest(BaseModel):
+    user_id: UUID | None = None  # Admin can specify user, otherwise self
+    name: str | None = None
+    key: str | None = None  # Optional, can be auto-generated
+
+
+class APIKeyUpdate(BaseModel):
+    name: str | None = None
+    is_active: bool | None = None

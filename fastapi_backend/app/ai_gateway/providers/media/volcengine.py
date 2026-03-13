@@ -189,7 +189,7 @@ class VolcengineVideoProvider(MediaProvider):
         payload.update(request.param_json)
 
         async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, headers=headers, timeout=30.0)
+            resp = await client.post(url, json=payload, headers=headers, timeout=120.0)
             if resp.status_code != 200:
                 raise AppError(
                     msg=f"Volcengine video submit error: {resp.status_code}",

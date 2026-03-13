@@ -89,7 +89,7 @@ class KlingVideoAdapter(MediaProvider):
             if len(images) > 1:
                 body["image_tail"] = _strip_data_url_prefix(images[1])
 
-        async with httpx_client(timeout_seconds=60.0) as client:
+        async with httpx_client(timeout_seconds=120.0) as client:
             resp = await client.post(create_url, headers=headers, json=body)
             resp.raise_for_status()
             create_data = resp.json()
@@ -118,7 +118,7 @@ class KlingVideoAdapter(MediaProvider):
         token = kling_bearer_token(api_key)
         headers = kling_headers(token=token)
 
-        async with httpx_client(timeout_seconds=60.0) as client:
+        async with httpx_client(timeout_seconds=120.0) as client:
             try:
                 r = await client.get(query_url, headers=headers)
             except Exception as e:

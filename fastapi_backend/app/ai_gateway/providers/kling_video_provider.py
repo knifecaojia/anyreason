@@ -63,7 +63,7 @@ class KlingVideoProvider:
             if len(images) > 1:
                 body["image_tail"] = _strip_data_url_prefix(images[1])
 
-        async with httpx_client(timeout_seconds=60.0) as client:
+        async with httpx_client(timeout_seconds=120.0) as client:
             resp = await client.post(create_url, headers=headers, json=body)
             resp.raise_for_status()
             create_data = resp.json()
@@ -78,7 +78,7 @@ class KlingVideoProvider:
         query_url = query_url_tpl.replace("{taskId}", str(task_id))
 
         async def _query():
-            async with httpx_client(timeout_seconds=60.0) as client:
+            async with httpx_client(timeout_seconds=120.0) as client:
                 r = await client.get(query_url, headers=headers)
                 r.raise_for_status()
                 data = r.json()
