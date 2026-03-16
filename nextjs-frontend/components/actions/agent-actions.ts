@@ -1,6 +1,7 @@
 "use server";
 
 import { cookies } from "next/headers";
+import { getServerApiBaseUrl } from "@/lib/serverApiConfig";
 
 type FetchOptions = {
   method?: string;
@@ -9,16 +10,12 @@ type FetchOptions = {
   query?: Record<string, string | number | boolean | undefined | null>;
 };
 
-function getApiBaseUrl() {
-  return process.env.INTERNAL_API_BASE_URL || process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-}
-
 async function authedFetch<T>(opts: FetchOptions): Promise<T> {
   const cookieStore = await cookies();
   const token = cookieStore.get("accessToken")?.value;
   if (!token) throw new Error("未登录：缺少 accessToken");
 
-  const url = new URL(opts.path, getApiBaseUrl());
+  const url = new URL(opts.path, getServerApiBaseUrl());
   if (opts.query) {
     Object.entries(opts.query).forEach(([k, v]) => {
       if (v === undefined || v === null) return;

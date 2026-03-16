@@ -125,6 +125,11 @@ async def process_task(*, task_id: UUID) -> None:
                     return
                 tb = traceback.format_exc()
                 logger.error("[process-task] submit failed task=%s error=%s\n%s", task_id, e, tb[-3000:])
+                # Call on_fail for cleanup
+                try:
+                    await handler.on_fail(db=db, task=task, error=str(e))
+                except Exception as cleanup_err:
+                    logger.error("[process-task] on_fail error during submit task=%s error=%s", task_id, cleanup_err)
                 await reporter.fail(error=str(e), details={"exception_type": type(e).__name__, "traceback": tb[-20000:], "phase": "submit"})
                 return
 
@@ -159,6 +164,11 @@ async def process_task(*, task_id: UUID) -> None:
                 return
             tb = traceback.format_exc()
             logger.error("[process-task] handler failed task=%s error=%s\n%s", task_id, e, tb[-3000:])
+            # Call on_fail for cleanup
+            try:
+                await handler.on_fail(db=db, task=task, error=str(e))
+            except Exception as cleanup_err:
+                logger.error("[process-task] on_fail error during run task=%s error=%s", task_id, cleanup_err)
             await reporter.fail(error=str(e), details={"exception_type": type(e).__name__, "traceback": tb[-20000:]})
             return
 

@@ -1,0 +1,62 @@
+================================================================================
+EVIDENCE: Task 5 - Centralized SSR/Internal API Base Resolution
+================================================================================
+Date: 2026-03-16
+
+SUMMARY
+-------
+Created centralized server-only API base URL resolver and updated 4 key files
+to use it instead of duplicated getApiBaseUrl() functions.
+
+FILES CREATED
+-------------
+1. nextjs-frontend/lib/serverApiConfig.ts
+   - Centralized server-side resolver
+   - Priority: INTERNAL_API_BASE_URL > API_BASE_URL > NEXT_PUBLIC_API_BASE_URL
+   - Development fallback: http://127.0.0.1:8000 (only when NODE_ENV === "development")
+   - Production throws error if no config set
+
+FILES MODIFIED
+--------------
+1. nextjs-frontend/components/actions/me-actions.ts
+   - Removed: local getApiBaseUrl() function (lines 5-7)
+   - Added: import { getServerApiBaseUrl } from "@/lib/serverApiConfig"
+   - Updated: authedFetch uses getServerApiBaseUrl()
+
+2. nextjs-frontend/components/actions/agent-actions.ts
+   - Removed: local getApiBaseUrl() function (lines 12-14)
+   - Added: import { getServerApiBaseUrl } from "@/lib/serverApiConfig"
+   - Updated: authedFetch uses getServerApiBaseUrl()
+
+3. nextjs-frontend/app/api/api-keys/route.ts
+   - Removed: local getApiBaseUrl() function (lines 4-6)
+   - Added: import { getServerApiBaseUrl } from "@/lib/serverApiConfig"
+   - Updated: All getApiBaseUrl() calls to getServerApiBaseUrl()
+
+4. nextjs-frontend/app/api/ai/video-models/route.ts
+   - Removed: local getApiBaseUrl() function (lines 4-11)
+   - Added: import { getServerApiBaseUrl } from "@/lib/serverApiConfig"
+   - Updated: getApiBaseUrl() call to getServerApiBaseUrl()
+
+VERIFICATION
+-----------
+1. TypeScript compilation: PASSED (no errors in modified files)
+2. Missing config error test: PASSED (throws in production mode)
+3. Development fallback test: PASSED (falls back to http://127.0.0.1:8000)
+4. Priority order test: PASSED (INTERNAL_API_BASE_URL takes precedence)
+
+KEY DESIGN DECISIONS
+--------------------
+1. Uses http://127.0.0.1:8000 (not localhost) - avoids IPv6 issues on Windows
+2. Only falls back to localhost in development (NODE_ENV === "development")
+3. Throws descriptive error in production when no config is set
+4. Exports both named export (getServerApiBaseUrl) and default export
+5. Also exports serverApiBase constant for direct usage
+
+NOTES
+-----
+- The shared resolver aligns with lib/clientConfig.ts server-side logic
+- 98 files still have localhost:8000 references but this task focused on the
+  4 key files specified in the requirements
+- The resolver is server-only ("use server" compatible)
+================================================================================

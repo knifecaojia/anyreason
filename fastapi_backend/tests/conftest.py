@@ -12,9 +12,86 @@ from app.config import settings
 from app.models import User, Base
 
 from app.database import get_user_db, get_async_session
-from app.main import app
 from app.users import get_jwt_strategy
 from app.services.credit_service import credit_service
+
+
+TEST_ENUM_DDL = [
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'canvas_status_enum') THEN
+            CREATE TYPE canvas_status_enum AS ENUM ('draft', 'active', 'archived');
+        END IF;
+    END
+    $$;
+    """,
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'canvas_node_status_enum') THEN
+            CREATE TYPE canvas_node_status_enum AS ENUM ('pending', 'running', 'completed', 'failed');
+        END IF;
+    END
+    $$;
+    """,
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'canvas_execution_status_enum') THEN
+            CREATE TYPE canvas_execution_status_enum AS ENUM ('pending', 'running', 'completed', 'partial', 'failed', 'cancelled');
+        END IF;
+    END
+    $$;
+    """,
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'canvas_trigger_type_enum') THEN
+            CREATE TYPE canvas_trigger_type_enum AS ENUM ('manual', 'batch', 'auto');
+        END IF;
+    END
+    $$;
+    """,
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'batch_video_job_status_enum') THEN
+            CREATE TYPE batch_video_job_status_enum AS ENUM ('draft', 'processing', 'completed', 'archived');
+        END IF;
+    END
+    $$;
+    """,
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'batch_video_asset_status_enum') THEN
+            CREATE TYPE batch_video_asset_status_enum AS ENUM ('pending', 'generating', 'completed', 'failed');
+        END IF;
+    END
+    $$;
+    """,
+    """
+    DO $$
+    BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'batch_video_history_status_enum') THEN
+            CREATE TYPE batch_video_history_status_enum AS ENUM ('pending', 'processing', 'completed', 'failed');
+        END IF;
+    END
+    $$;
+    """,
+]
+
+
+TEST_ENUM_DROP_DDL = [
+    "DROP TYPE IF EXISTS canvas_trigger_type_enum",
+    "DROP TYPE IF EXISTS canvas_execution_status_enum",
+    "DROP TYPE IF EXISTS canvas_node_status_enum",
+    "DROP TYPE IF EXISTS canvas_status_enum",
+    "DROP TYPE IF EXISTS batch_video_history_status_enum",
+    "DROP TYPE IF EXISTS batch_video_asset_status_enum",
+    "DROP TYPE IF EXISTS batch_video_job_status_enum",
+]
 
 
 class _FakeObject:
@@ -89,12 +166,16 @@ async def engine():
     engine = create_async_engine(settings.TEST_DATABASE_URL, echo=False)
 
     async with engine.begin() as conn:
+        for ddl in TEST_ENUM_DDL:
+            await conn.exec_driver_sql(ddl)
         await conn.run_sync(Base.metadata.create_all)
 
     yield engine
 
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
+        for ddl in TEST_ENUM_DROP_DDL:
+            await conn.exec_driver_sql(ddl)
 
     await engine.dispose()
 
@@ -115,6 +196,8 @@ async def db_session(engine):
 @pytest_asyncio.fixture(scope="function")
 async def test_client(db_session):
     """Fixture to create a test client that uses the test database session."""
+    # Lazy import to avoid triggering heavy optional dependencies for config-only tests
+    from app.main import app  # noqa: E402
 
     # FastAPI-Users database override (wraps session with user operation helpers)
     async def override_get_user_db():

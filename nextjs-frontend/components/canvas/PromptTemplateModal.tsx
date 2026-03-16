@@ -44,6 +44,7 @@ const TOOL_KEY_LABELS: Record<string, string> = {
   canvas_text_gen: '文本生成',
   canvas_image_gen: '图片生成',
   canvas_video_gen: '视频生成',
+  batch_video_polish: '分镜润色',
 };
 
 const ALL_GROUP = '__all__';

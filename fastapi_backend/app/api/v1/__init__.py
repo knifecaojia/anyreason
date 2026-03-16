@@ -39,6 +39,7 @@ from app.api.v1.storyboards import router as storyboards_router
 from app.api.v1.canvases import router as canvases_router
 from app.api.v1.ai_video_models import router as ai_video_models_router
 from app.api.v1.api_keys import router as api_keys_router
+from app.api.v1.batch_video import router as batch_video_router
 
 
 v1_router = APIRouter()
@@ -81,5 +82,6 @@ v1_router.include_router(canvases_router, prefix="/canvases", tags=["canvases"])
 v1_router.include_router(ai_video_models_router, tags=["ai"])
 v1_router.include_router(api_keys_router, prefix="/api-keys", tags=["admin"])
 v1_router.include_router(storyboards_router, prefix="/storyboards", tags=["storyboards"])
+v1_router.include_router(batch_video_router, prefix="/batch-video", tags=["batch_video"])
 
 __all__ = ["v1_router"]

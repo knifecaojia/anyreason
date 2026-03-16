@@ -226,6 +226,17 @@ export function CapabilityParams({
             <span className="text-textMain">水印</span>
           </label>
         )}
+        {caps.supports_off_peak === true && (
+          <label className="flex items-center gap-1.5 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={!!params.off_peak}
+              onChange={() => onChange("off_peak", !params.off_peak)}
+              className="rounded border-border w-3.5 h-3.5"
+            />
+            <span className="text-textMain">错峰模式</span>
+          </label>
+        )}
       </div>
 
       {/* Seed */}

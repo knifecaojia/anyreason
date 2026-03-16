@@ -16,28 +16,12 @@ export async function GET(_request: Request, ctx: { params: Promise<{ nodeId: st
     cache: "no-store",
   });
 
-  // If thumbnail not found, fallback to original download
-  if (upstream.status === 404) {
-    const fallback = await fetch(new URL(`/api/v1/vfs/nodes/${encodeURIComponent(nodeId)}/download`, getApiBaseUrl()).toString(), {
-      headers: { Authorization: `Bearer ${token}` },
-      cache: "no-store",
-    });
-    const body = await fallback.arrayBuffer();
-    return new NextResponse(body, {
-      status: fallback.status,
-      headers: {
-        "content-type": fallback.headers.get("content-type") || "application/octet-stream",
-        "cache-control": "public, max-age=3600",
-      },
-    });
-  }
-
   const body = await upstream.arrayBuffer();
   return new NextResponse(body, {
     status: upstream.status,
     headers: {
       "content-type": upstream.headers.get("content-type") || "image/jpeg",
-      "cache-control": "public, max-age=3600",
+      "content-disposition": upstream.headers.get("content-disposition") || "",
     },
   });
 }

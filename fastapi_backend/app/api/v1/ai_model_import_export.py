@@ -102,7 +102,10 @@ async def export_ai_models(
     )).scalars().all()
     configs = []
     for r in rows:
-        plain_key = _decrypt_api_key(r.encrypted_api_key)
+        # 优先使用 plaintext_api_key，否则尝试解密 encrypted_api_key
+        plain_key = r.plaintext_api_key
+        if not plain_key and r.encrypted_api_key:
+            plain_key = _decrypt_api_key(r.encrypted_api_key)
         configs.append({
             "id": str(r.id),
             "category": r.category,
@@ -110,6 +113,8 @@ async def export_ai_models(
             "model": r.model,
             "base_url": r.base_url,
             "api_key": plain_key,  # 明文！
+            "plaintext_api_key": r.plaintext_api_key,  # 原始明文key
+            "api_keys_info": r.api_keys_info,  # 多Key配置
             "enabled": r.enabled,
             "sort_order": r.sort_order,
         })
@@ -279,8 +284,11 @@ async def import_ai_models(
     config_id_map: dict[str, UUID] = {}
     for item in data.get("ai_model_configs", []):
         old_id = item["id"]
-        plain_key = item.get("api_key")
+        # 优先使用 api_key 字段，否则使用 plaintext_api_key
+        plain_key = item.get("api_key") or item.get("plaintext_api_key")
         encrypted = _encrypt_api_key(plain_key) if plain_key else None
+        # 导入多Key配置
+        api_keys_info = item.get("api_keys_info")
 
         existing = (await db.execute(
             select(AIModelConfig).where(
@@ -293,7 +301,9 @@ async def import_ai_models(
         if existing:
             existing.base_url = item.get("base_url")
             if encrypted is not None:
-                existing.encrypted_api_key = encrypted
+                existing.plaintext_api_key = plain_key
+            if api_keys_info is not None:
+                existing.api_keys_info = api_keys_info
             existing.enabled = item.get("enabled", True)
             existing.sort_order = item.get("sort_order", 0)
             config_id_map[old_id] = existing.id
@@ -305,6 +315,8 @@ async def import_ai_models(
                 model=item["model"],
                 base_url=item.get("base_url"),
                 encrypted_api_key=encrypted,
+                plaintext_api_key=plain_key if plain_key else None,
+                api_keys_info=api_keys_info if api_keys_info else None,
                 enabled=item.get("enabled", True),
                 sort_order=item.get("sort_order", 0),
             )

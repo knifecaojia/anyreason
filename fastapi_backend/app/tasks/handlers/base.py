@@ -40,3 +40,7 @@ class BaseTaskHandler:
         Receives the MediaResponse from the provider and should do post-processing
         (download, save to VFS, create records, etc.) then return result_json."""
         raise NotImplementedError()
+
+    async def on_fail(self, *, db: AsyncSession, task: Task, error: str) -> None:
+        """Called when the task fails. Override to perform cleanup (e.g., reset asset status)."""
+        pass

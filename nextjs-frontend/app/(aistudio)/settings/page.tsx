@@ -80,6 +80,7 @@ import {
   type AIChatMessage,
   type AIModelBinding,
   type AIModelConfig,
+  type AIModelKeyInfo,
 } from "@/components/actions/ai-model-actions";
 import {
   aiGetCatalog,
@@ -286,6 +287,7 @@ export default function Page() {
     model: "",
     base_url: "",
     api_key: "",
+    api_keys_info: [] as AIModelKeyInfo[],
     enabled: true,
     sort_order: 0,
   });
@@ -298,9 +300,10 @@ export default function Page() {
   const [catalogConfigSubmitting, setCatalogConfigSubmitting] = useState(false);
   const [catalogConfigError, setCatalogConfigError] = useState<string | null>(null);
   const [catalogSelected, setCatalogSelected] = useState<AICatalogItem | null>(null);
-  const [catalogDraft, setCatalogDraft] = useState<{ base_url: string; api_key: string; enabled: boolean; sort_order: number }>({
+  const [catalogDraft, setCatalogDraft] = useState<{ base_url: string; api_key: string; api_keys_info: AIModelKeyInfo[]; enabled: boolean; sort_order: number }>({
     base_url: "",
     api_key: "",
+    api_keys_info: [],
     enabled: true,
     sort_order: 0,
   });
@@ -1831,7 +1834,8 @@ export default function Page() {
     setCatalogSelected(item);
     setCatalogDraft({
       base_url: existingBaseUrl || defaultBaseUrl,
-      api_key: "",
+      api_key: cfg?.plaintext_api_key || "",
+      api_keys_info: cfg?.api_keys_info || [],
       enabled: cfg?.enabled ?? true,
       sort_order: Number(cfg?.sort_order ?? 0),
     });
@@ -1855,7 +1859,8 @@ export default function Page() {
       if (existingCfg?.id) {
         await aiAdminUpdateModelConfig(existingCfg.id, {
           base_url: catalogDraft.base_url.trim() ? catalogDraft.base_url.trim() : null,
-          api_key: catalogDraft.api_key.trim() ? catalogDraft.api_key.trim() : null,
+          plaintext_api_key: catalogDraft.api_key.trim() ? catalogDraft.api_key.trim() : null,
+          api_keys_info: catalogDraft.api_keys_info,
           enabled: !!catalogDraft.enabled,
           sort_order: Number(catalogDraft.sort_order || 0),
         });
@@ -1865,7 +1870,8 @@ export default function Page() {
           manufacturer: catalogSelected.manufacturer_code,
           model: catalogSelected.model_code,
           base_url: catalogDraft.base_url.trim() ? catalogDraft.base_url.trim() : null,
-          api_key: catalogDraft.api_key.trim() ? catalogDraft.api_key.trim() : null,
+          plaintext_api_key: catalogDraft.api_key.trim() ? catalogDraft.api_key.trim() : null,
+          api_keys_info: catalogDraft.api_keys_info,
           enabled: !!catalogDraft.enabled,
           sort_order: Number(catalogDraft.sort_order || 0),
         });
@@ -1893,7 +1899,8 @@ export default function Page() {
         manufacturer: modelForm.manufacturer.trim(),
         model: modelForm.model.trim(),
         base_url: modelForm.base_url.trim() || null,
-        api_key: modelForm.api_key.trim() || null,
+        plaintext_api_key: modelForm.api_key.trim() || null,
+        api_keys_info: modelForm.api_keys_info,
         enabled: !!modelForm.enabled,
         sort_order: Number(modelForm.sort_order || 0),
       });

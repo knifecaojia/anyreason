@@ -1,0 +1,40 @@
+# Task 7 - Compose Scan Evidence
+# ==============================
+# Date: 2026-03-16
+# Task: Remove unsafe deploy/public localhost defaults from compose and build flow
+
+## Changes Made
+
+### 1. compose.app.yml (line 127)
+- REMOVED: NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+- KEPT: INTERNAL_API_BASE_URL: http://backend:8000 (for SSR)
+- KEPT: API_BASE_URL: http://backend:8000 (for internal use)
+
+### 2. docker-compose.deploy.yml (line 194)
+- REMOVED: NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+- KEPT: INTERNAL_API_BASE_URL: http://backend:8000 (for SSR)
+- KEPT: API_BASE_URL: http://backend:8000 (for internal use)
+
+## Why These Changes
+
+1. NEXT_PUBLIC_* variables are baked into the frontend bundle at build time
+2. localhost:8000 is meaningless in a Docker/deploy environment - the browser cannot reach Docker-internal hostnames
+3. The frontend should use relative paths (/api) by default, which works correctly when NEXT_PUBLIC_API_BASE_URL is not set
+4. INTERNAL_API_BASE_URL is used by Next.js SSR (server-side) which CAN reach the Docker-internal hostname "backend:8000"
+
+## Verification
+
+- compose.app.yml: Check for NEXT_PUBLIC_API_BASE_URL with localhost - NOT FOUND ✓
+- docker-compose.deploy.yml: Check for NEXT_PUBLIC_API_BASE_URL with localhost - NOT FOUND ✓
+- INTERNAL_API_BASE_URL correctly set to http://backend:8000 in both files ✓
+
+## Rationale
+
+The previous configuration set NEXT_PUBLIC_API_BASE_URL to http://localhost:8000 which:
+- Is incorrect for deploy because browsers cannot reach Docker-internal hostnames
+- Is confusing because NEXT_PUBLIC_* is baked at build time, so runtime ENV has no effect
+- Creates a false sense of configuration that doesn't actually work
+
+The fix ensures:
+- Browser uses relative paths (default when NEXT_PUBLIC_API_BASE_URL is unset)
+- SSR uses INTERNAL_API_BASE_URL (http://backend:8000) which is reachable inside Docker network

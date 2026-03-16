@@ -1,6 +1,8 @@
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine
 from fastapi_users.db import SQLAlchemyUserDatabase
+import subprocess
+import os
 
 from app.database import (
     async_session_maker,
@@ -106,3 +108,17 @@ async def test_session_maker_configuration():
     # Create a test session
     async with async_session_maker() as session:
         assert isinstance(session, AsyncSession)
+
+
+@pytest.mark.asyncio
+async def test_create_db_and_tables_fails_for_unversioned_nonempty_db(mocker):
+    mocker.patch("app.database._alembic_version_table_exists", mocker.AsyncMock(return_value=False))
+    mocker.patch("app.database._has_public_user_tables", mocker.AsyncMock(return_value=True))
+    run_upgrade = mocker.patch("app.database._run_alembic_upgrade", mocker.AsyncMock())
+    getenv = mocker.patch("app.database.os.getenv", side_effect=lambda key, default=None: default if key == "PYTEST_CURRENT_TEST" else os.getenv(key, default))
+
+    with pytest.raises(RuntimeError, match="alembic_version"):
+        await create_db_and_tables()
+
+    getenv.assert_any_call("PYTEST_CURRENT_TEST")
+    run_upgrade.assert_not_called()

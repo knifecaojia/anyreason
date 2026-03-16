@@ -5,7 +5,7 @@ $backendDir = Join-Path $repoRoot "fastapi_backend"
 $frontendDir = Join-Path $repoRoot "nextjs-frontend"
 
 $backendHost = "0.0.0.0"
-$backendPort = "8100"
+$backendPort = "8000"
 $frontendHost = "0.0.0.0"
 $frontendPort = "3000"
 

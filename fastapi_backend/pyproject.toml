@@ -21,6 +21,7 @@ dependencies = [
     "pydantic-ai-slim[openai]>=1.58.0,<2",
     "volcengine-python-sdk[ark]>=5.0.9",
     "alembic>=1.14.0,<2",
+    "openpyxl>=3.1.0,<4",
 ]
 
 [dependency-groups]

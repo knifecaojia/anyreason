@@ -1,0 +1,27 @@
+
+> nextjs-frontend@0.0.8 test F:\animate-serial\apps\anyreason\nextjs-frontend
+> jest "--" "__tests__/serverApiConfig.test.ts" "--verbose"
+
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+PASS __tests__/serverApiConfig.test.ts
+  serverApiConfig
+    Priority order: INTERNAL_API_BASE_URL > API_BASE_URL > NEXT_PUBLIC_API_BASE_URL
+      √ should prefer INTERNAL_API_BASE_URL over other variables (4 ms)
+      √ should use API_BASE_URL when INTERNAL_API_BASE_URL is not set (1 ms)
+      √ should use NEXT_PUBLIC_API_BASE_URL when only it is set
+    Development mode fallback
+      √ should fallback to http://127.0.0.1:8000 in development mode when no env vars set
+      √ should NOT fallback to localhost in production mode when no env vars set (1 ms)
+      √ should NOT fallback to localhost in test mode when no env vars set (1 ms)
+    Production mode configuration requirements
+      √ should throw error in production when no API base URL is configured (1 ms)
+      √ should work in production when INTERNAL_API_BASE_URL is set
+      √ should work in production when API_BASE_URL is set
+    Exported constant serverApiBase
+      √ should export a string value for serverApiBase (1 ms)
+
+Test Suites: 1 passed, 1 total
+Tests:       10 passed, 10 total
+Snapshots:   0 total
+Time:        0.762 s, estimated 1 s
+Ran all test suites matching /__tests__\\serverApiConfig.test.ts|--verbose/i.

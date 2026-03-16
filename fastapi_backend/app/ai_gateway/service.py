@@ -126,7 +126,9 @@ class AIGatewayService:
             raise AppError(msg="AI model category mismatch", code=400, status_code=400)
         if not cfg_row.enabled:
             raise AppError(msg="AI model config disabled", code=400, status_code=400)
-        if not cfg_row.encrypted_api_key:
+        
+        # Check for any key (migrated plaintext, legacy encrypted, or multi-keys)
+        if not cfg_row.encrypted_api_key and not cfg_row.plaintext_api_key and not cfg_row.api_keys_info:
             raise AppError(msg="AI model api_key missing", code=400, status_code=400)
 
         manufacturer = (cfg_row.manufacturer or "").strip().lower()
@@ -138,14 +140,29 @@ class AIGatewayService:
                 data={"manufacturer": manufacturer},
             )
 
-        api_key = self._fernet().decrypt(cfg_row.encrypted_api_key).decode("utf-8")
+        # Get base key if available (plaintext preferred, fallback to encrypted)
+        api_key = cfg_row.plaintext_api_key
+        if not api_key and cfg_row.encrypted_api_key:
+            api_key = self._fernet().decrypt(cfg_row.encrypted_api_key).decode("utf-8")
+        
+        from app.ai_gateway.concurrency import concurrency_manager
+        chosen = await concurrency_manager.acquire_key(
+            config_id=cfg_row.id,
+            keys_info=cfg_row.api_keys_info,
+            default_key=api_key
+        )
+        
+        if not chosen:
+            raise AppError(msg="API 负载过高，请稍后再试", code=429, status_code=429)
+
         return (
             ResolvedModelConfig(
                 category=category,
                 manufacturer=cfg_row.manufacturer,
                 model=cfg_row.model,
                 base_url=cfg_row.base_url,
-                api_key=api_key,
+                api_key=chosen["api_key"],
+                config_id=cfg_row.id,
             ),
             cfg_row.id,
             resolved_binding_key,
@@ -235,6 +252,10 @@ class AIGatewayService:
                 consumed_credits = 0
             raise AppError(msg=f"AI 调用失败: {friendly_msg}", code=502, status_code=502, data={"raw": str(e), "friendly": friendly_msg})
         finally:
+            if cfg and cfg.config_id:
+                from app.ai_gateway.concurrency import concurrency_manager
+                await concurrency_manager.release_key(cfg.config_id, cfg.api_key)
+
             latency_ms = int((time.perf_counter() - started) * 1000)
             db.add(
                 AIUsageEvent(
@@ -377,6 +398,10 @@ class AIGatewayService:
                 
             raise AppError(msg=f"AI {category} generation failed: {friendly_msg}", code=502, status_code=502, data={"raw": str(e), "friendly": friendly_msg})
         finally:
+            if cfg and cfg.config_id:
+                from app.ai_gateway.concurrency import concurrency_manager
+                await concurrency_manager.release_key(cfg.config_id, cfg.api_key)
+
             latency_ms = int((time.perf_counter() - started) * 1000)
             db.add(
                 AIUsageEvent(
@@ -476,6 +501,9 @@ class AIGatewayService:
             )
 
             ref = await provider.submit_async(request)
+            # Store concurrency info in ref.meta for later release
+            ref.meta["concurrency_config_id"] = str(cfg.config_id)
+            ref.meta["concurrency_api_key"] = cfg.api_key
             return ref
 
         except AppError:
@@ -487,6 +515,11 @@ class AIGatewayService:
                     allow_negative=False,
                 )
                 await db.commit()
+            
+            # release key immediately on submission failure
+            if cfg and cfg.config_id:
+                from app.ai_gateway.concurrency import concurrency_manager
+                await concurrency_manager.release_key(cfg.config_id, cfg.api_key)
             raise
         except Exception as e:
             friendly_msg = _extract_api_error(e)
@@ -498,6 +531,12 @@ class AIGatewayService:
                     allow_negative=False,
                 )
                 await db.commit()
+            
+            # release key immediately on submission failure
+            if cfg and cfg.config_id:
+                from app.ai_gateway.concurrency import concurrency_manager
+                await concurrency_manager.release_key(cfg.config_id, cfg.api_key)
+            
             if isinstance(e, AppError):
                 raise e
             raise AppError(msg=f"AI {category} submit failed: {friendly_msg}", code=502, status_code=502, data={"raw": str(e), "friendly": friendly_msg})
@@ -518,7 +557,35 @@ class AIGatewayService:
             api_key=api_key,
             base_url=base_url,
         )
-        return await provider.query_status(ref)
+        status = await provider.query_status(ref)
+        
+        # If terminal state, release the concurrency key
+        if status.state in ("succeeded", "failed", "canceled"):
+            config_id_str = ref.meta.get("concurrency_config_id")
+            api_key = ref.meta.get("concurrency_api_key")
+            if config_id_str and api_key:
+                from app.ai_gateway.concurrency import concurrency_manager
+                await concurrency_manager.release_key(UUID(config_id_str), api_key)
+                # clear from meta to avoid double release if polled again
+                ref.meta.pop("concurrency_config_id", None)
+                ref.meta.pop("concurrency_api_key", None)
+        return status
+
+    async def cancel_media_task(
+        self,
+        *,
+        ref: ExternalTaskRef,
+    ) -> dict[str, object]:
+        provider_key = ref.provider
+        api_key = ref.meta.get("api_key", "")
+        base_url = ref.meta.get("base_url")
+
+        provider = media_provider_factory.get_provider(
+            manufacturer=provider_key,
+            api_key=api_key,
+            base_url=base_url,
+        )
+        return await provider.cancel_task(ref.external_task_id)
 
     async def chat_text_stream(
         self,
@@ -620,6 +687,10 @@ class AIGatewayService:
             yield {"type": "error", "message": f"AI 调用失败: {friendly_msg}", "code": 502}
             return
         finally:
+            if cfg and cfg.config_id:
+                from app.ai_gateway.concurrency import concurrency_manager
+                await concurrency_manager.release_key(cfg.config_id, cfg.api_key)
+
             latency_ms = int((time.perf_counter() - started) * 1000)
             db.add(
                 AIUsageEvent(

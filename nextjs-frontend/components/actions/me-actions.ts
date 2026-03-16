@@ -1,17 +1,14 @@
 "use server";
 
 import { cookies } from "next/headers";
-
-function getApiBaseUrl() {
-  return process.env.INTERNAL_API_BASE_URL || process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-}
+import { getServerApiBaseUrl } from "@/lib/serverApiConfig";
 
 async function authedFetch<T>(opts: { method?: string; path: string; body?: unknown }): Promise<T> {
   const cookieStore = await cookies();
   const token = cookieStore.get("accessToken")?.value;
   if (!token) throw new Error("未登录：缺少 accessToken");
 
-  const res = await fetch(new URL(opts.path, getApiBaseUrl()).toString(), {
+  const res = await fetch(new URL(opts.path, getServerApiBaseUrl()).toString(), {
     method: opts.method || "GET",
     headers: {
       Authorization: `Bearer ${token}`,

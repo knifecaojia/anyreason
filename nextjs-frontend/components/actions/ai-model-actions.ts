@@ -49,6 +49,14 @@ export type ApiResponse<T> = { code: number; msg: string; data: T | null };
 
 export type AICategory = "text" | "image" | "video";
 
+export type AIModelKeyInfo = {
+  id: string;
+  api_key: string;
+  concurrency_limit: number;
+  enabled: boolean;
+  note?: string | null;
+};
+
 export type AIModelConfig = {
   id: string;
   category: AICategory;
@@ -58,6 +66,8 @@ export type AIModelConfig = {
   enabled: boolean;
   sort_order: number;
   has_api_key: boolean;
+  plaintext_api_key?: string | null;
+  api_keys_info?: AIModelKeyInfo[] | null;
   created_at: string;
   updated_at: string;
 };
@@ -94,6 +104,8 @@ export async function aiAdminCreateModelConfig(input: {
   model: string;
   base_url?: string | null;
   api_key?: string | null;
+  plaintext_api_key?: string | null;
+  api_keys_info?: AIModelKeyInfo[] | null;
   enabled?: boolean;
   sort_order?: number;
 }) {
@@ -112,6 +124,8 @@ export async function aiAdminUpdateModelConfig(
     model: string;
     base_url: string | null;
     api_key: string | null;
+    plaintext_api_key: string | null;
+    api_keys_info: AIModelKeyInfo[] | null;
     enabled: boolean;
     sort_order: number;
   }>,

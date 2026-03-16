@@ -180,6 +180,7 @@ export interface VideoOutputNodeData extends BaseNodeData {
   resolution?: string; // 清晰度: 'standard' | 'hd' | '2k' | '4k'
   duration?: number; // 视频时长（秒）
   inputMode?: string; // 生成模式: text_to_video, first_frame, etc.
+  offPeak?: boolean; // Vidu 错峰模式
   referenceImages?: string[]; // 多图参考 URL 列表
   isProcessing?: boolean;
   progress?: number;

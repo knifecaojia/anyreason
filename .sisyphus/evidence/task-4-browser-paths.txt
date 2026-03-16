@@ -1,0 +1,127 @@
+# Task 4: Browser Path and Proxy Audit Evidence
+
+## Summary
+Frontend uses relative API paths exclusively. No hardcoded full backend origins found.
+All browser-side requests use relative URLs that route through nginx proxy.
+
+## 1. Frontend API Usage Patterns
+
+### 1.1 Direct fetch() calls with relative paths
+Found in `hooks/useVideoModelSpec.ts`:
+- `fetch("/api/ai/video-models")` (line 31)
+
+Found in `components/scripts/ScriptAIAssistantSessionPane.tsx`:
+- `fetch("/api/ai/scenes")` (line 211)
+- `fetch("/api/ai/chat/sessions?project_id=...")` (line 229)
+- `fetch("/api/ai/chat/sessions/${sessionId}")` (line 256)
+- `fetch("/api/tasks?status=queued,running&size=20")` (line 298)
+- `fetch("/api/ai/chat/sessions/${sessionId}/tasks")` (line 328)
+- `fetch("/api/tasks?status=succeeded&type=ai_assistant_chat&size=20")` (line 341)
+- `fetch("/api/ai/chat/sessions")` (line 443)
+- `fetch("/api/ai/scenes/${selectedScene.scene_code}/chat")` (line 592)
+- `fetch("/api/tasks/${encodeURIComponent(activeTaskId)}")` (line 724)
+- `fetch("/api/tasks")` (line 790)
+
+### 1.2 OpenAPI Client (axios-based)
+- File: `app/openapi-client/client.gen.ts`
+- Uses axios, configured WITHOUT baseURL
+- Line 24: `export const client = createClient(createConfig<ClientOptions>());`
+- SDK functions use relative URLs like `/auth/jwt.login`, `/users/me`, `/items/`
+- When baseURL is undefined, axios uses relative URLs (same-origin)
+
+### 1.3 No WebSocket usage in frontend
+- Searched for `new WebSocket(` - no matches
+- No direct WebSocket constructor found in frontend code
+
+### 1.4 No SSE/stream client usage in frontend
+- Searched for `SSE`, `sse`, `stream` patterns - no matches in components
+- The openapi-client has SSE support in `core/serverSentEvents.gen.ts` but it's not actively used
+
+## 2. No Hardcoded Backend Origins
+
+Searched for:
+- `localhost:8000` - not found
+- `127.0.0.1:8000` - not found
+- Any `https?://` absolute URLs - not found in frontend code
+
+## 3. Nginx Proxy Configuration
+
+From `docker/nginx/anyreason-https.conf`:
+
+### 3.1 API Proxy (lines 66-80)
+```
+location /api/ {
+    proxy_pass http://anyreason_backend/api/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 300s;
+    proxy_read_timeout 300s;
+}
+```
+
+### 3.2 WebSocket Proxy (lines 82-95)
+```
+location /api/v1/tasks/ws {
+    proxy_pass http://anyreason_backend/api/v1/tasks/ws;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_connect_timeout 60s;
+    proxy_send_timeout 3600s;
+    proxy_read_timeout 3600s;
+}
+```
+
+### 3.3 Frontend Root (lines 113-126)
+```
+location / {
+    proxy_pass http://anyreason_frontend;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection "upgrade";
+}
+```
+
+### 3.4 Static Assets (lines 128-133)
+```
+location /_next/static/ {
+    proxy_pass http://anyreason_frontend/_next/static/;
+    expires 365d;
+    add_header Cache-Control "public, immutable";
+}
+```
+
+## 4. Verification Results
+
+| Check | Status | Details |
+|-------|--------|---------|
+| Frontend uses relative /api/ paths | PASS | All fetch() calls use relative URLs |
+| OpenAPI client uses relative paths | PASS | No baseURL configured, axios uses same-origin |
+| No hardcoded backend origins | PASS | No localhost:8000 or absolute URLs found |
+| No WebSocket in frontend | PASS | No new WebSocket( found |
+| /api/ proxy exists | PASS | nginx lines 66-80 |
+| WebSocket proxy exists | PASS | nginx lines 82-95 with Upgrade headers |
+| Frontend root routes to frontend | PASS | nginx lines 113-126 |
+| Static assets route separately | PASS | nginx lines 128-133 |
+
+## 5. Conclusion
+
+The frontend architecture correctly relies on:
+1. Relative API paths that the browser resolves to the current origin
+2. Nginx proxying /api/ requests to the backend
+3. WebSocket proxy at /api/v1/tasks/ws with proper Upgrade headers
+4. Frontend served at root / with static assets cached at /_next/static/
+
+This design is sound - browser requests to /api/* route through nginx to backend, while the frontend is served separately. No hardcoded origins create cross-origin issues.

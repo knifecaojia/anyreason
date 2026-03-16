@@ -10,6 +10,14 @@ from pydantic import BaseModel, Field
 AICategory = Literal["text", "image", "video"]
 
 
+class AIModelKeyInfo(BaseModel):
+    id: str
+    api_key: str
+    concurrency_limit: int = 5
+    enabled: bool = True
+    note: str | None = None
+
+
 class AIModelConfigRead(BaseModel):
     id: UUID
     category: AICategory
@@ -19,6 +27,8 @@ class AIModelConfigRead(BaseModel):
     enabled: bool
     sort_order: int
     has_api_key: bool
+    plaintext_api_key: str | None = None
+    api_keys_info: list[AIModelKeyInfo] | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -31,6 +41,8 @@ class AdminAIModelConfigCreateRequest(BaseModel):
     model: str = Field(min_length=1, max_length=128)
     base_url: str | None = None
     api_key: str | None = None
+    plaintext_api_key: str | None = None
+    api_keys_info: list[AIModelKeyInfo] | None = None
     enabled: bool = True
     sort_order: int = 0
 
@@ -41,6 +53,8 @@ class AdminAIModelConfigUpdateRequest(BaseModel):
     model: str | None = Field(default=None, min_length=1, max_length=128)
     base_url: str | None = None
     api_key: str | None = None
+    plaintext_api_key: str | None = None
+    api_keys_info: list[AIModelKeyInfo] | None = None
     enabled: bool | None = None
     sort_order: int | None = None
 

@@ -21,6 +21,7 @@ from app.tasks.handlers.model_test_video_generate import ModelTestVideoGenerateH
 from app.tasks.handlers.canvas_batch_execute import CanvasBatchExecuteHandler
 from app.tasks.handlers.canvas_export import CanvasExportHandler
 from app.tasks.handlers.canvas_fcpxml_export import CanvasFcpxmlExportHandler
+from app.tasks.handlers.batch_video_asset_generate import BatchVideoAssetGenerateHandler
 
 TASK_HANDLER_REGISTRY = {
     NoopTaskHandler.task_type: NoopTaskHandler(),
@@ -47,4 +48,5 @@ TASK_HANDLER_REGISTRY = {
     CanvasBatchExecuteHandler.task_type: CanvasBatchExecuteHandler(),
     CanvasExportHandler.task_type: CanvasExportHandler(),
     CanvasFcpxmlExportHandler.task_type: CanvasFcpxmlExportHandler(),
+    BatchVideoAssetGenerateHandler.task_type: BatchVideoAssetGenerateHandler(),
 }

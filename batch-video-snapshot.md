@@ -1,0 +1,29 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e5]:
+      - heading "登录" [level=3] [ref=e6]
+      - paragraph [ref=e7]: 输入邮箱与密码登录你的账号。
+    - generic [ref=e8]:
+      - generic [ref=e9]:
+        - generic [ref=e10]: 邮箱
+        - textbox "邮箱" [ref=e11]:
+          - /placeholder: m@example.com
+          - text: admin@example.com
+      - generic [ref=e12]:
+        - generic [ref=e13]: 密码
+        - textbox "密码" [ref=e14]: change_me
+        - generic [ref=e15]:
+          - generic [ref=e16]:
+            - checkbox "记住我" [ref=e18]
+            - generic [ref=e19]: 记住我
+          - link "忘记密码？" [ref=e20] [cursor=pointer]:
+            - /url: /password-recovery
+      - button "登录" [ref=e21] [cursor=pointer]
+      - generic [ref=e22]:
+        - text: 还没有账号？
+        - link "注册" [ref=e23] [cursor=pointer]:
+          - /url: /register
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e29] [cursor=pointer]:
+    - img [ref=e30]
+  - alert [ref=e33]

@@ -1,0 +1,92 @@
+# TASK-3: Docker Build/Runtime Env Injection Path for Frontend API Configuration
+
+## Summary
+NEXT_PUBLIC_API_BASE_URL is **BAKED AT BUILD TIME** but compose files pass it as **RUNTIME ENV** - this is a mismatch.
+
+---
+
+## Flow Mapping
+
+### 1. Source → Build Arg → Build Time
+| Source | Build Arg | Set At | Value Used At Build |
+|--------|-----------|--------|---------------------|
+| compose.app.yml (NOT SET) | ARG NEXT_PUBLIC_API_BASE_URL | Dockerfile.prod:22 | undefined/empty |
+| docker-compose.deploy.yml (NOT SET) | ARG NEXT_PUBLIC_API_BASE_URL | Dockerfile.prod:22 | undefined/empty |
+
+### 2. Build Time → Baked Into Image
+| Dockerfile.prod Stage | Line | What Happens |
+|---------------------|------|--------------|
+| builder stage | 22 | `ARG NEXT_PUBLIC_API_BASE_URL` declared |
+| builder stage | 23 | `ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}` set |
+| builder stage | 28 | `pnpm run build` executes - value baked into .next output |
+
+### 3. Runtime Env (IGNORED by Next.js)
+| Compose File | Line | Runtime ENV Set | Consumed By |
+|-------------|------|-----------------|-------------|
+| compose.app.yml | 127 | `NEXT_PUBLIC_API_BASE_URL: http://localhost:8000` | Docker container only (not Next.js) |
+| docker-compose.deploy.yml | 194 | `NEXT_PUBLIC_API_BASE_URL: http://localhost:8000` | Docker container only (not Next.js) |
+
+---
+
+## Build-Time vs Runtime Env Responsibilities
+
+### Build-Time (ARG/ENV before RUN pnpm build)
+- `NEXT_PUBLIC_API_BASE_URL` - MUST be passed as build arg, consumed at build time by Next.js
+- These become part of the Docker image layers and CANNOT change without rebuild
+
+### Runtime-Only (ENV set after build)
+- `NODE_ENV` - Affects runtime behavior but NOT used for build
+- `INTERNAL_API_BASE_URL` - Runtime-only, not used by Next.js build
+- `API_BASE_URL` - Runtime-only, not used by Next.js build
+- `NEXT_PUBLIC_USE_MOCK_API` - Runtime-only
+
+---
+
+## Consumer Tracing
+
+### NEXT_PUBLIC_API_BASE_URL Consumer
+- Next.js at build time: Bundled into `.next/static` chunks
+- NOT readable/changable at runtime without rebuild
+- Use: API client initialization in frontend code
+
+### INTERNAL_API_BASE_URL Consumer  
+- NOT passed as build arg, set at runtime only
+- Could be used by server-side code or runtime API calls
+
+---
+
+## Issue Identified
+
+**COMPOSE FILES DO NOT PASS NEXT_PUBLIC_API_BASE_URL AS BUILD ARG**
+
+The Dockerfile.prod expects:
+```dockerfile
+ARG NEXT_PUBLIC_API_BASE_URL
+ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
+```
+
+But compose.app.yml only passes:
+```yaml
+build:
+  args:
+    NODE_BASE_IMAGE: ${NODE_BASE_IMAGE:-node:20-bookworm}
+```
+
+The `NEXT_PUBLIC_API_BASE_URL` is MISSING from the build args in BOTH compose files.
+
+Instead, it's set as runtime environment (too late):
+```yaml
+environment:
+  NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
+```
+
+This value is IGNORED because Next.js already baked its own value (undefined) during `pnpm run build`.
+
+---
+
+## Evidence Locations
+
+- Dockerfile.prod lines 22-28: ARG/ENV and build command
+- compose.app.yml lines 115-128: Frontend build args (missing NEXT_PUBLIC_API_BASE_URL) and runtime env
+- docker-compose.deploy.yml lines 180-201: Same issue
+- package.json line 7: Build command `pnpm run build`

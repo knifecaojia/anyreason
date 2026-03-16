@@ -42,7 +42,7 @@ export default function Page() {
         <div className="lg:col-span-2 bg-surface border border-border rounded-2xl p-6 flex flex-col">
           <h3 className="text-lg font-semibold mb-6">产能趋势 (Output Trend)</h3>
           <div className="flex-1 min-h-0">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={320}>
               <BarChart data={data} barSize={40}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2D3748" vertical={false} />
                 <XAxis
@@ -76,7 +76,7 @@ export default function Page() {
         <div className="bg-surface border border-border rounded-2xl p-6 flex flex-col">
           <h3 className="text-lg font-semibold mb-6">成本消耗 (Cost)</h3>
           <div className="flex-1 min-h-0">
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={320}>
               <LineChart data={data}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#2D3748" vertical={false} />
                 <XAxis

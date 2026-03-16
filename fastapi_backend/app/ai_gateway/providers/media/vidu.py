@@ -113,6 +113,8 @@ class ViduMediaProvider(MediaProvider):
             base["enhance"] = bool(pj["enhance"])
         if pj.get("seed") is not None:
             base["seed"] = pj["seed"]
+        if pj.get("off_peak") is not None:
+            base["off_peak"] = bool(pj["off_peak"])
         if request.callback_url:
             base["callback_url"] = request.callback_url
 
@@ -280,6 +282,41 @@ class ViduMediaProvider(MediaProvider):
             external_task_id=str(task_id),
             provider="vidu",
             meta={"api_key": self.api_key, "base_url": self.base_url},
+        )
+
+    async def cancel_task(self, external_task_id: str) -> dict[str, object]:
+        cancel_url = f"{self.base_url}/tasks/{external_task_id}/cancel"
+        headers = self._headers()
+
+        async with httpx.AsyncClient() as client:
+            try:
+                resp = await client.post(cancel_url, headers=headers, timeout=15.0)
+            except httpx.HTTPError as e:
+                raise AppError(
+                    msg=f"Vidu Cancel Error: {str(e)}",
+                    code=502,
+                    status_code=502,
+                ) from e
+
+        if resp.status_code == 200:
+            return {
+                "attempted": True,
+                "supported": True,
+                "message": "canceled",
+            }
+
+        if resp.status_code in (400, 404, 409):
+            return {
+                "attempted": True,
+                "supported": True,
+                "message": f"cancel_rejected:{resp.status_code}",
+            }
+
+        raise AppError(
+            msg=f"Vidu Cancel Error: {resp.status_code}",
+            data={"raw": resp.text[:1000]},
+            code=502,
+            status_code=502,
         )
 
     async def query_status(self, ref: ExternalTaskRef) -> ExternalTaskStatus:

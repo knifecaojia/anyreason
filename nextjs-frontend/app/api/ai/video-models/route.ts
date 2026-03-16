@@ -1,14 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-
-function getApiBaseUrl() {
-  return (
-    process.env.INTERNAL_API_BASE_URL ||
-    process.env.API_BASE_URL ||
-    process.env.NEXT_PUBLIC_API_BASE_URL ||
-    "http://localhost:8000"
-  );
-}
+import { getServerApiBaseUrl } from "@/lib/serverApiConfig";
 
 export async function GET() {
   const cookieStore = await cookies();
@@ -17,7 +9,7 @@ export async function GET() {
     return new NextResponse("unauthorized", { status: 401 });
   }
 
-  const upstreamUrl = new URL("/api/v1/ai/video-models", getApiBaseUrl()).toString();
+  const upstreamUrl = new URL("/api/v1/ai/video-models", getServerApiBaseUrl()).toString();
 
   const upstream = await fetch(upstreamUrl, {
     method: "GET",

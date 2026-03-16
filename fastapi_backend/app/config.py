@@ -72,6 +72,13 @@ class Settings(BaseSettings):
     MINIO_BUCKET_SCRIPTS: str = "anyreason-scripts"
     MINIO_BUCKET_VFS: str = "anyreason-vfs"
 
+    # Task Worker
+    TASK_WORKER_CONCURRENCY: int = 10
+    TASK_WORKER_ID: str = "worker-1"
+
+    # External Poller
+    EXTERNAL_TASK_MAX_WAIT_HOURS: int = 48
+
     model_config = SettingsConfigDict(
         env_file=".env", env_file_encoding="utf-8", extra="ignore"
     )

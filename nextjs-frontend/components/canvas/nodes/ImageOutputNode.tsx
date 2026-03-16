@@ -15,9 +15,10 @@ import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow
 import type { ImageOutputNodeData } from '@/lib/canvas/types';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import { useAIModelList } from '@/hooks/useAIModelList';
-import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon, Upload, Crop } from 'lucide-react';
+import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon, Upload, Crop, Layers } from 'lucide-react';
 import { collectUpstreamData, fetchRefImagesAsBase64 } from '@/lib/canvas/image-utils';
 import ImageCropOverlay from './ImageCropOverlay';
+import ImageGridEditorModal from './ImageGridEditorModal';
 
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const;
 const RESOLUTIONS = [
@@ -98,6 +99,7 @@ export default function ImageOutputNode(props: NodeProps) {
   const [uploading, setUploading] = useState(false);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [cropMode, setCropMode] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const { models: imageModels, selectedConfigId, selectModel } = useAIModelList('image', data.bindingKey ?? 'image-default', data.modelConfigId);
   const selectedModel = imageModels.find((m) => m.configId === selectedConfigId);
@@ -415,6 +417,11 @@ export default function ImageOutputNode(props: NodeProps) {
               <Crop size={13} />
             </button>
             <span className="text-textMuted/30">|</span>
+            <button type="button" onClick={() => setEditorOpen(true)}
+              className="nodrag text-textMuted hover:text-textMain transition-colors" title="多宫格编辑">
+              <Layers size={13} />
+            </button>
+            <span className="text-textMuted/30">|</span>
             <button type="button" onClick={handleGenerate}
               disabled={!upstream.hasTextSource}
               className="nodrag text-textMuted hover:text-textMain transition-colors text-[11px] disabled:opacity-30 disabled:cursor-not-allowed">
@@ -519,6 +526,10 @@ export default function ImageOutputNode(props: NodeProps) {
                   <button type="button" onClick={() => uploadInputRef.current?.click()} disabled={uploading}
                     className="nodrag text-textMuted/50 hover:text-textMain transition-colors disabled:opacity-30" title="上传图片">
                     {uploading ? <Loader2 size={11} className="animate-spin" /> : <Upload size={11} />}
+                  </button>
+                  <button type="button" onClick={() => setEditorOpen(true)}
+                    className="nodrag text-textMuted/50 hover:text-textMain transition-colors" title="多宫格编辑">
+                    <Layers size={11} />
                   </button>
                 </div>
               </div>
@@ -664,6 +675,24 @@ export default function ImageOutputNode(props: NodeProps) {
           fullUrl={fullImageUrl || data.lastImage!}
           onConfirm={handleCropConfirm}
           onCancel={() => setCropMode(false)}
+        />
+      )}
+
+      {/* Grid Editor Modal */}
+      {editorOpen && (
+        <ImageGridEditorModal
+          initialImage={fullImageUrl || data.lastImage}
+          onClose={() => setEditorOpen(false)}
+          onSave={(url, nodeId) => {
+            updateNodeData(props.id, {
+              ...dataRef.current,
+              lastImage: url,
+              lastImageFull: url,
+              isProcessing: false,
+              progress: 100,
+              error: undefined,
+            });
+          }}
         />
       )}
     </>

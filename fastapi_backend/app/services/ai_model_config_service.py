@@ -44,6 +44,8 @@ class AIModelConfigService:
         model: str,
         base_url: str | None,
         api_key: str | None,
+        plaintext_api_key: str | None,
+        api_keys_info: list | None,
         enabled: bool,
         sort_order: int,
     ) -> AIModelConfig:
@@ -62,7 +64,8 @@ class AIModelConfigService:
             manufacturer=manufacturer,
             model=model,
             base_url=base_url,
-            encrypted_api_key=encrypted_api_key,
+            plaintext_api_key=plaintext_api_key or api_key,
+            api_keys_info=[x.model_dump(mode="json") if hasattr(x, "model_dump") else x for x in api_keys_info] if api_keys_info else None,
             enabled=bool(enabled),
             sort_order=int(sort_order or 0),
         )
@@ -100,11 +103,17 @@ class AIModelConfigService:
             row.sort_order = int(patch["sort_order"])
 
         if "api_key" in patch and patch["api_key"] is not None:
-            api_key = _normalize_str(patch["api_key"])
-            if not api_key:
-                row.encrypted_api_key = None
+            row.plaintext_api_key = _normalize_str(patch["api_key"]) or None
+        if "plaintext_api_key" in patch and patch["plaintext_api_key"] is not None:
+            row.plaintext_api_key = _normalize_str(patch["plaintext_api_key"]) or None
+        
+        if "api_keys_info" in patch and patch["api_keys_info"] is not None:
+            # Pydantic model dump might need serialization
+            val = patch["api_keys_info"]
+            if isinstance(val, list):
+                row.api_keys_info = [x.model_dump(mode="json") if hasattr(x, "model_dump") else x for x in val]
             else:
-                row.encrypted_api_key = self._fernet().encrypt(api_key.encode("utf-8"))
+                row.api_keys_info = val
 
         try:
             await db.commit()

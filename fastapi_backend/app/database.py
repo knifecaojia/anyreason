@@ -124,8 +124,12 @@ async def create_db_and_tables() -> None:
         has_tables = await _has_public_user_tables()
         if not has_version:
             if has_tables:
-                await _run_alembic_upgrade(stamp_revision="d3f1a9c7b2e1")
-                return
+                raise RuntimeError(
+                    "Detected a non-empty public schema without alembic_version. "
+                    "Automatic stamping is disabled to avoid schema/revision drift. "
+                    "Please back up the database and manually align Alembic history "
+                    "before starting the application."
+                )
             await _run_alembic_upgrade()
             return
 

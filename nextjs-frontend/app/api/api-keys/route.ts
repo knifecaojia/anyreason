@@ -1,9 +1,6 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-
-function getApiBaseUrl() {
-  return process.env.INTERNAL_API_BASE_URL || process.env.API_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8000";
-}
+import { getServerApiBaseUrl } from "@/lib/serverApiConfig";
 
 export async function GET(request: Request) {
   const cookieStore = await cookies();
@@ -14,7 +11,7 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const userId = url.searchParams.get("user_id");
-  const backendUrl = new URL("/api/v1/api-keys", getApiBaseUrl());
+  const backendUrl = new URL("/api/v1/api-keys", getServerApiBaseUrl());
   if (userId) {
     backendUrl.searchParams.set("user_id", userId);
   }
@@ -39,7 +36,7 @@ export async function POST(request: Request) {
   }
 
   const payload = await request.json();
-  const upstream = await fetch(new URL("/api/v1/api-keys", getApiBaseUrl()).toString(), {
+  const upstream = await fetch(new URL("/api/v1/api-keys", getServerApiBaseUrl()).toString(), {
     method: "POST",
     headers: { 
       Authorization: `Bearer ${token}`,

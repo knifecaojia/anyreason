@@ -16,8 +16,8 @@ from sqlalchemy import select, and_
 from app.database import async_session_maker
 from app.models import Task
 from app.schemas_media import ExternalTaskRef
-from app.tasks.handlers.registry import TASK_HANDLER_REGISTRY
 from app.tasks.reporter import TaskReporter
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +26,13 @@ POLL_CYCLE_INTERVAL = 10          # seconds between each scan cycle
 POLL_BACKOFF_MIN = 30             # minimum seconds between polls for a single task
 POLL_BACKOFF_MAX = 300            # maximum seconds between polls (5 minutes)
 POLL_BACKOFF_FACTOR = 1.5         # multiplicative backoff factor
-MAX_TASK_WAIT_HOURS = 24          # fail tasks waiting longer than this
 BATCH_SIZE = 20                   # max tasks to process per cycle
 COMPLETE_PHASE_TIMEOUT = 300      # timeout for on_external_complete (download/save)
+
+
+def get_max_task_wait_hours() -> int:
+    """Get the max wait hours for external tasks from config."""
+    return settings.EXTERNAL_TASK_MAX_WAIT_HOURS
 
 
 async def _poll_single_task(task_id: UUID) -> None:
@@ -41,12 +45,12 @@ async def _poll_single_task(task_id: UUID) -> None:
         now = datetime.now(timezone.utc)
 
         # Check max wait time
-        if task.started_at and (now - task.started_at) > timedelta(hours=MAX_TASK_WAIT_HOURS):
+        if task.started_at and (now - task.started_at) > timedelta(hours=get_max_task_wait_hours()):
             reporter = TaskReporter(db=db, task=task)
-            logger.warning("[ext-poller] task=%s exceeded max wait (%dh), failing", task_id, MAX_TASK_WAIT_HOURS)
+            logger.warning("[ext-poller] task=%s exceeded max wait (%dh), failing", task_id, get_max_task_wait_hours())
             await reporter.fail(
-                error=f"外部任务等待超时（超过{MAX_TASK_WAIT_HOURS}小时）",
-                details={"max_wait_hours": MAX_TASK_WAIT_HOURS},
+                error=f"外部任务等待超时（超过{get_max_task_wait_hours()}小时）",
+                details={"max_wait_hours": get_max_task_wait_hours()},
             )
             return
 
@@ -77,6 +81,8 @@ async def _poll_single_task(task_id: UUID) -> None:
 
         if ext_status.state == "succeeded" and ext_status.result is not None:
             # External task completed — run on_external_complete
+            # Lazy import to avoid triggering heavy handler registry imports for config-only tests
+            from app.tasks.handlers.registry import TASK_HANDLER_REGISTRY  # noqa: E402
             handler = TASK_HANDLER_REGISTRY.get(str(task.type or "").strip())
             if handler is None or not handler.supports_two_phase:
                 logger.error("[ext-poller] no two-phase handler for task=%s type=%s", task_id, task.type)
@@ -206,10 +212,10 @@ async def _zombie_sweep() -> None:
 
     Handles two cases:
     1. Tasks with null next_poll_at — schedule them for immediate polling.
-    2. Tasks that exceeded MAX_TASK_WAIT_HOURS — fail them.
+    2. Tasks that exceeded get_max_task_wait_hours() — fail them.
     """
     now = datetime.now(timezone.utc)
-    cutoff = now - timedelta(hours=MAX_TASK_WAIT_HOURS)
+    cutoff = now - timedelta(hours=get_max_task_wait_hours())
 
     async with async_session_maker() as db:
         # Case 1: null next_poll_at — fix scheduling
@@ -240,11 +246,11 @@ async def _zombie_sweep() -> None:
         )
         expired_tasks = expired.scalars().all()
         for t in expired_tasks:
-            logger.warning("[ext-poller] zombie: task=%s exceeded max wait %dh, failing", t.id, MAX_TASK_WAIT_HOURS)
+            logger.warning("[ext-poller] zombie: task=%s exceeded max wait %dh, failing", t.id, get_max_task_wait_hours())
             reporter = TaskReporter(db=db, task=t)
             await reporter.fail(
-                error=f"外部任务等待超时（超过{MAX_TASK_WAIT_HOURS}小时）",
-                details={"max_wait_hours": MAX_TASK_WAIT_HOURS, "phase": "zombie_sweep"},
+                error=f"外部任务等待超时（超过{get_max_task_wait_hours()}小时）",
+                details={"max_wait_hours": get_max_task_wait_hours(), "phase": "zombie_sweep"},
             )
         if expired_tasks:
             logger.info("[ext-poller] zombie sweep: failed %d expired tasks", len(expired_tasks))

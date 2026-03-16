@@ -19,7 +19,7 @@ export interface TaskEvent {
 // ===== Configuration =====
 
 export interface BatchQueueConfig {
-  maxConcurrency?: number; // default 3
+  maxConcurrency?: number; // default unlimited (Number.MAX_SAFE_INTEGER)
   timeoutMs?: number; // default 300000 (300 seconds)
   executeTask: (nodeId: string) => Promise<string>; // returns taskId
   subscribeTask?: (taskId: string, handler: (event: TaskEvent) => void) => void;
@@ -38,7 +38,7 @@ export class BatchQueueManager {
   private onNodeUpdate?: (nodeId: string, update: Partial<QueueItem>) => void;
 
   constructor(config: BatchQueueConfig) {
-    this.maxConcurrency = config.maxConcurrency ?? 3;
+    this.maxConcurrency = config.maxConcurrency ?? Number.MAX_SAFE_INTEGER;
     this.timeoutMs = config.timeoutMs ?? 300000;
     this.executeTask = config.executeTask;
     this.subscribeTask = config.subscribeTask;

@@ -191,7 +191,6 @@ services:
       NODE_ENV: development
       INTERNAL_API_BASE_URL: http://backend:8000
       API_BASE_URL: http://backend:8000
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
       OPENAPI_OUTPUT_FILE: ./shared-data/openapi.json
       NEXT_PUBLIC_USE_MOCK_API: "false"
       USE_MOCK_API: "false"

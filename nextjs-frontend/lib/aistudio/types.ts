@@ -66,6 +66,7 @@ export interface ModelCapabilities {
   supports_prompt_extend?: boolean;
   supports_watermark?: boolean;
   supports_seed?: boolean;
+  supports_off_peak?: boolean;
   supports_guidance_scale?: boolean;
   guidance_scale_range?: { min: number; max: number; default?: number };
   max_reference_images?: number;

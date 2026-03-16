@@ -27,9 +27,11 @@ interface Props {
   onConfirm: (blob: Blob, cropInfo: { x: number; y: number; w: number; h: number }) => void;
   /** Called when user cancels crop */
   onCancel: () => void;
+  /** Optional: callback for using original image without cropping */
+  onUseOriginal?: (blob: Blob) => void;
 }
 
-export default function ImageCropOverlay({ thumbUrl, fullUrl, onConfirm, onCancel }: Props) {
+export default function ImageCropOverlay({ thumbUrl, fullUrl, onConfirm, onCancel, onUseOriginal }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
   const draggingRef = useRef(false);
@@ -90,13 +92,10 @@ export default function ImageCropOverlay({ thumbUrl, fullUrl, onConfirm, onCance
 
     setCropping(true);
     try {
-      // Calculate scale from displayed thumbnail to original image
       const displayW = img.clientWidth;
       const displayH = img.clientHeight;
 
-      // Load the FULL resolution image off-screen
       const fullImg = new Image();
-      // Only set crossOrigin for absolute cross-origin URLs; same-origin /api/* URLs don't need it
       if (fullUrl.startsWith('http')) fullImg.crossOrigin = 'anonymous';
       await new Promise<void>((resolve, reject) => {
         fullImg.onload = () => resolve();
@@ -109,13 +108,11 @@ export default function ImageCropOverlay({ thumbUrl, fullUrl, onConfirm, onCance
       const scaleX = origW / displayW;
       const scaleY = origH / displayH;
 
-      // Map crop rect from display coords to original image coords
       const cropX = Math.round(rect.x * scaleX);
       const cropY = Math.round(rect.y * scaleY);
       const cropW = Math.round(rect.w * scaleX);
       const cropH = Math.round(rect.h * scaleY);
 
-      // Crop using off-screen canvas
       const canvas = document.createElement('canvas');
       canvas.width = cropW;
       canvas.height = cropH;
@@ -136,6 +133,42 @@ export default function ImageCropOverlay({ thumbUrl, fullUrl, onConfirm, onCance
       setCropping(false);
     }
   }, [rect, fullUrl, onConfirm]);
+
+  const handleUseOriginal = useCallback(async () => {
+    setCropping(true);
+    try {
+      const fullImg = new Image();
+      if (fullUrl.startsWith('http')) fullImg.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        fullImg.onload = () => resolve();
+        fullImg.onerror = () => reject(new Error('Failed to load full image'));
+        fullImg.src = fullUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      canvas.width = fullImg.naturalWidth;
+      canvas.height = fullImg.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas context unavailable');
+      ctx.drawImage(fullImg, 0, 0);
+
+      const blob = await new Promise<Blob>((resolve, reject) => {
+        canvas.toBlob((b) => {
+          if (b) resolve(b);
+          else reject(new Error('Canvas toBlob failed'));
+        }, 'image/png');
+      });
+
+      if (onUseOriginal) {
+        onUseOriginal(blob);
+      } else {
+        onConfirm(blob, { x: 0, y: 0, w: fullImg.naturalWidth, h: fullImg.naturalHeight });
+      }
+    } catch (err) {
+      console.error('[ImageCropOverlay] use original failed:', err);
+      setCropping(false);
+    }
+  }, [fullUrl, onConfirm, onUseOriginal]);
 
   const hasSelection = rect && rect.w >= 5 && rect.h >= 5;
 
@@ -197,6 +230,14 @@ export default function ImageCropOverlay({ thumbUrl, fullUrl, onConfirm, onCance
             className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 hover:bg-white/20 text-white/80 text-[12px] transition-colors disabled:opacity-50"
           >
             <X size={14} /> 取消
+          </button>
+          <button
+            type="button"
+            onClick={handleUseOriginal}
+            disabled={cropping}
+            className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-purple-600 hover:bg-purple-500 text-white text-[12px] font-medium transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            直接使用原图
           </button>
           <button
             type="button"

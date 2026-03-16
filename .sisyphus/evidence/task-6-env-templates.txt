@@ -1,0 +1,55 @@
+# Task 6: Env Templates Normalization - Evidence
+
+## Date
+2026-03-16
+
+## Task Summary
+Normalize env templates and local-development defaults for frontend.
+
+## Files Modified
+
+### 1. nextjs-frontend/.env.example
+**Before:**
+- Had hardcoded localhost:8000 values
+- No clear distinction between deploy and local-dev values
+
+**After:**
+- Removed localhost defaults
+- Uses placeholder: `INTERNAL_API_BASE_URL=http://your-backend-host:8000`
+- NEXT_PUBLIC_API_BASE_URL commented out with explanation
+- Added clear documentation about deployment vs local-dev
+
+**Key Changes:**
+- INTERNAL_API_BASE_URL now uses placeholder instead of localhost
+- NEXT_PUBLIC_API_BASE_URL is commented (only for split-origin deployments)
+- Added comprehensive comments explaining the configuration contract
+
+### 2. nextjs-frontend/.env.local.example
+**Before:**
+- Had misleading localhost values (127.0.0.1:8100 instead of standard localhost:8000)
+- No clear markers that these are LOCAL DEV ONLY
+
+**After:**
+- Uses standard localhost:8000 (matching Docker compose setup)
+- Clearly marked as "LOCAL DEVELOPMENT ONLY"
+- Explains browser uses relative /api (no NEXT_PUBLIC_API_BASE_URL needed)
+- Organized into clear sections with comments
+
+## Contract Rules Applied
+
+Per Task 2 configuration contract:
+1. **Browser uses relative /api** - No NEXT_PUBLIC_API_BASE_URL needed for local dev
+2. **SSR uses INTERNAL_API_BASE_URL** - This is set to localhost for local dev
+3. **NEXT_PUBLIC_API_BASE_URL** - ONLY for explicit split-origin deployments (NOT localhost)
+
+## Verification
+
+- .env and .env.local are in .gitignore (lines 28-30) - confirmed as local-only
+- No actual .env files were modified (per task: "Do not rely on tracked real .env files as deploy truth")
+- Template files now clearly distinguish deployment vs local development purposes
+
+## Notes
+
+- The actual .env and .env.local files (gitignored) were NOT modified - these are developer-specific
+- The .example files are now proper templates for onboarding new developers
+- Clear separation between what's for deployment (.env.example) vs local dev (.env.local.example)

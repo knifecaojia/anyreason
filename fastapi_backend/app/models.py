@@ -181,6 +181,8 @@ class AIModelConfig(Base):
     model = Column(String(128), nullable=False)
     base_url = Column(Text, nullable=True)
     encrypted_api_key = Column(LargeBinary, nullable=True)
+    plaintext_api_key = Column(Text, nullable=True)
+    api_keys_info = Column(JSONB, nullable=True)
     enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
     sort_order = Column(Integer, nullable=False, server_default=text("0"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
@@ -1693,4 +1695,138 @@ class APIKey(Base):
     __table_args__ = (
         Index("idx_api_keys_user", "user_id"),
         Index("idx_api_keys_key", "key"),
+    )
+
+
+batch_video_job_status_enum = ENUM(
+    "draft", "processing", "completed", "archived",
+    name="batch_video_job_status_enum",
+    create_type=False,
+)
+
+
+batch_video_asset_status_enum = ENUM(
+    "pending", "generating", "completed", "failed",
+    name="batch_video_asset_status_enum",
+    create_type=False,
+)
+
+
+batch_video_history_status_enum = ENUM(
+    "pending", "processing", "completed", "failed",
+    name="batch_video_history_status_enum",
+    create_type=False,
+)
+
+
+class BatchVideoJob(Base):
+    __tablename__ = "batch_video_jobs"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    user_id = Column(UUID(as_uuid=True), ForeignKey("user.id", ondelete="CASCADE"), nullable=False)
+    title = Column(String(256), nullable=False)
+    config = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    status = Column(batch_video_job_status_enum, nullable=False, server_default=text("'draft'"))
+    total_assets = Column(Integer, nullable=False, server_default=text("0"))
+    completed_assets = Column(Integer, nullable=False, server_default=text("0"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    user = relationship("User", backref=backref("batch_video_jobs", cascade="all, delete-orphan", passive_deletes=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('draft', 'processing', 'completed', 'archived')",
+            name="ck_batch_video_jobs_status",
+        ),
+        Index("idx_batch_video_jobs_user", "user_id"),
+        Index("idx_batch_video_jobs_user_status", "user_id", "status"),
+        Index("idx_batch_video_jobs_created_at", "created_at"),
+    )
+
+
+class BatchVideoPendingImage(Base):
+    __tablename__ = "batch_video_pending_images"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    job_id = Column(UUID(as_uuid=True), ForeignKey("batch_video_jobs.id", ondelete="CASCADE"), nullable=False)
+    source_url = Column(String(512), nullable=False)
+    thumbnail_url = Column(String(512), nullable=True)
+    original_filename = Column(String(255), nullable=True)
+    content_type = Column(String(128), nullable=True)
+    mode = Column(String(16), nullable=False, server_default=text("'16:9'"))
+    linked_cell_key = Column(String(128), nullable=True)
+    linked_cell_label = Column(String(64), nullable=True)
+    processed = Column(Boolean, nullable=False, server_default=text("false"), default=False)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    job = relationship("BatchVideoJob", backref=backref("pending_images", cascade="all, delete-orphan", passive_deletes=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "mode IN ('16:9', '9:16')",
+            name="ck_batch_video_pending_images_mode",
+        ),
+        Index("idx_batch_video_pending_images_job", "job_id"),
+        Index("idx_batch_video_pending_images_job_processed", "job_id", "processed"),
+    )
+
+
+class BatchVideoAsset(Base):
+    __tablename__ = "batch_video_assets"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    job_id = Column(UUID(as_uuid=True), ForeignKey("batch_video_jobs.id", ondelete="CASCADE"), nullable=False)
+    source_url = Column(String(512), nullable=False)
+    thumbnail_url = Column(String(512), nullable=True)
+    prompt = Column(Text, nullable=True)
+    index = Column(Integer, nullable=False, server_default=text("0"))
+    status = Column(batch_video_asset_status_enum, nullable=False, server_default=text("'pending'"))
+    result_url = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    source_image_id = Column(UUID(as_uuid=True), ForeignKey("batch_video_pending_images.id", ondelete="SET NULL"), nullable=True)
+    slice_index = Column(Integer, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+
+    job = relationship("BatchVideoJob", backref=backref("assets", cascade="all, delete-orphan", passive_deletes=True))
+    source_image = relationship("BatchVideoPendingImage", backref=backref("assets", passive_deletes=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'generating', 'completed', 'failed')",
+            name="ck_batch_video_assets_status",
+        ),
+        Index("idx_batch_video_assets_job", "job_id"),
+        Index("idx_batch_video_assets_job_index", "job_id", "index"),
+        Index("idx_batch_video_assets_status", "status"),
+        Index("idx_batch_video_assets_source_image", "source_image_id"),
+    )
+
+
+class BatchVideoHistory(Base):
+    __tablename__ = "batch_video_history"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    asset_id = Column(UUID(as_uuid=True), ForeignKey("batch_video_assets.id", ondelete="CASCADE"), nullable=False)
+    task_id = Column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete="SET NULL"), nullable=True)
+    status = Column(batch_video_history_status_enum, nullable=False, server_default=text("'pending'"))
+    progress = Column(Integer, nullable=False, server_default=text("0"))
+    result_url = Column(Text, nullable=True)
+    error_message = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+
+    asset = relationship("BatchVideoAsset", backref=backref("history", cascade="all, delete-orphan", passive_deletes=True))
+    task = relationship("Task")
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('pending', 'processing', 'completed', 'failed')",
+            name="ck_batch_video_history_status",
+        ),
+        Index("idx_batch_video_history_asset", "asset_id"),
+        Index("idx_batch_video_history_task", "task_id"),
+        Index("idx_batch_video_history_created_at", "created_at"),
     )

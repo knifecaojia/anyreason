@@ -44,6 +44,7 @@ class VideoModelSpec:
     max_ref_images: int = 0
     max_frames: int = 0
     supports_enhance: bool = False
+    supports_off_peak: bool = False
     style_options: list[str] | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -78,6 +79,7 @@ VIDU_Q3_PRO = VideoModelSpec(
     max_ref_images=0,
     max_frames=0,
     supports_enhance=True,
+    supports_off_peak=True,
     style_options=["general", "anime"],
 )
 
@@ -93,6 +95,7 @@ VIDU_Q3_TURBO = VideoModelSpec(
     max_ref_images=0,
     max_frames=0,
     supports_enhance=True,
+    supports_off_peak=True,
     style_options=["general", "anime"],
 )
 
@@ -271,6 +274,8 @@ def to_model_capabilities(spec: VideoModelSpec) -> dict[str, Any]:
         caps["max_frames"] = spec.max_frames
     if spec.style_options:
         caps["style_options"] = list(spec.style_options)
+    if spec.supports_off_peak:
+        caps["supports_off_peak"] = True
     caps["supports_negative_prompt"] = True
     return caps
 
@@ -289,6 +294,7 @@ def spec_to_api_dict(spec: VideoModelSpec) -> dict[str, Any]:
         "max_ref_images": spec.max_ref_images,
         "max_frames": spec.max_frames,
         "supports_enhance": spec.supports_enhance,
+        "supports_off_peak": spec.supports_off_peak,
         "style_options": list(spec.style_options) if spec.style_options else None,
         "model_capabilities": to_model_capabilities(spec),
     }

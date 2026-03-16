@@ -1,0 +1,49 @@
+# Evidence: Task 2 - Frontend API Configuration Contract
+
+## Task
+Define and document the target frontend API configuration contract.
+
+## Evidence
+
+### 1. Documentation File Created
+- **File**: `docs/FRONTEND_API_CONFIG.md`
+- **Content**: Complete contract specifying browser vs SSR vs split-origin configurations
+
+### 2. Key Findings from Code Analysis
+
+#### clientConfig.ts (lines 13-29)
+- Browser: `baseURL = ""` (relative path - default, safe)
+- SSR: Uses precedence `INTERNAL_API_BASE_URL` → `API_BASE_URL` → `NEXT_PUBLIC_API_BASE_URL` → localhost fallback
+
+#### nginx config (lines 66-80)
+- Proxies `/api/` to `http://anyreason_backend/api/`
+- Enables same-origin browser requests via relative path
+
+#### compose.app.yml (lines 123-128)
+- **Problem found**: `NEXT_PUBLIC_API_BASE_URL: http://localhost:8000` leaks to browser
+- This should NOT be set for default deployments
+
+#### docker-compose.deploy.yml (lines 190-196)
+- **Same problem**: `NEXT_PUBLIC_API_BASE_URL: http://localhost:8000`
+
+### 3. Contract Rules Documented
+1. Browser uses relative `/api` by default (safe)
+2. SSR uses `INTERNAL_API_BASE_URL` for internal network calls
+3. `NEXT_PUBLIC_API_BASE_URL` should NOT be set to localhost - only for explicit split-origin
+4. Production must NOT expose localhost to browser
+
+### 4. Sections Included
+- Overview
+- Configuration Variables table
+- Semantic Rules (3 rules)
+- Deployment Scenarios:
+  - Local Development
+  - Docker Single-Host
+  - Production Deployment
+  - Split-Origin (optional future)
+- Current Issues in compose files
+- Nginx Proxy Contract
+- Summary table
+
+## Verification
+Documentation created at: F:\animate-serial\apps\anyreason\docs\FRONTEND_API_CONFIG.md

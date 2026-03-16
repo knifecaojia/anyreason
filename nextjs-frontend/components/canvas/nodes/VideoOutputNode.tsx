@@ -191,6 +191,7 @@ export default function VideoOutputNode(props: NodeProps) {
         duration,
         resolution,
         mode: inputMode,
+        off_peak: !!data.offPeak,
       };
 
       // Collect upstream reference images → base64 data URIs (preserves @N order)
@@ -461,6 +462,19 @@ export default function VideoOutputNode(props: NodeProps) {
                               </div>
                             )}
                           </div>
+                          {caps?.supports_off_peak && (
+                            <div className="mt-2 pt-2 border-t border-border/20">
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={!!data.offPeak}
+                                  onChange={(e) => updateNodeData(props.id, { ...data, offPeak: e.target.checked })}
+                                  className="rounded border-border w-3 h-3"
+                                />
+                                <span className="text-[10px] text-textMuted">错峰模式</span>
+                              </label>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

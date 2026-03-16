@@ -4,7 +4,7 @@ import { useState, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Check, Eye, EyeOff, Filter, MessageSquare, Plus, RefreshCw, Search, Settings as SettingsIcon, X, Trash2, Edit, Download, Upload } from "lucide-react";
-import type { AICategory, AIModelConfig, AIModelBinding } from "@/components/actions/ai-model-actions";
+import type { AICategory, AIModelConfig, AIModelBinding, AIModelKeyInfo } from "@/components/actions/ai-model-actions";
 
 import { ModelTestModal } from "./ModelTestModal";
 
@@ -167,7 +167,7 @@ export function ModelsSection(props: {
 
   const handleExport = async () => {
     try {
-      const res = await fetch("/api/v1/ai/models/export");
+      const res = await fetch("/api/ai/models/export");
       if (!res.ok) throw new Error("Export failed");
       const blob = await res.blob();
       const url = window.URL.createObjectURL(blob);
@@ -196,7 +196,7 @@ export function ModelsSection(props: {
     try {
       const formData = new FormData();
       formData.append("file", file);
-      const res = await fetch("/api/v1/ai/models/import", {
+      const res = await fetch("/api/ai/models/import", {
         method: "POST",
         body: formData,
       });
@@ -426,7 +426,11 @@ export function ModelsSection(props: {
                     <td className="px-4 py-3 font-medium text-textMain">{c.manufacturer}</td>
                     <td className="px-4 py-3 text-xs text-textMain font-mono">{c.model}</td>
                     <td className="px-4 py-3 text-xs text-textMuted font-mono truncate max-w-[18rem]">{c.base_url || "-"}</td>
-                    <td className="px-4 py-3 text-xs text-textMuted">{c.has_api_key ? "已配置" : "未配置"}</td>
+                    <td className="px-4 py-3 text-xs text-textMuted">
+                      {c.api_keys_info && c.api_keys_info.length > 0 
+                        ? `多 Key (${c.api_keys_info.length})` 
+                        : (c.plaintext_api_key ? "已配置" : "未配置")}
+                    </td>
                     <td className="px-4 py-3 text-xs text-textMain">{c.enabled ? "是" : "否"}</td>
                     <td className="px-4 py-3 text-right flex items-center justify-end gap-2">
                       <button
@@ -789,6 +793,100 @@ export function ModelsSection(props: {
                   >
                     {catalogApiKeyVisible ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
+                </div>
+
+                <div className="mt-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs text-textMuted font-bold">多 API Key 配置（错峰/并发控制）</label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = [...(catalogDraft.api_keys_info || [])];
+                        next.push({ id: Math.random().toString(36).substring(2), api_key: "", concurrency_limit: 1, enabled: true });
+                        setCatalogDraft((p: any) => ({ ...p, api_keys_info: next }));
+                      }}
+                      className="text-[10px] font-bold text-primary hover:underline flex items-center gap-1"
+                      disabled={catalogConfigSubmitting}
+                    >
+                      <Plus size={12} /> 添加 Key
+                    </button>
+                  </div>
+                  
+                  {(catalogDraft.api_keys_info || []).length > 0 && (
+                    <div className="space-y-3 border border-border rounded-xl p-3 bg-background/20 max-h-[200px] overflow-y-auto">
+                      {(catalogDraft.api_keys_info as AIModelKeyInfo[]).map((keyInfo, idx) => (
+                        <div key={keyInfo.id || idx} className="space-y-2 pb-3 border-b border-border/50 last:border-0 last:pb-0">
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={keyInfo.api_key}
+                              onChange={(e) => {
+                                const next = [...catalogDraft.api_keys_info];
+                                next[idx] = { ...keyInfo, api_key: e.target.value };
+                                setCatalogDraft((p: any) => ({ ...p, api_keys_info: next }));
+                              }}
+                              className="flex-1 bg-surfaceHighlight border border-border rounded-md px-2 py-1.5 text-xs outline-none focus:border-primary text-textMain font-mono"
+                              placeholder="API Key"
+                              disabled={catalogConfigSubmitting}
+                              autoComplete="off"
+                            />
+                            <div className="flex items-center gap-1 bg-surfaceHighlight border border-border rounded-md px-2 py-1">
+                              <span className="text-[10px] text-textMuted">并发</span>
+                              <input
+                                type="number"
+                                value={keyInfo.concurrency_limit}
+                                onChange={(e) => {
+                                  const next = [...catalogDraft.api_keys_info];
+                                  next[idx] = { ...keyInfo, concurrency_limit: Number(e.target.value || 1) };
+                                  setCatalogDraft((p: any) => ({ ...p, api_keys_info: next }));
+                                }}
+                                className="w-8 bg-transparent text-xs outline-none text-textMain text-center"
+                                min={1}
+                                disabled={catalogConfigSubmitting}
+                              />
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = (catalogDraft.api_keys_info as AIModelKeyInfo[]).filter((_: AIModelKeyInfo, i: number) => i !== idx);
+                                setCatalogDraft((p: any) => ({ ...p, api_keys_info: next }));
+                              }}
+                              className="p-1.5 text-textMuted hover:text-red-400"
+                              disabled={catalogConfigSubmitting}
+                            >
+                              <X size={14} />
+                            </button>
+                          </div>
+                          <div className="flex items-center gap-4 px-1">
+                            <label className="flex items-center gap-1.5 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={keyInfo.enabled}
+                                onChange={(e) => {
+                                  const next = [...catalogDraft.api_keys_info];
+                                  next[idx] = { ...keyInfo, enabled: e.target.checked };
+                                  setCatalogDraft((p: any) => ({ ...p, api_keys_info: next }));
+                                }}
+                                disabled={catalogConfigSubmitting}
+                                className="rounded-sm border-border"
+                              />
+                              <span className="text-[10px] text-textMuted">启用</span>
+                            </label>
+                            <input
+                              value={keyInfo.note || ""}
+                              onChange={(e) => {
+                                const next = [...catalogDraft.api_keys_info];
+                                next[idx] = { ...keyInfo, note: e.target.value };
+                                setCatalogDraft((p: any) => ({ ...p, api_keys_info: next }));
+                              }}
+                              className="flex-1 bg-transparent border-0 border-b border-transparent focus:border-border text-[10px] outline-none text-textMuted"
+                              placeholder="备注（如：主账号 / 备用）"
+                              disabled={catalogConfigSubmitting}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 {getApiKeyUrl(catalogSelected.manufacturer_code) ? (
                   <a

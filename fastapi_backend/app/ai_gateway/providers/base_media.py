@@ -23,3 +23,13 @@ class MediaProvider(ABC):
         """Query the status of a previously submitted external task.
         Override in subclass and set supports_async=True to enable."""
         raise NotImplementedError
+
+    async def cancel_task(self, external_task_id: str) -> dict[str, object]:
+        """Attempt to cancel a previously submitted external task.
+        Providers that do not support cancel should return a structured unsupported result."""
+        _ = external_task_id
+        return {
+            "attempted": True,
+            "supported": False,
+            "message": "provider_cancel_not_supported",
+        }
