@@ -82,10 +82,14 @@ export async function login(prevState: unknown, formData: FormData) {
     const remember = formData.get("remember") === "on";
     const maxAge = remember ? 60 * 60 * 24 * 30 : undefined; // 30 days if remember, otherwise session
 
+    // Note: secure flag should be true in production with HTTPS
+    // For HTTP deployments, set secure: false
+    const isSecure = process.env.NODE_ENV === "production";
+    
     cookieStore.set("accessToken", token, {
       httpOnly: true,
       sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
+      secure: isSecure,
       path: "/",
       maxAge: maxAge,
     });
@@ -95,7 +99,7 @@ export async function login(prevState: unknown, formData: FormData) {
       cookieStore.set("rememberedUsername", username, {
         httpOnly: false, // Accessible from client if needed, but we'll use it on server
         sameSite: "lax",
-        secure: process.env.NODE_ENV === "production",
+        secure: isSecure,
         path: "/",
         maxAge: 60 * 60 * 24 * 30, // Always 30 days if remember is checked
       });

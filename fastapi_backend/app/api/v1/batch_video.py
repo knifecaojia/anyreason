@@ -68,6 +68,10 @@ async def _cancel_external_task_if_possible(*, task: Task, user_id: UUID) -> dic
 
 
 def _build_preview_task(*, task: Task, history: BatchVideoHistory) -> BatchVideoPreviewTaskRead:
+    # 从 task.input_json 中提取 prompt
+    input_json = task.input_json or {}
+    prompt = input_json.get("prompt") if isinstance(input_json, dict) else None
+    
     return BatchVideoPreviewTaskRead(
         task_id=cast(UUID, task.id),
         status=cast(str, task.status),
@@ -78,6 +82,7 @@ def _build_preview_task(*, task: Task, history: BatchVideoHistory) -> BatchVideo
         result_url=cast(str | None, history.result_url),
         error_message=cast(str | None, history.error_message) or cast(str | None, task.error),
         external_task_id=cast(str | None, task.external_task_id),
+        prompt=cast(str | None, prompt),
     )
 
 

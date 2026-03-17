@@ -95,6 +95,7 @@ export interface BatchVideoPreviewTask {
   result_url?: string | null;
   error_message?: string | null;
   external_task_id?: string | null;
+  prompt?: string | null;
 }
 
 export interface BatchVideoPreviewSuccess {

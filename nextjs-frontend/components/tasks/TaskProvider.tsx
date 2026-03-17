@@ -29,19 +29,8 @@ export function shouldRefetchTaskOnEvent(eventType: string) {
 function getWsUrl(ticket: string) {
   if (typeof window === "undefined") return "";
 
-  // 优先从环境变量读取后端地址，与 API route 的 getApiBaseUrl() 保持一致
-  const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (apiBase) {
-    try {
-      const u = new URL(apiBase);
-      const protocol = u.protocol === "https:" ? "wss:" : "ws:";
-      return `${protocol}//${u.host}/ws/tasks?ticket=${encodeURIComponent(ticket)}`;
-    } catch {
-      // fall through to location-based detection
-    }
-  }
-
-  // Fallback：基于当前页面 origin 构建 WebSocket URL
+  // 始终基于当前页面 origin 构建 WebSocket URL
+  // 这样可以避免构建时环境变量导致的 Mixed Content 问题
   const loc = window.location;
   const protocol = loc.protocol === "https:" ? "wss:" : "ws:";
   return `${protocol}//${loc.host}/ws/tasks?ticket=${encodeURIComponent(ticket)}`;

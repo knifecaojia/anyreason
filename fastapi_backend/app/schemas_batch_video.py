@@ -139,6 +139,7 @@ class BatchVideoPreviewTaskRead(BaseModel):
     result_url: Optional[str] = None
     error_message: Optional[str] = None
     external_task_id: Optional[str] = None
+    prompt: Optional[str] = None
 
 
 class BatchVideoPreviewSuccessRead(BaseModel):

@@ -231,6 +231,14 @@ export function VideoPreviewCards({ cards, onReload }: Props) {
                   .filter((item) => item.task_id !== card.latest_task?.task_id)
                   .map((item) => (
                   <div key={item.task_id} className="px-4 py-3">
+                    {/* 提示词 - 历史任务视图也显示，优先显示任务当时的prompt */}
+                    <div className="mb-3">
+                      <div className="text-xs text-textMuted mb-1">提示词</div>
+                      <p className="text-sm text-textMain whitespace-pre-wrap break-words">
+                        {item.prompt || card.prompt || "暂无提示词"}
+                      </p>
+                    </div>
+                    
                     {/* 任务信息头部 */}
                     <div className="flex items-start justify-between gap-4 mb-3">
                       <div className="min-w-0">

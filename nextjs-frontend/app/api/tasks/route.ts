@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   }
 
   const url = new URL(request.url);
-  const upstreamUrl = new URL("/api/v1/tasks", getApiBaseUrl());
+  const upstreamUrl = new URL("/api/v1/tasks/", getApiBaseUrl());
   url.searchParams.forEach((v, k) => upstreamUrl.searchParams.set(k, v));
 
   const upstream = await fetch(upstreamUrl.toString(), {
@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   }
 
   const payload = await request.text();
-  const upstream = await fetch(new URL("/api/v1/tasks", getApiBaseUrl()).toString(), {
+  const upstream = await fetch(new URL("/api/v1/tasks/", getApiBaseUrl()).toString(), {
     method: "POST",
     headers: { Authorization: `Bearer ${token}`, "content-type": "application/json" },
     body: payload,
