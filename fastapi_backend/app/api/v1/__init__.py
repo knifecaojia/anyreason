@@ -21,6 +21,7 @@ from app.api.v1.ai_scene_runner import router as ai_scene_runner_router
 from app.api.v1.ai_scene_structure import router as ai_scene_structure_router
 from app.api.v1.ai_storyboard import router as ai_storyboard_router
 from app.api.v1.ai_context import router as ai_context_router
+from app.api.v1.internal_queue import router as internal_queue_router
 from app.api.v1.items import router as items_router
 from app.api.v1.credits import router as credits_router
 from app.api.v1.agents import router as agents_router
@@ -66,6 +67,7 @@ v1_router.include_router(ai_scene_test_router, tags=["ai"])
 v1_router.include_router(ai_scene_runner_router, tags=["ai"])
 v1_router.include_router(ai_context_router, tags=["ai"])
 v1_router.include_router(tasks_router, prefix="/tasks", tags=["tasks"])
+v1_router.include_router(internal_queue_router, tags=["queue"])
 v1_router.include_router(admin_router, tags=["admin"])
 v1_router.include_router(users_router, prefix="/users", tags=["users"])
 v1_router.include_router(credits_router, tags=["credits"])

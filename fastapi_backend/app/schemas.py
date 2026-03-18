@@ -537,7 +537,21 @@ class AIPromptPresetUpdateRequest(BaseModel):
     is_default: bool | None = None
 
 
-TaskStatus = Literal["queued", "running", "succeeded", "failed", "canceled", "waiting_external"]
+# Extended task status for video slot queue lifecycle:
+# - queued_for_slot: waiting in FIFO queue for slot capacity
+# - submitting: actively submitting to provider (after slot acquisition)
+# - waiting_external: waiting for provider to complete (existing)
+# - Other statuses: standard task lifecycle
+TaskStatus = Literal[
+    "queued",           # Initial state, waiting to be picked up by worker
+    "queued_for_slot", # Waiting in FIFO queue for API key capacity
+    "running",         # Actively processing (non-two-phase handlers)
+    "submitting",      # Submitting to external provider after slot acquisition
+    "waiting_external",# Waiting for external provider to complete generation
+    "succeeded",       # Task completed successfully
+    "failed",          # Task failed with error
+    "canceled",        # Task was canceled by user
+]
 
 
 class TaskCreateRequest(BaseModel):
@@ -562,6 +576,17 @@ class TaskRead(BaseModel):
     updated_at: datetime
     started_at: datetime | None = None
     finished_at: datetime | None = None
+
+    # Queue metadata for video slot queue lifecycle
+    # These fields are only populated when status is "queued_for_slot"
+    queue_position: int | None = None  # 1-based position in FIFO queue
+    queued_at: datetime | None = None  # When task entered the queue
+
+    # Slot owner metadata for tracking which task owns which slot
+    # These fields are populated when task has acquired a slot or is submitting
+    slot_owner_token: str | None = None  # Unique token proving slot ownership
+    slot_config_id: UUID | None = None    # The model config this slot belongs to
+    slot_acquired_at: datetime | None = None  # When slot was acquired
 
     model_config = {"from_attributes": True}
 
@@ -676,3 +701,52 @@ class APIKeyCreateRequest(BaseModel):
 class APIKeyUpdate(BaseModel):
     name: str | None = None
     is_active: bool | None = None
+
+
+# ---------------------------------------------------------------------------
+# Queue Observability Schemas (Task 9)
+# ---------------------------------------------------------------------------
+
+class QueueDepthInfo(BaseModel):
+    """Queue depth information for a model config."""
+    config_id: UUID
+    queue_depth: int  # Number of tasks waiting in queue
+    oldest_queued_at: datetime | None = None  # Timestamp of oldest queued task
+    newest_queued_at: datetime | None = None  # Timestamp of newest queued task
+
+
+class SlotUtilizationInfo(BaseModel):
+    """Slot utilization information for a model config."""
+    config_id: UUID
+    active: int  # Number of slots currently in use
+    total: int  # Total available slots (sum of enabled key limits)
+    available: int  # Number of available slots
+
+
+class StaleOwnerInfo(BaseModel):
+    """Information about a stale slot owner."""
+    owner_token: str  # Owner token (safe - not a secret)
+    key_id: str | None = None  # Key ID/hash (safe), not plaintext key
+    enqueued_at: datetime | None = None
+    acquired_at: datetime | None = None
+    age_seconds: float | None = None
+    task_id: str | None = None
+    is_queue_entry: bool = False  # True if stale in queue, False if stale active
+
+
+class QueueHealthConfigSummary(BaseModel):
+    """Summary of queue health for a single model config."""
+    config_id: UUID
+    queue_depth: int
+    active: int
+    total: int
+    available: int
+    stale_queue_count: int
+    stale_active_count: int
+
+
+class QueueHealthResponse(BaseModel):
+    """Combined queue health response."""
+    summary: QueueHealthConfigSummary | None = None
+    configs: dict[str, QueueHealthConfigSummary] = Field(default_factory=dict)
+    stale_owners: list[StaleOwnerInfo] = Field(default_factory=list)
