@@ -167,7 +167,8 @@ async def get_queue_depth(
     result: dict[str, QueueDepthInfo] = {}
 
     for config in configs:
-        config_id = config.id
+        # Normalize ORM column to plain UUID for type safety
+        config_id: UUID = UUID(str(config.id))  # type: ignore[assignment]
 
         # Get queue depth
         queue_key = manager._get_queue_key(config_id)
@@ -236,7 +237,8 @@ async def get_slot_utilization(
     result: dict[str, SlotUtilizationInfo] = {}
 
     for config in configs:
-        config_id = config.id
+        # Normalize ORM column to plain UUID for type safety
+        config_id: UUID = UUID(str(config.id))  # type: ignore[assignment]
 
         # Get keys_info safely (may be encrypted or None)
         keys_info = getattr(config, "api_keys_info", None) or []
@@ -309,7 +311,8 @@ async def get_stale_slots(
     }
 
     for config in configs:
-        config_id = config.id
+        # Normalize ORM column to plain UUID for type safety
+        config_id: UUID = UUID(str(config.id))  # type: ignore[assignment]
 
         # Check stale queued entries
         queue_owners = await _get_queue_owners_for_config(config_id)
@@ -397,7 +400,8 @@ async def get_queue_health(
     total_stale_active = 0
 
     for config in configs:
-        config_id = config.id
+        # Normalize ORM column to plain UUID for type safety
+        config_id: UUID = UUID(str(config.id))  # type: ignore[assignment]
 
         # Get keys_info safely
         keys_info = getattr(config, "api_keys_info", None) or []
