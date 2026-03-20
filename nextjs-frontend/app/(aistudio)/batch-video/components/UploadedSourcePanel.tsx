@@ -12,6 +12,8 @@ interface UploadedSourcePanelProps {
   filteredSourceId?: string | null;
   onToggleFilter?: (id: string) => void;
   onClearFilter?: () => void;
+  onBindScript?: (id: string) => void;
+  hasExcelReady?: boolean;
 }
 
 export function UploadedSourcePanel({
@@ -22,6 +24,8 @@ export function UploadedSourcePanel({
   filteredSourceId,
   onToggleFilter,
   onClearFilter,
+  onBindScript,
+  hasExcelReady,
 }: UploadedSourcePanelProps) {
   const [previewImage, setPreviewImage] = useState<string | null>(null);
 
@@ -111,6 +115,34 @@ export function UploadedSourcePanel({
                 >
                   {source.processed ? "已拆分" : "拆分为卡片"}
                 </button>
+
+                {source.processed && onBindScript && (
+                  <div className="space-y-2">
+                    <div className="text-[11px] text-textMuted">
+                      {source.linkedCellLabel ? (
+                        <span className="text-green-600">已绑定: {source.linkedCellLabel}</span>
+                      ) : (
+                        "未绑定"
+                      )}
+                    </div>
+                    <button
+                      onClick={() => onBindScript(source.id)}
+                      disabled={!hasExcelReady}
+                      className={`w-full px-3 py-1.5 text-xs rounded-md disabled:opacity-50 disabled:cursor-not-allowed ${
+                        source.linkedCellKey
+                          ? "bg-secondary text-textMain hover:bg-secondary/80"
+                          : "bg-primary text-white hover:bg-primary/90"
+                      }`}
+                    >
+                      {source.linkedCellKey ? "重新绑定" : "绑定剧本"}
+                    </button>
+                    {!hasExcelReady && (
+                      <div className="text-[10px] text-textMuted">
+                        请先上传 Excel 文件
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
           </div>

@@ -10,6 +10,7 @@ import { AssetGrid } from "./components/AssetGrid";
 import { UploadPanel } from "./components/UploadPanel";
 import { UploadedSourcePanel } from "./components/UploadedSourcePanel";
 import { VideoPreviewCards } from "./components/VideoPreviewCards";
+import { ScriptBindingDrawer } from "./components/ScriptBindingDrawer";
 import type { ModelCapabilities } from "@/lib/aistudio/types";
 import type { BatchVideoPreviewCard, BatchVideoPreviewCardsResponse } from "./types";
 import AIPolishWizard from "./components/AIPolishWizard";
@@ -35,6 +36,7 @@ export default function BatchVideoPage() {
   const [editingCellId, setEditingCellId] = useState<string | null>(null);
   const [filteredSourceId, setFilteredSourceId] = useState<string | null>(null);
   const [showPolishWizard, setShowPolishWizard] = useState(false);
+  const [bindingSourceId, setBindingSourceId] = useState<string | null>(null);
 
   // Video generation config state
   const [selectedVideoModelId, setSelectedVideoModelId] = useState<string>("");
@@ -336,9 +338,10 @@ export default function BatchVideoPage() {
       return;
     }
     if (!source.linkedCellKey) {
+      // 如果已上传 Excel，直接打开抽屉绑定；否则跳转到剧本数据页
       setPendingSplitSourceId(source.id);
-      setActiveTab("script-prep");
-      toast.info("请先在 Excel 预览中点击一个单元格，再执行拆分");
+      setBindingSourceId(source.id);
+      toast.info("请先绑定一个剧本单元格");
       return;
     }
 
@@ -567,7 +570,7 @@ export default function BatchVideoPage() {
   };
 
   const tabs: Array<{ key: TabKey; label: string }> = [
-    { key: "script-prep", label: "剧本准备" },
+    { key: "script-prep", label: "剧本数据" },
     { key: "storyboard-prep", label: "分镜准备" },
     { key: "video-gen", label: "视频生成" },
     { key: "video-preview", label: "视频预览" },
@@ -818,6 +821,8 @@ export default function BatchVideoPage() {
                       const source = uploadedSources.find((item) => item.id === id);
                       if (source) await splitSourceToCards(source);
                     }}
+                    onBindScript={(id) => setBindingSourceId(id)}
+                    hasExcelReady={excelMappings.length > 0}
                   />
                 </div>
               </>
@@ -827,8 +832,8 @@ export default function BatchVideoPage() {
               <div className="flex-1 p-6 overflow-y-auto">
                 <div className="max-w-5xl mx-auto space-y-6">
                   <div>
-                    <h2 className="text-xl font-semibold text-textMain">剧本准备</h2>
-                    <p className="text-sm text-textMuted mt-1">先上传 Excel 并指定目标列，后续每张图片切图前需要在这里交互式选择对应单元格。</p>
+                    <h2 className="text-xl font-semibold text-textMain">剧本数据</h2>
+                    <p className="text-sm text-textMuted mt-1">上传 Excel 并管理剧本内容。绑定操作已移至「分镜准备」页，可直接在图片卡片上进行。</p>
                   </div>
 
                   <div className="rounded-xl border border-border p-6 bg-background space-y-4">
@@ -1100,6 +1105,32 @@ export default function BatchVideoPage() {
         onClose={() => setShowPolishWizard(false)}
         onComplete={handlePolishComplete}
         onCancel={() => setShowPolishWizard(false)}
+      />
+
+      <ScriptBindingDrawer
+        open={bindingSourceId !== null}
+        source={uploadedSources.find((s) => s.id === bindingSourceId) ?? null}
+        selectedExcelColumn={selectedExcelColumn}
+        excelMappings={excelMappings}
+        editingCellId={editingCellId}
+        onClose={() => {
+          setBindingSourceId(null);
+          setPendingSplitSourceId(null);
+        }}
+        onToggleEdit={(cellId) => setEditingCellId((prev) => (prev === cellId ? null : cellId))}
+        onEditCell={handleEditExcelCell}
+        onSelectCell={async (cell) => {
+          await handleSelectExcelCell(cell);
+          setBindingSourceId(null);
+          // 如果是从拆分流程触发的绑定，自动执行拆分
+          if (pendingSplitSourceId) {
+            const source = uploadedSources.find((s) => s.id === pendingSplitSourceId);
+            if (source) {
+              setPendingSplitSourceId(null);
+              await splitSourceToCards(source);
+            }
+          }
+        }}
       />
     </div>
   );

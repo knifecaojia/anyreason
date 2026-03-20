@@ -327,7 +327,7 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
               />
 
               <SidebarItem
-                to="/studio/canvas"
+                to="/studio"
                 icon={Film}
                 label="创作工坊"
                 collapsed={collapsed}
