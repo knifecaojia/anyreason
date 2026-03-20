@@ -7,8 +7,11 @@ import { useTasks } from "@/components/tasks/TaskProvider";
 import type { Task } from "@/lib/tasks/types";
 
 function statusLabel(status: Task["status"]) {
+  if (status === "queued_for_slot") return "等待并发槽位";
+  if (status === "submitting") return "提交中";
   if (status === "queued") return "排队中";
   if (status === "running") return "执行中";
+  if (status === "waiting_external") return "云端处理中";
   if (status === "succeeded") return "已完成";
   if (status === "failed") return "失败";
   if (status === "canceled") return "已取消";
@@ -16,10 +19,14 @@ function statusLabel(status: Task["status"]) {
 }
 
 function statusColor(status: Task["status"]) {
+  if (status === "queued_for_slot") return "text-amber-400";
+  if (status === "submitting") return "text-blue-400";
   if (status === "running") return "text-blue-400";
   if (status === "queued") return "text-yellow-400";
+  if (status === "waiting_external") return "text-purple-400";
   if (status === "succeeded") return "text-green-400";
   if (status === "failed") return "text-red-400";
+  if (status === "canceled") return "text-textMuted";
   return "text-textMuted";
 }
 

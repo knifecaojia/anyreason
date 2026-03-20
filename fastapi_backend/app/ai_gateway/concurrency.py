@@ -5,6 +5,7 @@ import time
 import uuid
 from typing import Any
 from uuid import UUID
+from app.tasks.queue import enqueue_task
 from app.tasks.redis_client import get_redis
 
 logger = logging.getLogger(__name__)
@@ -90,6 +91,11 @@ class AIKeyConcurrencyManager:
         """
         Add an owner to the FIFO queue.
         Returns the queue position (1-based).
+        
+        NOTE: queue_position is NOT stored in owner metadata. Position is always
+        computed dynamically from queue list order (Redis LIST index). Storing it
+        leads to stale positions when earlier entries are removed. Callers should
+        use _get_queue_position() to get live position when needed.
         """
         redis = get_redis()
         queue_key = self._get_queue_key(config_id)
@@ -98,12 +104,15 @@ class AIKeyConcurrencyManager:
         
         owner_key = self._get_owner_key(config_id, owner_token)
         metadata = metadata or {}
+        existing: dict[str, str] = await redis.hgetall(owner_key)  # type: ignore[misc]
         metadata["enqueued_at"] = str(time.time())
         
         await redis.hset(owner_key, mapping={  # type: ignore[misc]
             "owner_token": owner_token,
             "enqueued_at": metadata.get("enqueued_at", str(time.time())),
-            "task_id": metadata.get("task_id", ""),
+            "task_id": metadata.get("task_id") or existing.get("task_id", ""),
+            # NOTE: queue_position intentionally NOT stored here. Always compute
+            # from queue list order via _get_queue_position() when needed.
         })
         await redis.expire(owner_key, self.OWNER_METADATA_TTL)
         
@@ -113,18 +122,37 @@ class AIKeyConcurrencyManager:
     async def dequeue_owner(self, config_id: UUID) -> str | None:
         """
         Remove and return the next owner from the queue (FIFO).
-        Returns owner token or None if queue is empty.
+        
+        NOTE: Owner metadata is NOT deleted here. Metadata is preserved so:
+        1. The re-entrant check in acquire_key() can detect already-queued owners
+           (those with enqueued_at but no acquired_at) and avoid re-enqueueing them.
+        2. The slot grant is set via try_acquire_for_queued_owner BEFORE this is called.
+        
+        Cleanup happens via:
+        - remove_from_queue(): when task is canceled while queued
+        - release_key_with_owner(): when task completes or fails holding a slot
         """
         redis = get_redis()
         queue_key = self._get_queue_key(config_id)
         
-        owner_token: str | None = await redis.lpop(queue_key)  # type: ignore[misc]
-        
-        if owner_token:
+        while True:
+            owner_token: str | None = await redis.lpop(queue_key)  # type: ignore[misc]
+            if owner_token is None:
+                return None
+
             owner_key = self._get_owner_key(config_id, owner_token)
-            await redis.delete(owner_key)
-        
-        return owner_token
+            metadata: dict[str, str] = await redis.hgetall(owner_key)  # type: ignore[misc]
+
+            # Orphan queue token: queue entry exists but owner metadata was already lost.
+            # Skip it so it cannot block advancement of real queued owners behind it.
+            if not metadata:
+                logger.warning("Skipping orphan queue owner without metadata config=%s owner=%s", config_id, owner_token)
+                continue
+
+            # NOTE: Do NOT delete owner metadata here. It is preserved for:
+            # - Re-entrant detection (enqueued_at present, acquired_at absent = waiting in queue)
+            # - Cleanup via remove_from_queue() or release_key_with_owner()
+            return owner_token
 
     async def remove_from_queue(self, config_id: UUID, owner_token: str) -> bool:
         """
@@ -522,6 +550,31 @@ class AIKeyConcurrencyManager:
                     }
         
         token = owner_token or self._generate_owner_token()
+        
+        # Re-entrant check: if owner_token was already granted a slot (has acquired_at),
+        # return the slot info directly instead of re-enqueueing.
+        if owner_token:
+            owner_key = self._get_owner_key(config_id, owner_token)
+            existing_metadata: dict[str, str] = await redis.hgetall(owner_key)  # type: ignore[misc]
+            if existing_metadata and existing_metadata.get("acquired_at"):
+                # Owner already has a slot grant — return it without re-enqueueing
+                return {
+                    "api_key": existing_metadata.get("api_key", ""),
+                    "limit": int(existing_metadata.get("limit", 5)),
+                    "id": existing_metadata.get("key_id", ""),
+                    "owner_token": owner_token,
+                    "key_id": existing_metadata.get("key_id", ""),
+                }
+            if existing_metadata and existing_metadata.get("enqueued_at"):
+                # Owner is already in the queue (enqueued but not yet acquired slot).
+                # Return queue info without re-enqueueing.
+                queue_pos = await self._get_queue_position(config_id, owner_token)
+                return {
+                    "queue_position": queue_pos,
+                    "owner_token": owner_token,
+                    "queued": True,
+                }
+        
         queue_position = await self.enqueue_owner(config_id, token, {"task_id": task_id})
         
         logger.info(f"No slots available for config={config_id}, queued with position={queue_position}")
@@ -610,12 +663,18 @@ class AIKeyConcurrencyManager:
                 await redis.expire(redis_key, self.OWNER_METADATA_TTL)
                 
                 owner_key = self._get_owner_key(config_id, owner_token)
-                await redis.hset(owner_key, mapping={  # type: ignore[misc]
+                # Preserve existing metadata (enqueued_at, task_id) and add slot grant info.
+                # queue_position is NOT stored in metadata (always computed from queue order).
+                existing: dict[str, str] = await redis.hgetall(owner_key)  # type: ignore[misc]
+                merged: dict[str, str] = {
                     "owner_token": owner_token,
                     "api_key": cand["api_key"],
                     "key_id": cand["id"],
                     "acquired_at": str(time.time()),
-                })
+                    "enqueued_at": existing.get("enqueued_at", ""),
+                    "task_id": existing.get("task_id", ""),
+                }
+                await redis.hset(owner_key, mapping=merged)  # type: ignore[misc]
                 await redis.expire(owner_key, self.OWNER_METADATA_TTL)
                 
                 return {
@@ -768,9 +827,29 @@ class AIKeyConcurrencyManager:
                     config_uuid, keys_info, default_key, next_owner
                 )
                 if acquired:
+                    next_owner_key = self._get_owner_key(config_uuid, next_owner)
+                    next_meta: dict[str, str] = await redis.hgetall(next_owner_key)  # type: ignore[misc]
+                    next_task_id = next_meta.get("task_id")
+                    if next_task_id:
+                        try:
+                            await enqueue_task(task_id=UUID(next_task_id))
+                        except Exception as e:
+                            logger.error(
+                                "Failed to re-enqueue advanced queued task task_id=%s owner=%s config=%s error=%s",
+                                next_task_id,
+                                next_owner,
+                                config_id,
+                                e,
+                            )
                     logger.info(f"Advanced queued owner {next_owner} to slot for config={config_id}")
                 else:
-                    await self.enqueue_owner(config_uuid, next_owner)
+                    next_owner_key = self._get_owner_key(config_uuid, next_owner)
+                    next_meta: dict[str, str] = await redis.hgetall(next_owner_key)  # type: ignore[misc]
+                    await self.enqueue_owner(
+                        config_uuid,
+                        next_owner,
+                        {"task_id": next_meta.get("task_id", "")},
+                    )
                     logger.warning(f"Could not advance owner {next_owner}, returned to queue")
         
         return True

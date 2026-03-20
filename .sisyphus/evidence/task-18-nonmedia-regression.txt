@@ -1,0 +1,37 @@
+# Task 18: Non-Media Regression Test Evidence
+
+## Test Run
+```
+pytest fastapi_backend/tests/ai_gateway/test_non_media_regression.py -v
+```
+
+## Results
+```
+============================= test session starts =============================
+collected 17 items
+
+tests/ai_gateway/test_non_media_regression.py .................          [100%]
+
+============================= 17 passed in 0.72s ==============================
+```
+
+## Test Coverage Summary
+
+### Non-Media Paths Verified (Fail-Fast):
+1. chat_text - NOT using allow_queue=True ✓
+2. chat_text_stream - NOT using allow_queue=True ✓
+3. generate_media - NOT using allow_queue=True ✓
+
+### Queueable Media Path Verified (Queue on Exhaustion):
+1. submit_media_async - USING allow_queue=True ✓
+
+### Key Assertions Passed:
+- allow_queue defaults to False in _resolve_model_config
+- Non-media paths do NOT pass allow_queue=True
+- Non-media paths do NOT skip slot acquisition
+- Queue code is NOT invoked for text/chat flows
+- Queue metadata is NOT exposed in non-media responses
+
+## Conclusion
+Non-media fail-fast semantics are PROTECTED by regression tests.
+Queue-only code paths are correctly separated from non-media flows.

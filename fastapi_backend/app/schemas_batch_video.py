@@ -140,6 +140,9 @@ class BatchVideoPreviewTaskRead(BaseModel):
     error_message: Optional[str] = None
     external_task_id: Optional[str] = None
     prompt: Optional[str] = None
+    # Queue metadata - only populated when status is "queued_for_slot"
+    queue_position: Optional[int] = None
+    queued_at: Optional[datetime] = None
 
 
 class BatchVideoPreviewSuccessRead(BaseModel):

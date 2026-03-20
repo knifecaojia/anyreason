@@ -12,7 +12,7 @@ jest.mock("next/headers", () => ({
   }),
 }));
 
-import { GET } from "@/app/api/batch-video/[...path]/route";
+import { GET, POST } from "@/app/api/batch-video/[...path]/route";
 
 describe("batch-video api route preview-cards normalization", () => {
   const realFetch = global.fetch;
@@ -61,5 +61,35 @@ describe("batch-video api route preview-cards normalization", () => {
     const payload = jsonMock.mock.calls[0][0] as any;
     expect(payload.data.cards[0].card_thumbnail_url).toBe("/api/vfs/nodes/node-1/thumbnail");
     expect(payload.data.cards[0].card_source_url).toBe("/api/vfs/nodes/node-1/download");
+  });
+
+  it("keeps assets/generate success payload as an array of created tasks", async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      status: 200,
+      text: async () =>
+        JSON.stringify({
+          code: 200,
+          msg: "OK",
+          data: [
+            { asset_id: "asset-1", task_id: "task-1" },
+            { asset_id: "asset-2", task_id: "task-2" },
+          ],
+        }),
+    });
+
+    const req = {
+      headers: { get: () => "application/json" },
+      json: async () => ({ asset_ids: ["asset-1", "asset-2"] }),
+    };
+
+    await POST(req as any, { params: Promise.resolve({ path: ["assets", "generate"] }) });
+
+    expect(jsonMock).toHaveBeenCalled();
+    const payload = jsonMock.mock.calls[0][0] as any;
+    expect(Array.isArray(payload.data)).toBe(true);
+    expect(payload.data).toEqual([
+      { asset_id: "asset-1", task_id: "task-1" },
+      { asset_id: "asset-2", task_id: "task-2" },
+    ]);
   });
 });

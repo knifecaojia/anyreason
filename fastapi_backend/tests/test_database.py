@@ -122,3 +122,21 @@ async def test_create_db_and_tables_fails_for_unversioned_nonempty_db(mocker):
 
     getenv.assert_any_call("PYTEST_CURRENT_TEST")
     run_upgrade.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_create_db_and_tables_raises_actionable_error_when_database_is_unreachable(mocker):
+    mocker.patch(
+        "app.database._alembic_version_table_exists",
+        mocker.AsyncMock(side_effect=ConnectionRefusedError("Connect call failed ('127.0.0.1', 5432)")),
+    )
+    mocker.patch(
+        "app.database.os.getenv",
+        side_effect=lambda key, default=None: default if key == "PYTEST_CURRENT_TEST" else os.getenv(key, default),
+    )
+
+    with pytest.raises(RuntimeError, match="PostgreSQL is unavailable") as exc_info:
+        await create_db_and_tables()
+
+    assert "127.0.0.1:5432" in str(exc_info.value)
+    assert "docker compose up -d" in str(exc_info.value)

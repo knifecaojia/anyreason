@@ -10,7 +10,14 @@ from app.models import BatchVideoAsset, BatchVideoHistory, BatchVideoJob, Task
 
 
 async def _create_job_with_assets(db_session, user_id):
-    job = BatchVideoJob(user_id=user_id, title="Preview Job", config={"duration": 3})
+    job = BatchVideoJob(
+        user_id=user_id,
+        title="Preview Job",
+        config={
+            "duration": 3,
+            "model_config_id": str(uuid.uuid4()),
+        },
+    )
     db_session.add(job)
     await db_session.commit()
     await db_session.refresh(job)
@@ -55,6 +62,22 @@ async def _create_task(db_session, user_id, asset_id, *, status_value: str, prog
 
 
 class TestBatchVideoPreviewCards:
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_generate_videos_rejects_job_without_model_config_id(self, test_client, authenticated_user, db_session):
+        job, asset1, _asset2 = await _create_job_with_assets(db_session, authenticated_user["user"].id)
+        job.config = {"duration": 3}
+        await db_session.commit()
+
+        res = await test_client.post(
+            "/api/v1/batch-video/assets/generate",
+            headers=authenticated_user["headers"],
+            json={"asset_ids": [str(asset1.id)]},
+        )
+
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        body = res.json()
+        assert "model_config_id" in body["msg"]
+
     @pytest.mark.asyncio(loop_scope="function")
     async def test_preview_cards_returns_asset_ordered_cards_with_latest_and_history(self, test_client, authenticated_user, db_session):
         job, asset1, asset2 = await _create_job_with_assets(db_session, authenticated_user["user"].id)
@@ -172,6 +195,79 @@ class TestBatchVideoPreviewCards:
         first = cards[0]
         assert len(first["history"]) == 2
         assert first["history"][0]["task_id"] == body["task_id"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_retry_batch_video_task_rejects_job_without_model_config_id(self, test_client, authenticated_user, db_session):
+        job, asset1, _asset2 = await _create_job_with_assets(db_session, authenticated_user["user"].id)
+        job.config = {"duration": 3}
+        failed_task = await _create_task(
+            db_session,
+            authenticated_user["user"].id,
+            asset1.id,
+            status_value="failed",
+            progress=100,
+            error="失败待重试",
+        )
+        db_session.add(BatchVideoHistory(asset_id=asset1.id, task_id=failed_task.id, status="failed", progress=100, error_message="失败待重试"))
+        await db_session.commit()
+
+        res = await test_client.post(
+            f"/api/v1/batch-video/tasks/{failed_task.id}/retry",
+            headers=authenticated_user["headers"],
+        )
+
+        assert res.status_code == status.HTTP_400_BAD_REQUEST
+        body = res.json()
+        assert "model_config_id" in body["msg"]
+
+    @pytest.mark.asyncio(loop_scope="function")
+    async def test_preview_cards_with_queued_for_slot_status(self, test_client, authenticated_user, db_session):
+        """Regression test: queued_for_slot tasks should not cause 500 errors
+        and should include queue_position in the response."""
+        job, asset1, _asset2 = await _create_job_with_assets(db_session, authenticated_user["user"].id)
+        
+        # Create a task in queued_for_slot status (new queue-based status)
+        queued_task = await _create_task(
+            db_session,
+            authenticated_user["user"].id,
+            asset1.id,
+            status_value="queued_for_slot",
+            progress=0,
+        )
+        
+        from datetime import datetime, timezone
+        from uuid import UUID
+        
+        # Simulate queue metadata set by the queue slot service
+        queued_task.queue_position = 3  # type: ignore
+        queued_task.queued_at = datetime.now(timezone.utc)  # type: ignore
+        
+        db_session.add(BatchVideoHistory(
+            asset_id=asset1.id,
+            task_id=queued_task.id,
+            status="pending",  # history status is mapped from task status
+            progress=0,
+            created_at=datetime.now(timezone.utc),
+        ))
+        await db_session.commit()
+
+        res = await test_client.get(
+            f"/api/v1/batch-video/jobs/{job.id}/preview-cards",
+            headers=authenticated_user["headers"],
+        )
+
+        assert res.status_code == status.HTTP_200_OK, f"Got {res.status_code}: {res.text}"
+        data = res.json()["data"]
+        cards = data["cards"]
+        assert len(cards) == 2
+        
+        first = cards[0]
+        assert first["latest_task"]["task_id"] == str(queued_task.id)
+        assert first["latest_task"]["status"] == "queued_for_slot"
+        assert first["latest_task"]["progress"] == 0
+        # Verify queue metadata fields are returned
+        assert first["latest_task"]["queue_position"] == 3
+        assert first["latest_task"]["queued_at"] is not None
 
     @pytest.mark.asyncio(loop_scope="function")
     async def test_stop_batch_video_task_cancels_internal_and_reports_external_cancel_attempt(self, test_client, authenticated_user, db_session, monkeypatch):

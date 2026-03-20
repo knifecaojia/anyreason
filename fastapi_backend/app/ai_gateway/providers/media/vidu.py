@@ -91,6 +91,43 @@ class ViduMediaProvider(MediaProvider):
             "Content-Type": "application/json",
         }
 
+    @staticmethod
+    def _extract_failure_message(task_data: dict[str, Any]) -> str:
+        candidates = [
+            task_data.get("err_msg"),
+            task_data.get("message"),
+            task_data.get("msg"),
+            task_data.get("detail"),
+            task_data.get("error"),
+            task_data.get("reason"),
+            task_data.get("err_code"),
+            task_data.get("code"),
+        ]
+        for value in candidates:
+            if isinstance(value, str) and value.strip():
+                return value.strip()
+
+        nested = task_data.get("data")
+        if isinstance(nested, dict):
+            nested_candidates = [
+                nested.get("err_msg"),
+                nested.get("message"),
+                nested.get("msg"),
+                nested.get("detail"),
+                nested.get("error"),
+                nested.get("reason"),
+                nested.get("err_code"),
+                nested.get("code"),
+            ]
+            for value in nested_candidates:
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+
+        compact = {k: task_data.get(k) for k in ("state", "code", "msg", "message", "detail", "error", "reason") if task_data.get(k) is not None}
+        if compact:
+            return str(compact)
+        return "unknown"
+
     def _build_payload(self, mode: str, request: MediaRequest) -> dict[str, Any]:
         pj = request.param_json
         base: dict[str, Any] = {
@@ -210,7 +247,7 @@ class ViduMediaProvider(MediaProvider):
                 )
 
             if state == "failed":
-                err_msg = task_data.get("err_code") or task_data.get("message") or "unknown"
+                err_msg = self._extract_failure_message(task_data)
                 raise AppError(
                     msg=f"Vidu Task Failed: {err_msg}",
                     data=task_data,
@@ -354,6 +391,6 @@ class ViduMediaProvider(MediaProvider):
                 result=MediaResponse(url=video_url, usage_id=ref.external_task_id, meta=task_data),
             )
         if state == "failed":
-            err_msg = task_data.get("err_msg") or task_data.get("message") or "unknown"
+            err_msg = self._extract_failure_message(task_data)
             return ExternalTaskStatus(state="failed", error=f"Vidu Task Failed: {err_msg}")
         return ExternalTaskStatus(state="running")

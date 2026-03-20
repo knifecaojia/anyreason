@@ -85,9 +85,20 @@ export interface BatchVideoHistory {
   completed_at?: string;
 }
 
+// Batch video task statuses matching backend TaskStatus
+export type BatchVideoTaskStatus =
+  | "queued"
+  | "queued_for_slot"
+  | "running"
+  | "submitting"
+  | "waiting_external"
+  | "succeeded"
+  | "failed"
+  | "canceled";
+
 export interface BatchVideoPreviewTask {
   task_id: string;
-  status: string;
+  status: BatchVideoTaskStatus;
   progress: number;
   created_at: string;
   updated_at?: string | null;
@@ -96,6 +107,9 @@ export interface BatchVideoPreviewTask {
   error_message?: string | null;
   external_task_id?: string | null;
   prompt?: string | null;
+  // Queue metadata - only populated when status is "queued_for_slot"
+  queue_position?: number | null;
+  queued_at?: string | null;
 }
 
 export interface BatchVideoPreviewSuccess {

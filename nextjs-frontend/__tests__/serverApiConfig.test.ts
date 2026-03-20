@@ -9,21 +9,27 @@
 
 describe("serverApiConfig", () => {
   // Helper to import module with custom env
-  async function importWithEnv(envVars: Record<string, string | undefined>, nodeEnv: string) {
+  async function importWithEnv(
+    envVars: Record<string, string | undefined>,
+    nodeEnv: "development" | "production" | "test"
+  ) {
+    const nextEnv = { ...process.env };
+
     // Clear all relevant env vars first
-    delete process.env.INTERNAL_API_BASE_URL;
-    delete process.env.API_BASE_URL;
-    delete process.env.NEXT_PUBLIC_API_BASE_URL;
-    
+    delete nextEnv.INTERNAL_API_BASE_URL;
+    delete nextEnv.API_BASE_URL;
+    delete nextEnv.NEXT_PUBLIC_API_BASE_URL;
+
     // Set new values
     Object.entries(envVars).forEach(([key, value]) => {
       if (value === undefined) {
-        delete process.env[key];
+        delete nextEnv[key];
       } else {
-        process.env[key] = value;
+        nextEnv[key] = value;
       }
     });
-    process.env.NODE_ENV = nodeEnv;
+    nextEnv.NODE_ENV = nodeEnv;
+    process.env = nextEnv;
     
     // Reset modules to get fresh import
     jest.resetModules();

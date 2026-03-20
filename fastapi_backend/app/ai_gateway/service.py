@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import time
 from collections.abc import AsyncIterator
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy import select
@@ -106,7 +106,22 @@ class AIGatewayService:
         binding_key: str | None,
         model_config_id: UUID | None,
         default_binding_key: str,
-    ) -> tuple[ResolvedModelConfig, UUID, str | None]:
+        skip_slot_acquisition: bool = False,
+        allow_queue: bool = False,
+    ) -> tuple[ResolvedModelConfig, UUID, str | None, dict[str, Any] | None]:
+        """
+        Resolve model config and optionally acquire a concurrency slot.
+        
+        Args:
+            allow_queue: If True, returns queue info instead of raising on slot exhaustion.
+                        If False (default), raises 429 on slot exhaustion for fail-fast behavior.
+        
+        Returns:
+            tuple of (ResolvedModelConfig, config_id, binding_key, slot_acquisition_result)
+            - slot_acquisition_result is None when skip_slot_acquisition=True
+            - slot_acquisition_result contains {"api_key": ..., "owner_token": ..., ...} when slot acquired
+            - slot_acquisition_result contains {"queue_position": N, "owner_token": ..., "queued": True} when queued
+        """
         cfg_row: AIModelConfig | None = None
         resolved_binding_key: str | None = None
 
@@ -122,17 +137,30 @@ class AIGatewayService:
 
         if cfg_row is None:
             raise AppError(msg="AI model config not found", code=404, status_code=404)
-        if cfg_row.category != category:
+
+        # Normalize ORM row into plain Python locals for type safety
+        # SQLAlchemy returns Column[...] from ORM objects; we extract plain values
+        cfg_id: UUID = cfg_row.id  # type: ignore[assignment]
+        cfg_category: str = cfg_row.category  # type: ignore[assignment]
+        cfg_enabled: bool = cfg_row.enabled  # type: ignore[assignment]
+        cfg_manufacturer: str | None = cfg_row.manufacturer  # type: ignore[assignment]
+        cfg_model: str | None = cfg_row.model  # type: ignore[assignment]
+        cfg_base_url: str | None = cfg_row.base_url  # type: ignore[assignment]
+        cfg_plaintext_api_key: str | None = cfg_row.plaintext_api_key  # type: ignore[assignment]
+        cfg_encrypted_api_key: bytes | None = cfg_row.encrypted_api_key  # type: ignore[assignment]
+        cfg_api_keys_info: list[dict[str, Any]] | None = cfg_row.api_keys_info  # type: ignore[assignment]
+
+        if cfg_category != category:  # type: ignore
             raise AppError(msg="AI model category mismatch", code=400, status_code=400)
-        if not cfg_row.enabled:
+        if not cfg_enabled:  # type: ignore
             raise AppError(msg="AI model config disabled", code=400, status_code=400)
-        
+
         # Check for any key (migrated plaintext, legacy encrypted, or multi-keys)
-        if not cfg_row.encrypted_api_key and not cfg_row.plaintext_api_key and not cfg_row.api_keys_info:
+        if not cfg_encrypted_api_key and not cfg_plaintext_api_key and not cfg_api_keys_info:  # type: ignore
             raise AppError(msg="AI model api_key missing", code=400, status_code=400)
 
-        manufacturer = (cfg_row.manufacturer or "").strip().lower()
-        if category == "text" and manufacturer != "openai" and not (cfg_row.base_url or "").strip():
+        manufacturer = (cfg_manufacturer or "").strip().lower()
+        if category == "text" and manufacturer != "openai" and not (cfg_base_url or "").strip():
             raise AppError(
                 msg="AI model base_url required for this manufacturer",
                 code=400,
@@ -141,31 +169,70 @@ class AIGatewayService:
             )
 
         # Get base key if available (plaintext preferred, fallback to encrypted)
-        api_key = cfg_row.plaintext_api_key
-        if not api_key and cfg_row.encrypted_api_key:
-            api_key = self._fernet().decrypt(cfg_row.encrypted_api_key).decode("utf-8")
-        
+        api_key: str | None = cfg_plaintext_api_key  # type: ignore
+        if not api_key and cfg_encrypted_api_key:  # type: ignore
+            api_key = self._fernet().decrypt(cfg_encrypted_api_key).decode("utf-8")  # type: ignore
+
+        # For two-phase media tasks, slot acquisition is handled separately
+        # by process_two_phase_task() before handler.submit() is called
+        if skip_slot_acquisition:
+            resolved_api_key = api_key or ""
+            return (
+                ResolvedModelConfig(
+                    category=category,
+                    manufacturer=cast(str, cfg_manufacturer),
+                    model=cast(str, cfg_model),
+                    base_url=cfg_base_url,  # type: ignore
+                    api_key=resolved_api_key,
+                    config_id=cfg_id,  # type: ignore
+                ),
+                cfg_id,  # type: ignore
+                resolved_binding_key,
+                None,  # No slot acquired yet - handled by caller
+            )
+
         from app.ai_gateway.concurrency import concurrency_manager
         chosen = await concurrency_manager.acquire_key(
-            config_id=cfg_row.id,
-            keys_info=cfg_row.api_keys_info,
+            config_id=cfg_id,  # type: ignore
+            keys_info=cfg_api_keys_info,  # type: ignore
             default_key=api_key
         )
-        
+
         if not chosen:
             raise AppError(msg="API 负载过高，请稍后再试", code=429, status_code=429)
+
+        # Check if we got a slot or a queue placement
+        if chosen.get("queued"):
+            if not allow_queue:
+                # Non-media paths: fail fast on slot exhaustion
+                raise AppError(msg="API 负载过高，请稍后再试", code=429, status_code=429)
+            # Media paths with allow_queue=True: return queue info for caller to handle
+            return (
+                ResolvedModelConfig(
+                    category=category,
+                    manufacturer=cast(str, cfg_manufacturer),
+                    model=cast(str, cfg_model),
+                    base_url=cfg_base_url,  # type: ignore
+                    api_key=api_key or "",  # placeholder, will be replaced when slot acquired
+                    config_id=cfg_id,  # type: ignore
+                ),
+                cfg_id,  # type: ignore
+                resolved_binding_key,
+                chosen,  # Queue placement info: {queue_position, owner_token, queued: True}
+            )
 
         return (
             ResolvedModelConfig(
                 category=category,
-                manufacturer=cfg_row.manufacturer,
-                model=cfg_row.model,
-                base_url=cfg_row.base_url,
+                manufacturer=cast(str, cfg_manufacturer),
+                model=cast(str, cfg_model),
+                base_url=cfg_base_url,  # type: ignore
                 api_key=chosen["api_key"],
-                config_id=cfg_row.id,
+                config_id=cfg_id,  # type: ignore
             ),
-            cfg_row.id,
+            cfg_id,  # type: ignore
             resolved_binding_key,
+            chosen,  # Slot info: {api_key, owner_token, ...}
         )
 
     async def chat_text(
@@ -179,7 +246,7 @@ class AIGatewayService:
         attachments: list[dict[str, Any]],
         credits_cost: int = 1,
     ) -> dict[str, Any]:
-        cfg, cfg_id, resolved_binding_key = await self._resolve_model_config(
+        cfg, cfg_id, resolved_binding_key, _ = await self._resolve_model_config(
             db=db,
             category="text",
             binding_key=binding_key,
@@ -294,7 +361,7 @@ class AIGatewayService:
         callback_url: str | None = None,
         category: str = "image",
     ) -> MediaResponse:
-        cfg, cfg_id, resolved_binding_key = await self._resolve_model_config(
+        cfg, cfg_id, resolved_binding_key, _ = await self._resolve_model_config(
             db=db,
             category=category,
             binding_key=binding_key,
@@ -439,15 +506,77 @@ class AIGatewayService:
         param_json: dict[str, Any] | None = None,
         callback_url: str | None = None,
         category: str = "video",
+        # For two-phase flow: pass the pre-acquired api_key from slot acquisition
+        acquired_api_key: str | None = None,
+        acquired_config_id: UUID | None = None,
     ) -> ExternalTaskRef:
-        """Phase 1 of two-phase async: submit to external provider and return immediately."""
-        cfg, cfg_id, resolved_binding_key = await self._resolve_model_config(
-            db=db,
-            category=category,
-            binding_key=binding_key,
-            model_config_id=model_config_id,
-            default_binding_key=category,
-        )
+        """Phase 1 of two-phase async: submit to external provider and return immediately.
+        
+        For two-phase media tasks (queueable):
+        - Slot acquisition is handled by process_two_phase_task() BEFORE calling this method
+        - Pass acquired_api_key to use the pre-acquired slot (no additional slot acquisition)
+        - The slot will be released when query_media_status() detects terminal state
+        
+        For synchronous flow:
+        - Do NOT pass acquired_api_key (defaults to None)
+        - Slot acquisition happens here (raises 429 if no capacity)
+        """
+        # For two-phase flow: use the pre-acquired api_key
+        if acquired_api_key and acquired_config_id:
+            # Skip config resolution's slot acquisition - slot was already acquired
+            # We still need to resolve the model config for manufacturer/model info
+            cfg, cfg_id, resolved_binding_key, _ = await self._resolve_model_config(
+                db=db,
+                category=category,
+                binding_key=binding_key,
+                model_config_id=model_config_id,
+                default_binding_key=category,
+                skip_slot_acquisition=True,  # Skip slot acquisition - already done
+            )
+            
+            # Use the pre-acquired api_key
+            cfg = ResolvedModelConfig(
+                category=cfg.category,
+                manufacturer=cfg.manufacturer,
+                model=cfg.model,
+                base_url=cfg.base_url,
+                api_key=acquired_api_key,
+                config_id=acquired_config_id or cfg.config_id,
+            )
+        else:
+            # Synchronous flow: resolve config and acquire slot here
+            # Use allow_queue=True so media tasks queue instead of failing with 429
+            cfg, cfg_id, resolved_binding_key, slot_result = await self._resolve_model_config(
+                db=db,
+                category=category,
+                binding_key=binding_key,
+                model_config_id=model_config_id,
+                default_binding_key=category,
+                skip_slot_acquisition=False,
+                allow_queue=True,  # Allow queue placement instead of raising 429
+            )
+            
+            # Check if we got a queue placement instead of a slot
+            if slot_result and slot_result.get("queued"):
+                # Slot exhausted - return a "queued" reference
+                # The caller should create/update task with queued_for_slot status
+                return ExternalTaskRef(
+                    external_task_id=f"QUEUED-{slot_result.get('owner_token', 'unknown')}",
+                    provider=cfg.manufacturer or category,  # Use manufacturer or category as provider
+                    meta={
+                        "queued": True,
+                        "queue_position": slot_result.get("queue_position"),
+                        "slot_owner_token": slot_result.get("owner_token"),
+                        "concurrency_config_id": str(cfg_id),  # type: ignore
+                        "concurrency_api_key": cfg.api_key,  # placeholder, will be updated when slot acquired
+                        "slot_status": "queued_for_slot",
+                    },
+                )
+            
+            # Store slot acquisition result for tracking
+            if slot_result:
+                # Will be tracked in ref.meta below
+                pass
 
         param_json = param_json or {}
 
@@ -601,7 +730,7 @@ class AIGatewayService:
         # Resolve config inside try/except so errors become SSE error events
         # instead of crashing the StreamingResponse.
         try:
-            cfg, cfg_id, resolved_binding_key = await self._resolve_model_config(
+            cfg, cfg_id, resolved_binding_key, _ = await self._resolve_model_config(
                 db=db,
                 category="text",
                 binding_key=binding_key,

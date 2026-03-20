@@ -76,6 +76,7 @@ async def create_canvas(
         name=body.name,
         description=body.description,
         user_id=user.id,
+        status="draft",
     )
     db.add(canvas)
     await db.flush()

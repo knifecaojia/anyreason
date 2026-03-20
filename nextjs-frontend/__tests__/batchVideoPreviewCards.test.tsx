@@ -106,6 +106,17 @@ const previewCardsPayload = {
             error_message: "前一次失败",
             external_task_id: "vidu-0",
           },
+          {
+            task_id: "task-success-old",
+            status: "succeeded",
+            progress: 100,
+            created_at: "2026-03-14T00:00:00Z",
+            updated_at: "2026-03-14T00:00:10Z",
+            completed_at: "2026-03-14T00:00:10Z",
+            result_url: "https://cdn.example.com/a1-old.mp4",
+            error_message: null,
+            external_task_id: "vidu-old",
+          },
         ],
       },
       {
@@ -189,6 +200,9 @@ describe("BatchVideoPage video preview cards", () => {
 
     fireEvent.click(screen.getAllByRole("button", { name: /展开任务历史/i })[0]!);
     expect(screen.getByText("task-failed")).toBeInTheDocument();
+    expect(screen.getByText("task-success-old")).toBeInTheDocument();
+    expect(screen.getByText("该任务生成的视频")).toBeInTheDocument();
+    expect(document.querySelector('video[src="https://cdn.example.com/a1-old.mp4"]')).not.toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /停止/i }));
     await waitFor(() => {
@@ -297,5 +311,177 @@ describe("BatchVideoPage video preview cards", () => {
     });
 
     expect(previewCallCount).toBe(callsAfterSuccess);
+  });
+
+  it("displays queue position for queued_for_slot status", async () => {
+    const queuedPayload = {
+      ...previewCardsPayload,
+      data: {
+        ...previewCardsPayload.data,
+        cards: [
+          {
+            asset_id: "asset-queued",
+            index: 2,
+            card_thumbnail_url: "/img/thumb-queued.jpg",
+            card_source_url: "/img/source-queued.jpg",
+            prompt: "排队中的任务",
+            latest_task: {
+              task_id: "task-queued",
+              status: "queued_for_slot",
+              progress: 0,
+              created_at: "2026-03-16T02:00:00Z",
+              updated_at: "2026-03-16T02:00:00Z",
+              completed_at: null,
+              result_url: null,
+              error_message: null,
+              external_task_id: null,
+              queue_position: 3,
+            },
+            latest_success: null,
+            history: [],
+          },
+        ],
+      },
+    };
+
+    mockFetch.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/batch-video/jobs") return mockJson(jobsPayload);
+      if (url === "/api/batch-video/jobs/job-1/assets") return mockJson(assetsPayload);
+      if (url === "/api/batch-video/jobs/job-1/pending-images") return mockJson(pendingImagesPayload);
+      if (url === "/api/batch-video/jobs/job-1/preview-cards") return mockJson(queuedPayload);
+      return mockJson({ code: 200, data: [] });
+    });
+
+    await act(async () => {
+      render(<BatchVideoPage />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "视频预览" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("等待并发槽位")).toBeInTheDocument();
+    });
+    expect(screen.getByText("排队第3位")).toBeInTheDocument();
+  });
+
+  it("shows submitting status with appropriate messaging", async () => {
+    const submittingPayload = {
+      ...previewCardsPayload,
+      data: {
+        ...previewCardsPayload.data,
+        cards: [
+          {
+            asset_id: "asset-submitting",
+            index: 3,
+            card_thumbnail_url: "/img/thumb-submit.jpg",
+            card_source_url: "/img/source-submit.jpg",
+            prompt: "提交中的任务",
+            latest_task: {
+              task_id: "task-submitting",
+              status: "submitting",
+              progress: 0,
+              created_at: "2026-03-16T02:30:00Z",
+              updated_at: "2026-03-16T02:30:00Z",
+              completed_at: null,
+              result_url: null,
+              error_message: null,
+              external_task_id: null,
+            },
+            latest_success: null,
+            history: [],
+          },
+        ],
+      },
+    };
+
+    mockFetch.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/batch-video/jobs") return mockJson(jobsPayload);
+      if (url === "/api/batch-video/jobs/job-1/assets") return mockJson(assetsPayload);
+      if (url === "/api/batch-video/jobs/job-1/pending-images") return mockJson(pendingImagesPayload);
+      if (url === "/api/batch-video/jobs/job-1/preview-cards") return mockJson(submittingPayload);
+      return mockJson({ code: 200, data: [] });
+    });
+
+    await act(async () => {
+      render(<BatchVideoPage />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "视频预览" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("提交中")).toBeInTheDocument();
+    });
+  });
+
+  it("can cancel queued_for_slot tasks", async () => {
+    mockFetch.mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === "/api/batch-video/jobs") return mockJson(jobsPayload);
+      if (url === "/api/batch-video/jobs/job-1/assets") return mockJson(assetsPayload);
+      if (url === "/api/batch-video/jobs/job-1/pending-images") return mockJson(pendingImagesPayload);
+      if (url.includes("/preview-cards")) {
+        return mockJson({
+          code: 200,
+          data: {
+            job: jobsPayload.data.items[0],
+            cards: [
+              {
+                asset_id: "asset-queueable",
+                index: 4,
+                card_thumbnail_url: "/img/thumb-queue.jpg",
+                card_source_url: "/img/source-queue.jpg",
+                prompt: "可取消的排队任务",
+                latest_task: {
+                  task_id: "task-queueable",
+                  status: "queued_for_slot",
+                  progress: 0,
+                  created_at: "2026-03-16T03:00:00Z",
+                  updated_at: "2026-03-16T03:00:00Z",
+                  completed_at: null,
+                  result_url: null,
+                  error_message: null,
+                  external_task_id: null,
+                  queue_position: 1,
+                },
+                latest_success: null,
+                history: [],
+              },
+            ],
+          },
+        });
+      }
+      if (url.includes("/stop")) return mockJson({ code: 200, data: { task_id: "task-queueable", asset_id: "asset-queueable", status: "canceled", external_cancel: { attempted: false, supported: false, message: "" } } });
+      return mockJson({ code: 200, data: [] });
+    });
+
+    await act(async () => {
+      render(<BatchVideoPage />);
+    });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "视频预览" }));
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText("等待并发槽位")).toBeInTheDocument();
+    });
+
+    const stopButton = screen.getByRole("button", { name: "停止" });
+    expect(stopButton).toBeInTheDocument();
+
+    fireEvent.click(stopButton);
+
+    await waitFor(() => {
+      expect(mockFetch).toHaveBeenCalledWith(
+        "/api/batch-video/tasks/task-queueable/stop",
+        expect.objectContaining({ method: "POST" })
+      );
+    });
   });
 });

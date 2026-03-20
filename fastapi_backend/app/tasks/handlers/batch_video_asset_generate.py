@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import base64
+import logging
 import re
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -67,11 +70,12 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
         if not folder:
             from app.services.storage.vfs_service import get_or_create_user_ai_folder
             user_ai_folder = await get_or_create_user_ai_folder(db=db, user_id=user_id)
+            _folder_parent_id: UUID | None = cast(UUID | None, user_ai_folder.id)
             folder = await vfs_service.create_folder(
                 db=db,
                 user_id=user_id,
                 name=f"batch-video-{job_id}",
-                parent_id=user_ai_folder.id,
+                parent_id=_folder_parent_id,
                 workspace_id=None,
                 project_id=None,
             )
@@ -161,7 +165,7 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
                 node, file_bytes = await vfs_service.read_file_bytes(
                     db=db, user_id=user_id, node_id=node_id
                 )
-                content_type = node.content_type or "image/jpeg"
+                content_type: str = str(node.content_type) if node.content_type is not None else "image/jpeg"
                 return file_bytes, content_type
             except Exception as e:
                 raise ValueError(f"Failed to read VFS file: {e}")
@@ -181,7 +185,8 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
 
     async def submit(self, *, db: AsyncSession, task: Task, reporter: TaskReporter) -> ExternalSubmitResult:
         """Phase 1: validate inputs, submit to external provider, return ref."""
-        payload = task.input_json or {}
+        _task_user_id: UUID = cast(UUID, task.user_id)
+        payload: dict[str, Any] = cast(dict[str, Any], task.input_json) if task.input_json is not None else {}
         job_id = payload.get("job_id")
         asset_id = payload.get("asset_id")
         source_url = payload.get("source_url")
@@ -198,7 +203,7 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
         
         # Download image and convert to base64 data URI for external APIs
         try:
-            image_bytes, content_type = await self._resolve_image_bytes(db, task.user_id, source_url)
+            image_bytes, content_type = await self._resolve_image_bytes(db, _task_user_id, source_url)
             base64_data = base64.b64encode(image_bytes).decode("utf-8")
             data_url = f"data:{content_type or 'image/jpeg'};base64,{base64_data}"
         except Exception as e:
@@ -216,17 +221,26 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
         # Get model_config_id from config (UUID format)
         model_config_id = config.get("model_config_id")
         if model_config_id:
-            from uuid import UUID
             model_config_id = UUID(str(model_config_id))
+        
+        # Extract pre-acquired api_key from external_meta (set by process_two_phase_task)
+        acquired_api_key = None
+        acquired_config_id = None
+        external_meta = task.external_meta or {}
+        if external_meta.get("_slot_api_key"):
+            acquired_api_key = external_meta.get("_slot_api_key")
+            acquired_config_id = model_config_id  # Use the resolved config_id
         
         ref = await ai_gateway_service.submit_media_async(
             db=db,
-            user_id=task.user_id,
+            user_id=_task_user_id,
             binding_key=None,
             model_config_id=model_config_id,
             prompt=prompt,
             param_json=param_json,
             category="video",
+            acquired_api_key=acquired_api_key,
+            acquired_config_id=acquired_config_id,
         )
         
         return ExternalSubmitResult(
@@ -247,22 +261,23 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
         if not url:
             raise RuntimeError("video_url_missing")
         
-        payload = task.input_json or {}
+        payload: dict[str, Any] = cast(dict[str, Any], task.input_json) if task.input_json is not None else {}
         job_id = payload.get("job_id")
         asset_id = payload.get("asset_id")
+        _task_user_id: UUID = cast(UUID, task.user_id)
         
         await reporter.progress(progress=70)
         
         result = await self._save_video(
-            db=db, user_id=task.user_id, job_id=job_id, asset_id=asset_id, url=url
+            db=db, user_id=_task_user_id, job_id=cast(UUID, job_id), asset_id=cast(UUID, asset_id), url=url
         )
         
         if asset_id:
             asset_uuid = UUID(str(asset_id))
             asset = await db.get(BatchVideoAsset, asset_uuid)
             if asset:
-                asset.status = "completed"
-                asset.result_url = url
+                asset.status = "completed"  # type: ignore
+                asset.result_url = url  # type: ignore
                 
                 history_result = await db.execute(
                     select(BatchVideoHistory).where(
@@ -271,9 +286,9 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
                 )
                 history = history_result.scalars().first()
                 if history:
-                    history.status = "completed"
-                    history.result_url = url
-                    history.completed_at = datetime.now(timezone.utc)
+                    history.status = "completed"  # type: ignore
+                    history.result_url = url  # type: ignore
+                    history.completed_at = datetime.now(timezone.utc)  # type: ignore
                 
                 job_result = await db.execute(
                     select(BatchVideoAsset).where(
@@ -286,9 +301,10 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
                 from app.models import BatchVideoJob
                 job = await db.get(BatchVideoJob, asset.job_id)
                 if job:
-                    job.completed_assets = completed_count
-                    if job.completed_assets >= job.total_assets:
-                        job.status = "completed"
+                    job.completed_assets = completed_count  # type: ignore
+                    _total: int | None = cast(int | None, job.total_assets)
+                    if _total is not None and completed_count >= _total:
+                        job.status = "completed"  # type: ignore
                 
                 await db.commit()
         
@@ -297,7 +313,8 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
 
     async def run(self, *, db: AsyncSession, task: Task, reporter: TaskReporter) -> dict[str, Any]:
         """Legacy blocking path (fallback when provider doesn't support async)."""
-        payload = task.input_json or {}
+        _task_user_id: UUID = cast(UUID, task.user_id)
+        payload: dict[str, Any] = cast(dict[str, Any], task.input_json) if task.input_json is not None else {}
         job_id = payload.get("job_id")
         asset_id = payload.get("asset_id")
         source_url = payload.get("source_url")
@@ -314,7 +331,7 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
 
         # Download image and convert to base64 data URI for external APIs
         try:
-            image_bytes, content_type = await self._resolve_image_bytes(db, task.user_id, source_url)
+            image_bytes, content_type = await self._resolve_image_bytes(db, _task_user_id, source_url)
             base64_data = base64.b64encode(image_bytes).decode("utf-8")
             data_url = f"data:{content_type or 'image/jpeg'};base64,{base64_data}"
         except Exception as e:
@@ -336,7 +353,7 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
         
         media_resp = await ai_gateway_service.generate_media(
             db=db,
-            user_id=task.user_id,
+            user_id=_task_user_id,
             binding_key=None,
             model_config_id=model_config_id,
             prompt=prompt,
@@ -350,16 +367,18 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
         
         await reporter.progress(progress=60)
         
+        _resolved_job_id: UUID | None = cast(UUID | None, job_id) if job_id else None
+        _resolved_asset_id: UUID | None = cast(UUID | None, asset_id) if asset_id else None
         result = await self._save_video(
-            db=db, user_id=task.user_id, job_id=job_id, asset_id=asset_id, url=url
+            db=db, user_id=_task_user_id, job_id=cast(UUID, job_id), asset_id=cast(UUID, asset_id), url=url
         )
         
         if asset_id:
             asset_uuid = UUID(str(asset_id))
             asset = await db.get(BatchVideoAsset, asset_uuid)
             if asset:
-                asset.status = "completed"
-                asset.result_url = url
+                asset.status = "completed"  # type: ignore
+                asset.result_url = url  # type: ignore
                 await db.commit()
 
         await reporter.progress(progress=90)
@@ -367,7 +386,7 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
 
     async def on_fail(self, *, db: AsyncSession, task: Task, error: str) -> None:
         """Reset asset status when task fails. Asset can be retried with new tasks."""
-        payload = task.input_json or {}
+        payload: dict[str, Any] = cast(dict[str, Any], task.input_json) if task.input_json is not None else {}
         asset_id = payload.get("asset_id")
 
         if asset_id:
@@ -380,8 +399,9 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
                 if asset:
                     # Only reset status if it was set to generating (legacy)
                     # New logic: asset status stays independent
-                    if asset.status == "generating":
-                        asset.status = "pending"
+                    asset_status: str = cast(str, asset.status)
+                    if asset_status == "generating":
+                        asset.status = "pending"  # type: ignore
                         await db.commit()
 
                 # Update history record if exists
@@ -390,8 +410,8 @@ class BatchVideoAssetGenerateHandler(BaseTaskHandler):
                 )
                 history = history_result.scalars().first()
                 if history:
-                    history.status = "failed"
-                    history.error_message = error[:500]
+                    history.status = "failed"  # type: ignore
+                    history.error_message = error[:500]  # type: ignore
                     await db.commit()
 
             except Exception as e:

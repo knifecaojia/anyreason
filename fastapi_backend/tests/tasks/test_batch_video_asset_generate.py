@@ -33,8 +33,8 @@ async def test_batch_video_submit_preserves_provider_meta(db_session, monkeypatc
         _ = (db, user_id_arg, source_url)
         return b"image-bytes", "image/png"
 
-    async def _fake_submit_media_async(*, db, user_id, binding_key, model_config_id, prompt, param_json, category):
-        _ = (db, user_id, binding_key, model_config_id, prompt, param_json, category)
+    async def _fake_submit_media_async(*, db, user_id, binding_key, model_config_id, prompt, param_json, category, acquired_api_key=None, acquired_config_id=None):
+        _ = (db, user_id, binding_key, model_config_id, prompt, param_json, category, acquired_api_key, acquired_config_id)
         return SimpleNamespace(
             external_task_id="ext-123",
             provider="vidu",
@@ -53,6 +53,7 @@ async def test_batch_video_submit_preserves_provider_meta(db_session, monkeypatc
 
     task = SimpleNamespace(
         user_id=user_id,
+        external_meta={},
         input_json={
             "job_id": str(job_id),
             "asset_id": str(asset_id),

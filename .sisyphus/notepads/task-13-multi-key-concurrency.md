@@ -84,4 +84,4 @@ pytest fastapi_backend/tests/ai_gateway/test_video_slot_scheduler.py -k "multi_k
 - [x] Implementation complete
 - [x] Tests added
 - [x] All tests pass
-- [ ] Committed
+- [x] Committed: `2e497b5`

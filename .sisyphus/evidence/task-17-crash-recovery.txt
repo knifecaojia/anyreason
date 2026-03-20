@@ -1,0 +1,67 @@
+Task 17: Crash Recovery and Zombie-Slot Reclamation Tests
+============================================================
+Date: 2026-03-19
+
+SUMMARY
+-------
+Created comprehensive crash recovery tests proving that:
+- Abandoned active owners are recovered without permanent slot saturation
+- Queued owners advance correctly after stale-owner recovery
+- Zombie slots (orphaned counters without metadata) are reclaimed
+- Poller crash/interruption does not leak slots forever
+
+TEST RESULTS
+------------
+19 tests PASSED (0 failures)
+
+Test Coverage:
+- TestAbandonedActiveOwnerRecovery: 3 tests
+  * test_worker_crash_does_not_permanently_block_queue: PASSED
+  * test_stale_owner_recovery_never_doubles_decrement: PASSED
+  * test_stale_healthy_owner_not_recovered: PASSED
+
+- TestQueuedOwnerAdvancesAfterRecovery: 2 tests
+  * test_queue_advances_after_stale_recovery: PASSED
+  * test_fifo_order_preserved_after_multiple_recoveries: PASSED
+
+- TestZombieSlotReclamation: 5 tests
+  * test_zombie_cleanup_finds_orphaned_counter: PASSED
+  * test_zombie_cleanup_skips_healthy_owners: PASSED
+  * test_zombie_cleanup_is_idempotent: PASSED
+  * test_zombie_cleanup_advances_queue: PASSED
+  * test_recovery_then_new_owners_interleave_correctly: PASSED
+
+- TestPollerCrashInterruptionRecovery: 4 tests
+  * test_poller_crash_does_not_leak_slot: PASSED
+  * test_external_poller_zombie_sweep_releases_expired_task: PASSED
+  * test_poller_interrupted_while_waiting_recovers_on_restart: PASSED
+  * test_queued_task_not_affected_by_poller_crash: PASSED
+
+- TestFullCrashRecoveryIntegration: 2 tests
+  * test_worker_restart_recovery_flow: PASSED
+  * test_poller_crash_recovery_does_not_block_queue: PASSED
+
+- TestRecoveryEdgeCases: 3 tests
+  * test_recovery_with_no_queue_no_slots: PASSED
+  * test_recovery_with_empty_keys_info: PASSED
+  * test_cleanup_zombie_with_empty_keys_info: PASSED
+
+FILES CHANGED
+-------------
+Created:
+- fastapi_backend/tests/tasks/test_video_slot_crash_recovery.py (1075 lines)
+
+VERIFICATION COMMANDS
+--------------------
+pytest fastapi_backend/tests/tasks/test_video_slot_crash_recovery.py -q
+pytest fastapi_backend/tests/ai_gateway/test_video_slot_scheduler.py -q
+pytest fastapi_backend/tests/tasks/test_external_poller_slot_release.py -q
+
+ACCEPTANCE CRITERIA STATUS
+--------------------------
+[✓] Simulated crashes do not leave permanent slot saturation
+[✓] Waiting tasks progress after stale-owner recovery
+[✓] Recovery never drives counter negative
+[✓] Zombie slots are detected and cleaned
+[✓] FIFO ordering preserved through recovery cycles
+[✓] Poller crash does not leak slots

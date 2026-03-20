@@ -8,8 +8,11 @@ import { TASK_TYPES } from "@/lib/tasks/constants";
 import type { Task, TaskStatus } from "@/lib/tasks/types";
 
 function statusLabel(status: Task["status"]) {
+  if (status === "queued_for_slot") return "等待并发槽位";
+  if (status === "submitting") return "提交中";
   if (status === "queued") return "排队中";
   if (status === "running") return "执行中";
+  if (status === "waiting_external") return "云端处理中";
   if (status === "succeeded") return "已完成";
   if (status === "failed") return "失败";
   if (status === "canceled") return "已取消";
@@ -17,11 +20,19 @@ function statusLabel(status: Task["status"]) {
 }
 
 function statusColor(status: Task["status"]) {
+  if (status === "queued_for_slot") return "text-amber-400";
+  if (status === "submitting") return "text-blue-400";
   if (status === "running") return "text-blue-400";
   if (status === "queued") return "text-yellow-400";
+  if (status === "waiting_external") return "text-purple-400";
   if (status === "succeeded") return "text-green-400";
   if (status === "failed") return "text-red-400";
+  if (status === "canceled") return "text-textMuted";
   return "text-textMuted";
+}
+
+function isCancelable(status: Task["status"]) {
+  return status === "queued" || status === "queued_for_slot" || status === "running";
 }
 
 function getContinueHref(t: Task) {
@@ -174,6 +185,12 @@ export function TaskList({
                   <div className="flex items-center gap-2">
                     <div className="text-sm font-semibold text-textMain truncate">{t.type}</div>
                     <div className={`text-xs font-semibold ${statusColor(t.status)}`}>{statusLabel(t.status)}</div>
+                    {/* Queue position indicator for queued_for_slot tasks */}
+                    {t.status === "queued_for_slot" && t.queue_position && (
+                      <div className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 font-medium">
+                        排队第{t.queue_position}位
+                      </div>
+                    )}
                     {t.entity_type && t.entity_id && (
                       <div className="text-[10px] text-textMuted/70 tabular-nums">
                         {t.entity_type}:{t.entity_id.slice(0, 8)}
@@ -202,7 +219,7 @@ export function TaskList({
                       </Link>
                     );
                   })()}
-                  {onCancel && (t.status === "queued" || t.status === "running") && (
+                  {onCancel && isCancelable(t.status) && (
                     <button
                       type="button"
                       className="px-3 py-1.5 rounded-lg bg-surface border border-border text-xs font-bold text-textMuted hover:text-red-300 hover:border-red-500/40 transition-colors"
@@ -250,7 +267,9 @@ export function TaskList({
                         ? "bg-green-500"
                         : t.status === "canceled"
                           ? "bg-textMuted/40"
-                          : "bg-primary"
+                          : t.status === "queued_for_slot"
+                            ? "bg-amber-500"
+                            : "bg-primary"
                   }`}
                   style={{ width: `${Math.max(0, Math.min(100, t.progress || 0))}%` }}
                 />

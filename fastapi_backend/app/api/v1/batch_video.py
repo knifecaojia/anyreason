@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 from typing import cast
 from io import BytesIO
 from datetime import datetime, timezone
@@ -39,6 +40,7 @@ from app.users import current_active_user
 
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 def _history_status_from_task_status(task_status: str) -> str:
@@ -51,6 +53,15 @@ def _history_status_from_task_status(task_status: str) -> str:
         "canceled": "failed",
     }
     return mapping.get(task_status, "pending")
+
+
+def _require_batch_video_model_config_id(job: BatchVideoJob) -> str:
+    raw_config = cast(object, job.config)
+    config = raw_config if isinstance(raw_config, dict) else {}
+    model_config_id = config.get("model_config_id")
+    if not model_config_id:
+        raise AppError(msg="batch video job requires model_config_id before generate/retry", code=400, status_code=400)
+    return str(model_config_id)
 
 
 async def _cancel_external_task_if_possible(*, task: Task, user_id: UUID) -> dict:
@@ -68,7 +79,7 @@ async def _cancel_external_task_if_possible(*, task: Task, user_id: UUID) -> dic
 
 
 def _build_preview_task(*, task: Task, history: BatchVideoHistory) -> BatchVideoPreviewTaskRead:
-    # 从 task.input_json 中提取 prompt
+    # From task.input_json 中提取 prompt
     input_json = task.input_json or {}
     prompt = input_json.get("prompt") if isinstance(input_json, dict) else None
     
@@ -83,6 +94,9 @@ def _build_preview_task(*, task: Task, history: BatchVideoHistory) -> BatchVideo
         error_message=cast(str | None, history.error_message) or cast(str | None, task.error),
         external_task_id=cast(str | None, task.external_task_id),
         prompt=cast(str | None, prompt),
+        # Queue metadata - populated for queued_for_slot tasks
+        queue_position=cast(int | None, task.queue_position),
+        queued_at=cast(datetime | None, task.queued_at),
     )
 
 
@@ -522,6 +536,14 @@ async def generate_videos(
         asset = await get_asset_with_owner(db, asset_id, user.id)
         
         job = await get_job_with_owner(db, asset.job_id, user.id)
+        model_config_id = _require_batch_video_model_config_id(job)
+        logger.info(
+            "[batch-video] generate request job=%s asset=%s resolved_model_config_id=%s job_config=%s",
+            job.id,
+            asset.id,
+            model_config_id,
+            job.config,
+        )
         
         task = await task_service.create_task(
             db=db,
@@ -538,6 +560,14 @@ async def generate_videos(
                     "config": job.config,
                 },
             ),
+        )
+        logger.info(
+            "[batch-video] created task task=%s type=%s asset=%s job=%s input_config=%s",
+            task.id,
+            task.type,
+            asset.id,
+            job.id,
+            (task.input_json or {}).get("config") if isinstance(task.input_json, dict) else None,
         )
         
         history = BatchVideoHistory(
@@ -604,6 +634,15 @@ async def retry_batch_video_task(
 
     asset = await get_asset_with_owner(db, asset_id, user.id)
     job = await get_job_with_owner(db, asset.job_id, user.id)
+    model_config_id = _require_batch_video_model_config_id(job)
+    logger.info(
+        "[batch-video] retry request prior_task=%s job=%s asset=%s resolved_model_config_id=%s job_config=%s",
+        task.id,
+        job.id,
+        asset.id,
+        model_config_id,
+        job.config,
+    )
 
     new_task = await task_service.create_task(
         db=db,
@@ -621,6 +660,14 @@ async def retry_batch_video_task(
                 "retry_from_task_id": str(task.id),
             },
         ),
+    )
+    logger.info(
+        "[batch-video] created retry task task=%s prior_task=%s asset=%s job=%s input_config=%s",
+        new_task.id,
+        task.id,
+        asset.id,
+        job.id,
+        (new_task.input_json or {}).get("config") if isinstance(new_task.input_json, dict) else None,
     )
     history = BatchVideoHistory(asset_id=asset.id, task_id=new_task.id, status="pending", progress=0)
     db.add(history)

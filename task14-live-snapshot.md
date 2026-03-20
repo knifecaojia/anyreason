@@ -1,0 +1,134 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - button [ref=e4] [cursor=pointer]:
+        - img [ref=e5]
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - img [ref=e10]
+          - heading "言之有理" [level=1] [ref=e13]
+        - navigation [ref=e14]:
+          - link "工作台" [ref=e15] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e16]
+            - generic [ref=e21]: 工作台
+          - generic [ref=e22]:
+            - paragraph [ref=e23]: Production Pipeline
+            - link "剧本管理" [ref=e24] [cursor=pointer]:
+              - /url: /scripts
+              - img [ref=e25]
+              - generic [ref=e28]: 剧本管理
+            - link "资产管理" [ref=e29] [cursor=pointer]:
+              - /url: /assets
+              - img [ref=e30]
+              - generic [ref=e32]: 资产管理
+            - link "创作工坊" [ref=e33] [cursor=pointer]:
+              - /url: /studio/canvas
+              - img [ref=e34]
+              - generic [ref=e36]: 创作工坊
+            - link "批量视频" [ref=e37] [cursor=pointer]:
+              - /url: /batch-video
+              - img [ref=e38]
+              - generic [ref=e40]: 批量视频
+            - link "AI 场景管理" [ref=e41] [cursor=pointer]:
+              - /url: /ai-scenes
+              - img [ref=e42]
+              - generic [ref=e45]: AI 场景管理
+          - generic [ref=e46]:
+            - paragraph [ref=e47]: System
+            - link "项目归档" [ref=e48] [cursor=pointer]:
+              - /url: /projects
+              - img [ref=e49]
+              - generic [ref=e54]: 项目归档
+            - link "任务清单" [ref=e55] [cursor=pointer]:
+              - /url: /tasks
+              - img [ref=e56]
+              - generic [ref=e59]: 任务清单
+            - generic [ref=e60]:
+              - button "系统设置" [ref=e61] [cursor=pointer]:
+                - generic [ref=e62]:
+                  - img [ref=e63]
+                  - generic [ref=e66]: 系统设置
+                - img [ref=e67]
+              - generic [ref=e70]:
+                - link "模型引擎" [ref=e71] [cursor=pointer]:
+                  - /url: /settings?tab=models
+                  - img [ref=e72]
+                  - generic [ref=e75]: 模型引擎
+                - link "用户管理" [ref=e76] [cursor=pointer]:
+                  - /url: /settings?tab=users
+                  - img [ref=e77]
+                  - generic [ref=e82]: 用户管理
+                - link "角色管理" [ref=e83] [cursor=pointer]:
+                  - /url: /settings?tab=roles
+                  - img [ref=e84]
+                  - generic [ref=e86]: 角色管理
+                - link "权限管理" [ref=e87] [cursor=pointer]:
+                  - /url: /settings?tab=permissions
+                  - img [ref=e88]
+                  - generic [ref=e91]: 权限管理
+                - link "系统审计" [ref=e92] [cursor=pointer]:
+                  - /url: /settings?tab=audit
+                  - img [ref=e93]
+                  - generic [ref=e98]: 系统审计
+      - generic [ref=e100]:
+        - button "A admin@example.com admin" [ref=e101] [cursor=pointer]:
+          - generic [ref=e103]: A
+          - generic [ref=e104]:
+            - paragraph [ref=e105]: admin@example.com
+            - paragraph [ref=e106]: admin
+        - button "退出登录" [ref=e107] [cursor=pointer]:
+          - img [ref=e108]
+    - main [ref=e111]:
+      - generic [ref=e112]:
+        - generic [ref=e113]:
+          - generic [ref=e114]: Workspace
+          - img [ref=e115]
+          - generic [ref=e117]: 言之有理
+        - generic [ref=e118]:
+          - generic [ref=e119]:
+            - img [ref=e120]
+            - textbox "搜索项目、资产..." [ref=e123]
+          - button "系统通知" [ref=e125] [cursor=pointer]:
+            - img [ref=e126]
+      - generic [ref=e130]:
+        - generic [ref=e131]:
+          - generic [ref=e132]:
+            - heading "批量视频" [level=1] [ref=e133]
+            - generic [ref=e134]: 当前任务内分为四个阶段处理
+          - generic [ref=e135]:
+            - button "剧本准备" [ref=e136] [cursor=pointer]
+            - button "分镜准备" [ref=e137] [cursor=pointer]
+            - button "视频生成" [ref=e138] [cursor=pointer]
+            - button "视频预览" [ref=e139] [cursor=pointer]
+        - generic [ref=e140]:
+          - generic [ref=e142]:
+            - generic [ref=e143]:
+              - heading "任务列表" [level=2] [ref=e144]
+              - button "+ 新建" [ref=e145] [cursor=pointer]
+            - generic [ref=e150] [cursor=pointer]:
+              - generic [ref=e151]:
+                - paragraph [ref=e152]: 测试
+                - generic [ref=e153]:
+                  - generic [ref=e154]: 处理中
+                  - generic [ref=e155]: 6/9
+              - button [ref=e156]:
+                - img [ref=e157]
+          - generic [ref=e161]:
+            - generic [ref=e162]:
+              - heading "剧本准备" [level=2] [ref=e163]
+              - paragraph [ref=e164]: 先上传 Excel 并指定目标列，后续每张图片切图前需要在这里交互式选择对应单元格。
+            - generic [ref=e166] [cursor=pointer]: 上传 Excel
+  - region "Notifications alt+T"
+  - generic [ref=e171] [cursor=pointer]:
+    - button "Open Next.js Dev Tools" [ref=e172]:
+      - img [ref=e173]
+    - generic [ref=e176]:
+      - button "Open issues overlay" [ref=e177]:
+        - generic [ref=e178]:
+          - generic [ref=e179]: "0"
+          - generic [ref=e180]: "1"
+        - generic [ref=e181]: Issue
+      - button "Collapse issues badge" [ref=e182]:
+        - img [ref=e183]
+  - alert [ref=e185]

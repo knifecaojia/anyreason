@@ -3,7 +3,7 @@ from __future__ import annotations
 import base64
 import logging
 import re
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -94,14 +94,29 @@ class ModelTestVideoGenerateHandler(BaseTaskHandler):
         await reporter.log(message="开始提交 AI 视频生成任务", level="info")
 
         param_json = self._extract_params(task)
+        
+        # Extract pre-acquired api_key from external_meta (set by process_two_phase_task)
+        acquired_api_key = None
+        acquired_config_id = None
+        external_meta = task.external_meta or {}
+        if external_meta.get("_slot_api_key"):
+            acquired_api_key = external_meta.get("_slot_api_key")
+            model_config_id_val = payload.get("model_config_id")
+            if model_config_id_val:
+                acquired_config_id = UUID(str(model_config_id_val))
+        
+        _task_user_id: UUID = cast(UUID, task.user_id)
+
         ref = await ai_gateway_service.submit_media_async(
             db=db,
-            user_id=task.user_id,
+            user_id=_task_user_id,
             binding_key=None,
             model_config_id=UUID(str(model_config_id)) if model_config_id else None,
             prompt=prompt,
             param_json=param_json,
             category="video",
+            acquired_api_key=acquired_api_key,
+            acquired_config_id=acquired_config_id,
         )
         return ExternalSubmitResult(
             external_task_id=ref.external_task_id,
@@ -124,32 +139,35 @@ class ModelTestVideoGenerateHandler(BaseTaskHandler):
             raise RuntimeError("video_url_missing")
         raw = {"url": url}
 
+        _task_user_id: UUID = cast(UUID, task.user_id)
+        _parent_node_id: UUID | None = None
         output_node_id: UUID | None = None
         output_ct: str | None = None
 
         await reporter.progress(progress=60)
         await reporter.log(message="视频生成完成，开始下载保存文件", level="info")
 
-        parent = await get_or_create_user_ai_folder(db=db, user_id=task.user_id)
+        parent = await get_or_create_user_ai_folder(db=db, user_id=_task_user_id)
+        _parent_node_id = cast(UUID, parent.id)
         filename = "generated.mp4"
 
         parsed = _parse_data_url(url)
         if parsed:
             mime, data = parsed
             node = await vfs_service.create_bytes_file(
-                db=db, user_id=task.user_id, name=filename, data=data,
-                content_type=mime, parent_id=parent.id, workspace_id=None, project_id=None,
+                db=db, user_id=_task_user_id, name=filename, data=data,
+                content_type=mime, parent_id=_parent_node_id, workspace_id=None, project_id=None,
             )
-            output_node_id = node.id
+            output_node_id = cast(UUID | None, node.id)
             output_ct = mime
         elif url.startswith(("http://", "https://")):
             data, ct = await _download_bytes(url, max_bytes=200 * 1024 * 1024)
             mime = ct or "video/mp4"
             node = await vfs_service.create_bytes_file(
-                db=db, user_id=task.user_id, name=filename, data=data,
-                content_type=mime, parent_id=parent.id, workspace_id=None, project_id=None,
+                db=db, user_id=_task_user_id, name=filename, data=data,
+                content_type=mime, parent_id=_parent_node_id, workspace_id=None, project_id=None,
             )
-            output_node_id = node.id
+            output_node_id = cast(UUID | None, node.id)
             output_ct = mime
 
         await reporter.progress(progress=85)
@@ -234,9 +252,11 @@ class ModelTestVideoGenerateHandler(BaseTaskHandler):
                     param_json["mode"] = "multi_frame"
                 logger.info("[video-handler] task=%s inferred mode=%s from %d images", task.id, param_json["mode"], img_count)
 
+            _task_user_id: UUID = cast(UUID, task.user_id)
+
             media_resp = await ai_gateway_service.generate_media(
                 db=db,
-                user_id=task.user_id,
+                user_id=_task_user_id,
                 binding_key=None,
                 model_config_id=UUID(str(model_config_id)) if model_config_id else None,
                 prompt=prompt,
@@ -253,7 +273,8 @@ class ModelTestVideoGenerateHandler(BaseTaskHandler):
             await reporter.log(message="视频生成完成，开始下载保存文件", level="info", payload={"url_len": len(url)})
 
             # Save file to user's AI folder
-            parent = await get_or_create_user_ai_folder(db=db, user_id=task.user_id)
+            parent = await get_or_create_user_ai_folder(db=db, user_id=_task_user_id)
+            _parent_node_id: UUID = cast(UUID, parent.id)
             filename = "generated.mp4"
 
             parsed = _parse_data_url(url)
@@ -261,30 +282,30 @@ class ModelTestVideoGenerateHandler(BaseTaskHandler):
                 mime, data = parsed
                 node = await vfs_service.create_bytes_file(
                     db=db,
-                    user_id=task.user_id,
+                    user_id=_task_user_id,
                     name=filename,
                     data=data,
                     content_type=mime,
-                    parent_id=parent.id,
+                    parent_id=_parent_node_id,
                     workspace_id=None,
                     project_id=None,
                 )
-                output_node_id = node.id
+                output_node_id = cast(UUID | None, node.id)
                 output_ct = mime
             elif url.startswith(("http://", "https://")):
                 data, ct = await _download_bytes(url, max_bytes=200 * 1024 * 1024)
                 mime = ct or "video/mp4"
                 node = await vfs_service.create_bytes_file(
                     db=db,
-                    user_id=task.user_id,
+                    user_id=_task_user_id,
                     name=filename,
                     data=data,
                     content_type=mime,
-                    parent_id=parent.id,
+                    parent_id=_parent_node_id,
                     workspace_id=None,
                     project_id=None,
                 )
-                output_node_id = node.id
+                output_node_id = cast(UUID | None, node.id)
                 output_ct = mime
 
             await reporter.progress(progress=85)

@@ -17,6 +17,10 @@ type Props = {
 
 function getStatusLabel(status?: string | null) {
   switch (status) {
+    case "queued_for_slot":
+      return "等待并发槽位";
+    case "submitting":
+      return "提交中";
     case "queued":
       return "等待中";
     case "running":
@@ -44,6 +48,10 @@ function getStatusClass(status?: string | null) {
       return "bg-gray-200 text-gray-700";
     case "waiting_external":
       return "bg-purple-100 text-purple-700";
+    case "submitting":
+      return "bg-blue-100 text-blue-700";
+    case "queued_for_slot":
+      return "bg-amber-100 text-amber-700";
     case "running":
     case "queued":
       return "bg-blue-100 text-blue-700";
@@ -53,7 +61,8 @@ function getStatusClass(status?: string | null) {
 }
 
 function canStop(task?: BatchVideoPreviewTask | null) {
-  return task && ["queued", "running", "waiting_external"].includes(task.status);
+  // Can stop when queued (including queued_for_slot), running, submitting, or waiting_external
+  return task && ["queued", "queued_for_slot", "running", "submitting", "waiting_external"].includes(task.status);
 }
 
 function canRetry(task?: BatchVideoPreviewTask | null) {
@@ -79,9 +88,11 @@ export function VideoPreviewCards({ cards, onReload }: Props) {
         throw new Error(result.msg || "停止任务失败");
       }
       if (result.data.external_cancel.attempted && !result.data.external_cancel.supported) {
-        toast.success("已停止本地任务跟踪，云端任务可能仍继续执行");
+        toast.success("已取消本地任务跟踪，云端任务可能仍继续执行");
+      } else if (result.data.external_cancel.attempted) {
+        toast.success("已取消云端任务");
       } else {
-        toast.success("任务已停止");
+        toast.success("任务已取消");
       }
       await onReload();
     } catch (error) {
@@ -133,6 +144,11 @@ export function VideoPreviewCards({ cards, onReload }: Props) {
                     <span className={`px-2 py-0.5 text-xs rounded-full ${getStatusClass(task?.status)}`}>
                       {getStatusLabel(task?.status)}
                     </span>
+                    {task?.status === "queued_for_slot" && task.queue_position && (
+                      <span className="text-xs px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                        排队第{task.queue_position}位
+                      </span>
+                    )}
                     {task?.progress != null && task.status !== "succeeded" && (
                       <span className="text-xs text-textMuted">{task.progress}%</span>
                     )}
@@ -196,15 +212,19 @@ export function VideoPreviewCards({ cards, onReload }: Props) {
                       <video controls className="w-full rounded-lg border border-border bg-black" src={card.latest_success.result_url} />
                     ) : (
                       <div className="rounded-lg border border-dashed border-border bg-secondary/20 p-6 text-sm text-textMuted min-h-[140px] flex items-center justify-center text-center">
-                        {task?.status === "waiting_external"
-                          ? "云端生成中"
-                          : task?.status === "running" || task?.status === "queued"
-                            ? "任务处理中"
-                            : task?.status === "failed"
-                              ? task.error_message || "任务失败，可重试"
-                              : task?.status === "canceled"
-                                ? "任务已停止"
-                                : "暂无视频结果"}
+                        {task?.status === "queued_for_slot"
+                          ? "等待并发槽位中..."
+                          : task?.status === "submitting"
+                            ? "正在提交到云端..."
+                            : task?.status === "waiting_external"
+                              ? "云端生成中"
+                              : task?.status === "running" || task?.status === "queued"
+                                ? "任务处理中"
+                                : task?.status === "failed"
+                                  ? task.error_message || "任务失败，可重试"
+                                  : task?.status === "canceled"
+                                    ? "任务已停止"
+                                    : "暂无视频结果"}
                       </div>
                     )}
                   </div>
@@ -218,7 +238,18 @@ export function VideoPreviewCards({ cards, onReload }: Props) {
                     <span>{task.progress}%</span>
                   </div>
                   <div className="w-full h-2 rounded-full bg-gray-200 overflow-hidden">
-                    <div className="h-full bg-primary transition-all duration-300" style={{ width: `${task.progress}%` }} />
+                    <div
+                      className={`h-full transition-all duration-300 ${
+                        task.status === "failed"
+                          ? "bg-red-500"
+                          : task.status === "canceled"
+                            ? "bg-gray-400"
+                            : task.status === "queued_for_slot"
+                              ? "bg-amber-500"
+                              : "bg-primary"
+                      }`}
+                      style={{ width: `${task.progress}%` }}
+                    />
                   </div>
                 </div>
               )}
@@ -250,8 +281,15 @@ export function VideoPreviewCards({ cards, onReload }: Props) {
                         {item.error_message && <div className="text-xs text-red-500 mt-1">{item.error_message}</div>}
                       </div>
                       <div className="text-right shrink-0">
-                        <div className={`inline-flex px-2 py-0.5 text-xs rounded-full ${getStatusClass(item.status)}`}>
-                          {getStatusLabel(item.status)}
+                        <div className="flex items-center gap-1">
+                          <div className={`inline-flex px-2 py-0.5 text-xs rounded-full ${getStatusClass(item.status)}`}>
+                            {getStatusLabel(item.status)}
+                          </div>
+                          {item.status === "queued_for_slot" && item.queue_position && (
+                            <span className="text-[10px] px-1 py-0.5 rounded bg-amber-100 text-amber-700 font-medium">
+                              第{item.queue_position}位
+                            </span>
+                          )}
                         </div>
                         <div className="text-xs text-textMuted mt-1">{item.progress}%</div>
                         <div className="mt-2 flex items-center justify-end gap-2">
@@ -279,13 +317,7 @@ export function VideoPreviewCards({ cards, onReload }: Props) {
                       </div>
                     </div>
                     {/* 该任务生成的视频 - 避免与主区域重复显示 */}
-                    {item.status === "succeeded" ? (
-                      // 成功的任务视频已在主区域显示，这里只显示提示
-                      <div className="mt-3 text-xs text-textMuted">
-                        视频已在上方预览区显示
-                      </div>
-                    ) : item.result_url ? (
-                      // 非成功状态但有视频（异常情况）
+                    {item.result_url ? (
                       <div className="mt-3">
                         <div className="text-xs text-textMuted mb-1">该任务生成的视频</div>
                         <video 

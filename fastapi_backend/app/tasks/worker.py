@@ -17,8 +17,9 @@ WORKER_CONCURRENCY = settings.TASK_WORKER_CONCURRENCY
 
 
 def _log(msg: str) -> None:
-    """Log with worker identifier prefix."""
-    print(f"[task-worker:{WORKER_ID}] {msg}", flush=True)
+    """Log with worker identifier prefix and timestamp."""
+    ts = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S.%f")[:23]
+    print(f"{ts} [task-worker:{WORKER_ID}] {msg}", flush=True)
 
 
 def _load_task_handler_registry():

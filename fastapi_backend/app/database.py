@@ -43,6 +43,23 @@ async_db_connection_url = (
     f"{parsed_db_url.path}"
 )
 
+
+def _database_endpoint_for_logs() -> str:
+    host = db_hostname or "<unknown-host>"
+    port = parsed_db_url.port or 5432
+    return f"{host}:{port}"
+
+
+def _database_unavailable_error_message(reason: str) -> str:
+    endpoint = _database_endpoint_for_logs()
+    return (
+        f"PostgreSQL is unavailable during application startup ({reason}). "
+        f"Tried to connect to {endpoint}. "
+        "Start PostgreSQL first, then retry the backend. "
+        "For local development, run `docker compose up -d` in the `docker/` directory, "
+        "or update DATABASE_URL if your database is running elsewhere."
+    )
+
 # Disable connection pooling for serverless environments like Vercel
 engine = create_async_engine(
     async_db_connection_url,
@@ -139,7 +156,16 @@ async def create_db_and_tables() -> None:
 
         await _run_alembic_upgrade()
 
-    await asyncio.wait_for(_migrate(), timeout=60)
+    try:
+        await asyncio.wait_for(_migrate(), timeout=60)
+    except asyncio.TimeoutError as exc:
+        msg = _database_unavailable_error_message("database initialization timed out after 60 seconds")
+        logger.exception(msg)
+        raise RuntimeError(msg) from exc
+    except ConnectionRefusedError as exc:
+        msg = _database_unavailable_error_message("connection was refused")
+        logger.exception(msg)
+        raise RuntimeError(msg) from exc
     logger.info("db:init done")
 
 

@@ -1,0 +1,66 @@
+uid=1_0 RootWebArea "言之有理 | AI漫剧创作平台" url="http://127.0.0.1:3000/login"
+  uid=1_1 ignored
+    uid=1_2 ignored
+      uid=1_3 ignored
+        uid=1_4 generic
+          uid=1_5 ignored
+            uid=1_6 ignored
+              uid=1_7 heading "登录" level="3"
+                uid=1_8 StaticText "登录"
+                  uid=1_9 InlineTextBox "登录"
+              uid=1_10 paragraph
+                uid=1_11 StaticText "输入邮箱与密码登录你的账号。"
+                  uid=1_9 InlineTextBox "输入邮箱与密码登录你的账号。"
+            uid=1_12 ignored
+              uid=1_13 ignored
+                uid=1_14 LabelText
+                  uid=1_15 StaticText "邮箱"
+                    uid=1_9 InlineTextBox "邮箱"
+                uid=1_16 textbox "邮箱" required value="admin@example.com"
+                  uid=1_17 ignored
+                  uid=1_18 generic
+                    uid=1_19 StaticText "admin@example.com"
+                      uid=1_9 InlineTextBox "admin@example.com"
+              uid=1_20 ignored
+                uid=1_21 LabelText
+                  uid=1_22 StaticText "密码"
+                    uid=1_9 InlineTextBox "密码"
+                uid=1_23 textbox "密码" required value="••••••••"
+                  uid=1_24 generic
+                    uid=1_25 StaticText "••••••••"
+                      uid=1_9 InlineTextBox "••••••••"
+                uid=1_26 ignored
+                  uid=1_27 ignored
+                    uid=1_28 generic
+                      uid=1_29 checkbox "记住我"
+                    uid=1_30 ignored
+                      uid=1_31 ignored
+                  uid=1_32 link "忘记密码？" url="http://127.0.0.1:3000/password-recovery"
+                    uid=1_33 StaticText "忘记密码？"
+                      uid=1_9 InlineTextBox "忘记密码？"
+              uid=1_34 button "登录"
+                uid=1_35 StaticText "登录"
+                  uid=1_9 InlineTextBox "登录"
+              uid=1_36 generic
+                uid=1_37 StaticText "还没有账号？"
+                  uid=1_9 InlineTextBox "还没有账号？"
+                uid=1_38 link "注册" url="http://127.0.0.1:3000/register"
+                  uid=1_39 StaticText "注册"
+                    uid=1_9 InlineTextBox "注册"
+      uid=1_40 region "Notifications alt+T" live="polite" relevant="additions text"
+      uid=1_41 generic
+        uid=1_42 generic
+          uid=1_43 generic
+            uid=1_44 ignored
+              uid=1_45 ignored
+                uid=1_46 generic
+                  uid=1_47 ignored
+                    uid=1_48 button "Open Next.js Dev Tools" expandable haspopup="menu"
+                      uid=1_49 image
+                        uid=1_50 ignored
+                        uid=1_51 ignored
+                        uid=1_52 ignored
+                        uid=1_53 ignored
+                        uid=1_54 ignored
+      uid=1_55 generic
+        uid=1_56 alert atomic live="assertive" relevant="additions text"

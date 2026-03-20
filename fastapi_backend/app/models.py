@@ -952,6 +952,17 @@ class Task(Base):
     external_meta = Column(JSONB, nullable=True)
     next_poll_at = Column(DateTime(timezone=True), nullable=True)
 
+    # Queue metadata for video slot queue lifecycle
+    # Only populated when status is "queued_for_slot"
+    queue_position = Column(Integer, nullable=True)
+    queued_at = Column(DateTime(timezone=True), nullable=True)
+
+    # Slot owner metadata for tracking slot ownership
+    # Populated when task has acquired a slot (queued_for_slot -> submitting transition)
+    slot_owner_token = Column(String(64), nullable=True)
+    slot_config_id = Column(UUID(as_uuid=True), nullable=True)
+    slot_acquired_at = Column(DateTime(timezone=True), nullable=True)
+
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     started_at = Column(DateTime(timezone=True), nullable=True)
@@ -967,7 +978,7 @@ class Task(Base):
 
     __table_args__ = (
         CheckConstraint(
-            "status IN ('queued', 'running', 'succeeded', 'failed', 'canceled', 'waiting_external')",
+            "status IN ('queued', 'queued_for_slot', 'running', 'submitting', 'succeeded', 'failed', 'canceled', 'waiting_external')",
             name="ck_tasks_status",
         ),
         CheckConstraint("progress >= 0 AND progress <= 100", name="ck_tasks_progress"),
@@ -976,6 +987,8 @@ class Task(Base):
         Index("idx_tasks_entity", "entity_type", "entity_id"),
         Index("idx_tasks_created_at", "created_at"),
         Index("idx_tasks_waiting_poll", "status", "next_poll_at", postgresql_where=text("status = 'waiting_external'")),
+        # Index for queue position queries - find tasks waiting for slot on a specific config
+        Index("idx_tasks_queued_for_slot", "status", "slot_config_id", "queue_position", postgresql_where=text("status = 'queued_for_slot'")),
     )
 
 

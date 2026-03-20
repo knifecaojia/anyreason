@@ -16,70 +16,16 @@ from app.users import get_jwt_strategy
 from app.services.credit_service import credit_service
 
 
+# Use DO blocks with IF NOT EXISTS for enum creation
+# This is compatible with all PostgreSQL versions and handles concurrent creation
 TEST_ENUM_DDL = [
-    """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'canvas_status_enum') THEN
-            CREATE TYPE canvas_status_enum AS ENUM ('draft', 'active', 'archived');
-        END IF;
-    END
-    $$;
-    """,
-    """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'canvas_node_status_enum') THEN
-            CREATE TYPE canvas_node_status_enum AS ENUM ('pending', 'running', 'completed', 'failed');
-        END IF;
-    END
-    $$;
-    """,
-    """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'canvas_execution_status_enum') THEN
-            CREATE TYPE canvas_execution_status_enum AS ENUM ('pending', 'running', 'completed', 'partial', 'failed', 'cancelled');
-        END IF;
-    END
-    $$;
-    """,
-    """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'canvas_trigger_type_enum') THEN
-            CREATE TYPE canvas_trigger_type_enum AS ENUM ('manual', 'batch', 'auto');
-        END IF;
-    END
-    $$;
-    """,
-    """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'batch_video_job_status_enum') THEN
-            CREATE TYPE batch_video_job_status_enum AS ENUM ('draft', 'processing', 'completed', 'archived');
-        END IF;
-    END
-    $$;
-    """,
-    """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'batch_video_asset_status_enum') THEN
-            CREATE TYPE batch_video_asset_status_enum AS ENUM ('pending', 'generating', 'completed', 'failed');
-        END IF;
-    END
-    $$;
-    """,
-    """
-    DO $$
-    BEGIN
-        IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'batch_video_history_status_enum') THEN
-            CREATE TYPE batch_video_history_status_enum AS ENUM ('pending', 'processing', 'completed', 'failed');
-        END IF;
-    END
-    $$;
-    """,
+    "DO $$ BEGIN CREATE TYPE canvas_status_enum AS ENUM ('draft', 'active', 'archived'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+    "DO $$ BEGIN CREATE TYPE canvas_node_status_enum AS ENUM ('pending', 'running', 'completed', 'failed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+    "DO $$ BEGIN CREATE TYPE canvas_execution_status_enum AS ENUM ('pending', 'running', 'completed', 'partial', 'failed', 'cancelled'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+    "DO $$ BEGIN CREATE TYPE canvas_trigger_type_enum AS ENUM ('manual', 'batch', 'auto'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+    "DO $$ BEGIN CREATE TYPE batch_video_job_status_enum AS ENUM ('draft', 'processing', 'completed', 'archived'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+    "DO $$ BEGIN CREATE TYPE batch_video_asset_status_enum AS ENUM ('pending', 'generating', 'completed', 'failed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
+    "DO $$ BEGIN CREATE TYPE batch_video_history_status_enum AS ENUM ('pending', 'processing', 'completed', 'failed'); EXCEPTION WHEN duplicate_object THEN NULL; END $$",
 ]
 
 
@@ -130,6 +76,8 @@ class _FakeMinio:
     def get_object(self, bucket: str | None = None, key: str | None = None, *, bucket_name: str | None = None, object_name: str | None = None):
         b = bucket_name or bucket
         k = object_name or key
+        if b is None or k is None:
+            raise KeyError("bucket and key cannot be None")
         return _FakeObject(self._objects[(b, k)])
 
     def remove_object(self, *, bucket_name: str, object_name: str):
@@ -145,39 +93,122 @@ def mock_minio(monkeypatch):
     return fake
 
 
+async def _create_test_database(admin_dsn: str, db_name: str) -> None:
+    """Create a test database with retry logic for PostgreSQL semantics."""
+    import asyncio
+
+    max_retries = 5
+    retry_delay = 0.1
+
+    conn = await asyncpg.connect(admin_dsn, database="postgres")
+    try:
+        for attempt in range(max_retries):
+            try:
+                await conn.execute(f'CREATE DATABASE "{db_name}"')
+                break
+            except asyncpg.exceptions.DuplicateDatabaseError:
+                # Race condition: another process created it. Retry.
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay * (2 ** attempt))
+                else:
+                    raise
+    finally:
+        await conn.close()
+
+
+async def _drop_test_database(admin_dsn: str, db_name: str) -> None:
+    """Drop a test database with retry logic for PostgreSQL semantics."""
+    import asyncio
+
+    max_retries = 5
+    retry_delay = 0.1
+
+    conn = await asyncpg.connect(admin_dsn, database="postgres")
+    try:
+        # Step 1: Terminate all connections to the target database
+        while True:
+            result = await conn.fetch(
+                """
+                SELECT pid FROM pg_stat_activity
+                WHERE datname = $1 AND pid <> pg_backend_pid()
+                """,
+                db_name,
+            )
+            if not result:
+                break
+            for row in result:
+                try:
+                    await conn.execute(f"SELECT pg_terminate_backend({row['pid']})")
+                except Exception:
+                    pass
+            await asyncio.sleep(retry_delay)
+
+        # Step 2: Drop database with retry
+        for attempt in range(max_retries):
+            try:
+                await conn.execute(f'DROP DATABASE IF EXISTS "{db_name}"')
+                break
+            except Exception:
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(retry_delay * (2 ** attempt))
+                else:
+                    pass  # Best effort - DB may not exist
+    finally:
+        await conn.close()
+
+
 @pytest_asyncio.fixture(scope="function")
 async def engine():
-    """Create a fresh test database engine for each test function."""
-    test_url = make_url(settings.TEST_DATABASE_URL)
+    """Create a fresh unique test database for each test function.
+    
+    Uses a unique database name per test to ensure complete isolation.
+    Database is dropped after the test completes.
+    """
+    test_db_url = settings.TEST_DATABASE_URL
+    assert test_db_url is not None, "TEST_DATABASE_URL must be set"
+    test_url = make_url(test_db_url)
+    base_db_name = str(test_url.database)  # type: ignore
+
+    # Generate unique database name for this test
+    unique_suffix = str(uuid.uuid4()).replace("-", "")[:12]
+    unique_db_name = f"{base_db_name}_{unique_suffix}"
+
+    # Build admin DSN for postgres database
     admin_url = test_url.set(database="postgres")
     admin_dsn = admin_url.render_as_string(hide_password=False).replace(
         "postgresql+asyncpg://", "postgresql://"
     )
-    conn = await asyncpg.connect(admin_dsn)
+
+    # Build the actual test database URL with unique name
+    unique_test_url = test_url.set(database=unique_db_name)
+    unique_test_db_url = unique_test_url.render_as_string(hide_password=False)
+    unique_test_dsn = unique_test_url.render_as_string(hide_password=False).replace(
+        "postgresql+asyncpg://", "postgresql://"
+    )
+
+    # Create the unique database
+    await _create_test_database(admin_dsn, unique_db_name)
+
+    # Create enums using asyncpg directly
+    enum_conn = await asyncpg.connect(unique_test_dsn)
     try:
-        exists = await conn.fetchval(
-            "SELECT 1 FROM pg_database WHERE datname = $1", test_url.database
-        )
-        if not exists:
-            await conn.execute(f'CREATE DATABASE "{test_url.database}"')
-    finally:
-        await conn.close()
-
-    engine = create_async_engine(settings.TEST_DATABASE_URL, echo=False)
-
-    async with engine.begin() as conn:
         for ddl in TEST_ENUM_DDL:
-            await conn.exec_driver_sql(ddl)
+            await enum_conn.execute(ddl)
+    finally:
+        await enum_conn.close()
+
+    # Create SQLAlchemy engine with unique database
+    test_engine = create_async_engine(unique_test_db_url, echo=False)
+
+    async with test_engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
-    yield engine
+    yield test_engine
 
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
-        for ddl in TEST_ENUM_DROP_DDL:
-            await conn.exec_driver_sql(ddl)
+    await test_engine.dispose()
 
-    await engine.dispose()
+    # Drop the unique database
+    await _drop_test_database(admin_dsn, unique_db_name)
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -196,6 +196,10 @@ function mapPath(method: string, path: string | string[]) {
   }
 
   if (segments[0] === "assets") {
+    if (segments.length === 2 && segments[1] === "generate") {
+      return { upstreamPath: "assets/generate", mode: "asset-generate" as const };
+    }
+
     if (segments.length === 2 && segments[1] === "polish") {
       return { upstreamPath: "assets/polish", mode: "asset-polish" as const };
     }
@@ -300,6 +304,10 @@ function transformResponse(mode: string, data: unknown) {
 
   if (mode === "job-assets-upload" && Array.isArray(envelope.data)) {
     return { ...envelope, data: envelope.data.map((item) => normalizeAsset(item as BatchVideoAssetLike)) };
+  }
+
+  if (mode === "asset-generate" && Array.isArray(envelope.data)) {
+    return envelope;
   }
 
   if (mode === "jobs-list" && envelope.code === 200 && !envelope.data) {
@@ -418,7 +426,8 @@ export async function POST(
     fetchOptions.body = body;
   }
 
-  const response = await fetchWithTimeout(url, fetchOptions);
+  const timeoutMs = mode === "asset-generate" ? 60000 : 10000;
+  const response = await fetchWithTimeout(url, fetchOptions, timeoutMs);
 
   const data = await parseJsonSafe(response);
   return NextResponse.json(transformResponse(mode, data), { status: response.status });

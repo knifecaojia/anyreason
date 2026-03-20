@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import re
-from typing import Any
+from typing import Any, cast
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -80,45 +80,54 @@ class AssetVideoGenerateHandler(BaseTaskHandler):
 
     async def _resolve_storage(self, *, db: AsyncSession, task: Task) -> tuple[Any, FileNode]:
         """Resolve project and parent folder for saving the video file."""
-        payload = task.input_json or {}
+        payload: dict[str, Any] = cast(dict[str, Any], task.input_json) if task.input_json is not None else {}
         project_id = payload.get("project_id")
         parent_node_id = payload.get("parent_node_id")
+        _task_user_id: UUID = cast(UUID, task.user_id)
 
         project = None
         if project_id:
             project_uuid = UUID(str(project_id))
             project = await db.get(Project, project_uuid)
-            if not project or project.owner_id != task.user_id:
+            _owner_id: UUID | None = cast(UUID | None, project.owner_id) if project else None
+            if not project or (_owner_id is not None and _owner_id != _task_user_id):
                 raise AppError(msg="Not found", code=404, status_code=404)
 
         parent: FileNode | None = None
         if parent_node_id:
             parent_uuid = UUID(str(parent_node_id))
             parent = await db.get(FileNode, parent_uuid)
-            if not parent or not parent.is_folder:
+            _is_folder: bool = cast(bool, parent.is_folder) if parent else False
+            if not parent or not _is_folder:
                 raise AppError(msg="Node not found", code=404, status_code=404)
-            if project and parent.project_id and parent.project_id != project.id:
+            _parent_project_id: UUID | None = cast(UUID | None, parent.project_id) if parent else None
+            _project_id: UUID | None = cast(UUID | None, project.id) if project else None
+            if project and _parent_project_id is not None and _project_id is not None and _parent_project_id != _project_id:
                 raise AppError(msg="scope_mismatch", code=400, status_code=400)
         else:
             if project:
-                parent = await get_or_create_project_ai_folder(db=db, user_id=task.user_id, project_id=project.id)
+                _project_id_for_folder: UUID = cast(UUID, project.id)
+                parent = await get_or_create_project_ai_folder(db=db, user_id=_task_user_id, project_id=_project_id_for_folder)
             else:
-                parent = await get_or_create_user_ai_folder(db=db, user_id=task.user_id)
+                parent = await get_or_create_user_ai_folder(db=db, user_id=_task_user_id)
         return project, parent  # type: ignore[return-value]
 
     async def _save_video(self, *, db: AsyncSession, task: Task, url: str, project: Any, parent: FileNode) -> dict[str, Any]:
         """Download and save video from URL to VFS. Returns result_json."""
-        payload = task.input_json or {}
+        payload: dict[str, Any] = cast(dict[str, Any], task.input_json) if task.input_json is not None else {}
         filename = str(payload.get("filename") or "").strip() or "generated.mp4"
         raw = {"url": url}
+        _task_user_id: UUID = cast(UUID, task.user_id)
+        _parent_id: UUID | None = cast(UUID | None, parent.id)
+        _project_id: UUID | None = cast(UUID | None, project.id) if project else None
 
         parsed = _parse_data_url(url)
         if parsed:
             mime, data = parsed
             node = await vfs_service.create_bytes_file(
-                db=db, user_id=task.user_id, name=filename, data=data,
-                content_type=mime, parent_id=parent.id, workspace_id=None,
-                project_id=project.id if project else None,
+                db=db, user_id=_task_user_id, name=filename, data=data,
+                content_type=mime, parent_id=_parent_id, workspace_id=None,
+                project_id=_project_id,
             )
             return {"url": url, "file_node_id": str(node.id), "raw": raw}
 
@@ -131,31 +140,32 @@ class AssetVideoGenerateHandler(BaseTaskHandler):
                 else:
                     data, ct = await _download_bytes(url, max_bytes=200 * 1024 * 1024)
                 node = await vfs_service.create_bytes_file(
-                    db=db, user_id=task.user_id, name=filename, data=data,
-                    content_type=ct or "video/mp4", parent_id=parent.id,
-                    workspace_id=None, project_id=project.id if project else None,
+                    db=db, user_id=_task_user_id, name=filename, data=data,
+                    content_type=ct or "video/mp4", parent_id=_parent_id,
+                    workspace_id=None, project_id=_project_id,
                 )
                 return {"url": url, "file_node_id": str(node.id), "raw": raw}
             except Exception:
                 node = await vfs_service.create_text_file(
-                    db=db, user_id=task.user_id, name=f"{filename}.url.txt",
-                    content=f"url: {url}\n", parent_id=parent.id,
-                    workspace_id=None, project_id=project.id if project else None,
+                    db=db, user_id=_task_user_id, name=f"{filename}.url.txt",
+                    content=f"url: {url}\n", parent_id=_parent_id,
+                    workspace_id=None, project_id=_project_id,
                     content_type="text/plain; charset=utf-8",
                 )
                 return {"url": url, "file_node_id": str(node.id), "raw": raw}
 
         node = await vfs_service.create_text_file(
-            db=db, user_id=task.user_id, name=f"{filename}.url.txt",
-            content=f"url: {url}\n", parent_id=parent.id,
-            workspace_id=None, project_id=project.id if project else None,
+            db=db, user_id=_task_user_id, name=f"{filename}.url.txt",
+            content=f"url: {url}\n", parent_id=_parent_id,
+            workspace_id=None, project_id=_project_id,
             content_type="text/plain; charset=utf-8",
         )
         return {"url": url, "file_node_id": str(node.id), "raw": raw}
 
     async def submit(self, *, db: AsyncSession, task: Task, reporter: TaskReporter) -> ExternalSubmitResult:
         """Phase 1: validate inputs, submit to external provider, return ref."""
-        payload = task.input_json or {}
+        payload: dict[str, Any] = cast(dict[str, Any], task.input_json) if task.input_json is not None else {}
+        _task_user_id: UUID = cast(UUID, task.user_id)
         prompt = str(payload.get("prompt") or "").strip()
         if not prompt:
             raise ValueError("prompt is required")
@@ -164,14 +174,27 @@ class AssetVideoGenerateHandler(BaseTaskHandler):
         await reporter.progress(progress=5)
 
         param_json = self._extract_params(task)
+        
+        # Extract pre-acquired api_key from external_meta (set by process_two_phase_task)
+        acquired_api_key = None
+        acquired_config_id = None
+        external_meta = task.external_meta or {}
+        if external_meta.get("_slot_api_key"):
+            acquired_api_key = external_meta.get("_slot_api_key")
+            model_config_id_val = payload.get("model_config_id")
+            if model_config_id_val:
+                acquired_config_id = UUID(str(model_config_id_val))
+        
         ref = await ai_gateway_service.submit_media_async(
             db=db,
-            user_id=task.user_id,
+            user_id=_task_user_id,
             binding_key=payload.get("binding_key"),
             model_config_id=UUID(str(payload["model_config_id"])) if payload.get("model_config_id") else None,
             prompt=prompt,
             param_json=param_json,
             category="video",
+            acquired_api_key=acquired_api_key,
+            acquired_config_id=acquired_config_id,
         )
         return ExternalSubmitResult(
             external_task_id=ref.external_task_id,
@@ -195,7 +218,8 @@ class AssetVideoGenerateHandler(BaseTaskHandler):
 
     async def run(self, *, db: AsyncSession, task: Task, reporter: TaskReporter) -> dict[str, Any]:
         """Legacy blocking path (fallback when provider doesn't support async)."""
-        payload = task.input_json or {}
+        payload: dict[str, Any] = cast(dict[str, Any], task.input_json) if task.input_json is not None else {}
+        _task_user_id: UUID = cast(UUID, task.user_id)
         prompt = str(payload.get("prompt") or "").strip()
         if not prompt:
             raise ValueError("prompt is required")
@@ -206,7 +230,7 @@ class AssetVideoGenerateHandler(BaseTaskHandler):
 
         media_resp = await ai_gateway_service.generate_media(
             db=db,
-            user_id=task.user_id,
+            user_id=_task_user_id,
             binding_key=payload.get("binding_key"),
             model_config_id=UUID(str(payload["model_config_id"])) if payload.get("model_config_id") else None,
             prompt=prompt,
