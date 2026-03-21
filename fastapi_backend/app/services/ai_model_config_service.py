@@ -48,6 +48,7 @@ class AIModelConfigService:
         api_keys_info: list | None,
         enabled: bool,
         sort_order: int,
+        credits_cost: int = 0,
     ) -> AIModelConfig:
         manufacturer = _normalize_str(manufacturer)
         model = _normalize_str(model)
@@ -68,6 +69,7 @@ class AIModelConfigService:
             api_keys_info=[x.model_dump(mode="json") if hasattr(x, "model_dump") else x for x in api_keys_info] if api_keys_info else None,
             enabled=bool(enabled),
             sort_order=int(sort_order or 0),
+            credits_cost=max(0, int(credits_cost or 0)),
         )
         db.add(row)
         try:
@@ -101,6 +103,8 @@ class AIModelConfigService:
             row.enabled = bool(patch["enabled"])
         if "sort_order" in patch and patch["sort_order"] is not None:
             row.sort_order = int(patch["sort_order"])
+        if "credits_cost" in patch and patch["credits_cost"] is not None:
+            row.credits_cost = max(0, int(patch["credits_cost"]))
 
         if "api_key" in patch and patch["api_key"] is not None:
             row.plaintext_api_key = _normalize_str(patch["api_key"]) or None

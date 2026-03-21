@@ -1,33 +1,40 @@
+/**
+ * 多宫格图片编辑器
+ * 首批增强：拖拽/中键缩放/双击编辑模式外壳
+ */
+
 'use client';
 
-import { useState, useRef, useCallback, useEffect } from 'react';
+import { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  X, Save, Trash2, Layers, Upload, Plus, Minus, 
-  Maximize, Minimize, ChevronUp, ChevronDown, 
-  Crop as CropIcon, Image as ImageIcon, Loader2, Download
+import {
+  X,
+  Save,
+  Trash2,
+  Layers,
+  Plus,
+  Minus,
+  ChevronUp,
+  ChevronDown,
+  Loader2,
+  Move,
+  MousePointer2,
 } from 'lucide-react';
 import * as htmlToImage from 'html-to-image';
+
+import type {
+  GridItem,
+  CellContent,
+  EditModeState,
+  ImageGridEditorModalProps,
+} from '../types/grid';
+import { useDraggableImage } from '../hooks/useDraggableImage';
+import { useZoomableImage } from '../hooks/useZoomableImage';
+import { constrainPosition, getCellKey } from '../utils/gridMath';
+import { transformToCSS } from '../utils/transformHelpers';
+import GridCell from './GridCell';
 import ImageCropOverlay from './ImageCropOverlay';
-
-interface GridItem {
-  id: string;
-  url: string;
-  x: number;
-  y: number;
-  scale: number;
-  zIndex: number;
-}
-
-interface CellContent {
-  items: GridItem[];
-}
-
-interface ImageGridEditorModalProps {
-  initialImage?: string;
-  onSave: (url: string, fileNodeId: string) => void;
-  onClose: () => void;
-}
+import ZoomToast from './ZoomToast';
 
 const ASPECT_RATIOS = [
   { label: '1:1', value: 1 },
@@ -37,6 +44,18 @@ const ASPECT_RATIOS = [
   { label: '3:4', value: 3 / 4 },
 ];
 
+function createGridItem(url: string, zIndex: number): GridItem {
+  return {
+    id: Math.random().toString(36).slice(2, 11),
+    url,
+    x: 0,
+    y: 0,
+    scale: 1,
+    zIndex,
+    rotation: 0,
+  };
+}
+
 export default function ImageGridEditorModal({ initialImage, onSave, onClose }: ImageGridEditorModalProps) {
   const [rows, setRows] = useState(2);
   const [cols, setCols] = useState(2);
@@ -45,35 +64,103 @@ export default function ImageGridEditorModal({ initialImage, onSave, onClose }: 
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
   const [selectedItemIdx, setSelectedItemIdx] = useState<number | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  
-  // Ref for the cell currently being uploaded to, to avoid state race conditions
+  const [editMode, setEditMode] = useState<EditModeState | null>(null);
+  const [cropMode, setCropMode] = useState(false);
+
   const targetUploadCellRef = useRef<string | null>(null);
-  
-  // Crop related state
-  const [cropTarget, setCropTarget] = useState<{ url: string; cellKey: string } | null>(null);
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const initializedRef = useRef(false);
+  const cellRefs = useRef<Map<string, HTMLDivElement>>(new Map());
 
-  // Initialize cells if not present
+  const updateItemById = useCallback((cellKey: string, itemId: string, updates: Partial<GridItem>) => {
+    setCells((prev) => {
+      const cell = prev[cellKey];
+      if (!cell) return prev;
+
+      const index = cell.items.findIndex((item) => item.id === itemId);
+      if (index === -1) return prev;
+
+      const nextItems = [...cell.items];
+      nextItems[index] = { ...nextItems[index], ...updates };
+
+      return {
+        ...prev,
+        [cellKey]: { items: nextItems },
+      };
+    });
+  }, []);
+
+  const findItemLocation = useCallback((itemId: string) => {
+    for (const [cellKey, cell] of Object.entries(cells)) {
+      const itemIdx = cell.items.findIndex((item) => item.id === itemId);
+      if (itemIdx !== -1) {
+        return { cellKey, itemIdx, item: cell.items[itemIdx] };
+      }
+    }
+    return null;
+  }, [cells]);
+
+  const {
+    handleDragStart: handleDragStartHook,
+    draggingItemId,
+  } = useDraggableImage({
+    constrainPosition,
+    onDragMove: (item, newX, newY) => {
+      const location = findItemLocation(item.id);
+      if (!location) return;
+      updateItemById(location.cellKey, item.id, { x: newX, y: newY });
+    },
+    onDragEnd: (item, finalX, finalY) => {
+      const location = findItemLocation(item.id);
+      if (!location) return;
+      updateItemById(location.cellKey, item.id, { x: finalX, y: finalY });
+    },
+  });
+
+  const {
+    zoomToast,
+    handleZoomStart: handleZoomStartHook,
+    handleWheelZoom,
+    zoomingItemId,
+  } = useZoomableImage({
+    minScale: 0.1,
+    maxScale: 5,
+    zoomStep: 0.1,
+    onZoomChange: (item, newScale) => {
+      const location = findItemLocation(item.id);
+      if (!location) return;
+      updateItemById(location.cellKey, item.id, { scale: newScale });
+    },
+  });
+
+  const handleDragStart = useCallback((e: React.MouseEvent, item: GridItem, cellKey: string) => {
+    const cellEl = cellRefs.current.get(cellKey);
+    if (!cellEl) return;
+    handleDragStartHook(e, item, cellEl.getBoundingClientRect());
+  }, [handleDragStartHook]);
+
+  const handleZoomStart = useCallback((e: React.MouseEvent, item: GridItem) => {
+    handleZoomStartHook(e, item);
+  }, [handleZoomStartHook]);
+
   useEffect(() => {
-    setCells(prev => {
-      const newCells = { ...prev };
+    setCells((prev) => {
+      const next = { ...prev };
       let changed = false;
-      for (let r = 0; r < rows; r++) {
-        for (let c = 0; c < cols; c++) {
-          const key = `${r}-${c}`;
-          if (!newCells[key]) {
-            newCells[key] = { items: [] };
+      for (let r = 0; r < rows; r += 1) {
+        for (let c = 0; c < cols; c += 1) {
+          const key = getCellKey(r, c);
+          if (!next[key]) {
+            next[key] = { items: [] };
             changed = true;
           }
         }
       }
-      return changed ? newCells : prev;
+      return changed ? next : prev;
     });
   }, [rows, cols]);
 
-  // Auto-select first cell when grid is ready and no cell is selected
   useEffect(() => {
     const cellKeys = Object.keys(cells);
     if (cellKeys.length > 0 && !selectedCell) {
@@ -83,230 +170,184 @@ export default function ImageGridEditorModal({ initialImage, onSave, onClose }: 
   }, [cells, selectedCell]);
 
   const handleAddImage = useCallback((url: string, cellKey: string) => {
-    console.log('========== [ImageGridEditor] handleAddImage START ==========');
-    console.log('[ImageGridEditor] handleAddImage called with:', { url, cellKey });
-    console.log('[ImageGridEditor] current cells state:', JSON.stringify(cells, (k, v) => k === 'url' ? '[URL]' : v, 2));
-    const id = Math.random().toString(36).substr(2, 9);
-    
-    setCells(prev => {
-      console.log('[ImageGridEditor] setCells callback - prev keys:', Object.keys(prev));
-      console.log('[ImageGridEditor] target cellKey:', cellKey);
-      console.log('[ImageGridEditor] prev[cellKey]:', prev[cellKey]);
-      
+    setCells((prev) => {
       const cell = prev[cellKey] || { items: [] };
-      const newItem: GridItem = {
-        id,
-        url,
-        x: 0,
-        y: 0,
-        scale: 1,
-        zIndex: cell.items.length,
-      };
-      const updatedItems = [...cell.items, newItem];
-      console.log('[ImageGridEditor] Updating cell', cellKey, 'with', updatedItems.length, 'items, newItem.id:', id);
-      
-      const newState = {
-        ...prev,
-        [cellKey]: { items: updatedItems }
-      };
-      console.log('[ImageGridEditor] new cells state keys:', Object.keys(newState));
-      console.log('[ImageGridEditor] newState[cellKey]:', newState[cellKey]);
-      return newState;
+      const nextItems = [...cell.items, createGridItem(url, cell.items.length)];
+      return { ...prev, [cellKey]: { items: nextItems } };
     });
-
-    // Update selection AFTER state update triggers re-render
     setSelectedCell(cellKey);
-    // Use a small delay to ensure the cells state has been updated before we try to select based on its length
-    // Actually, we can just set it to the new length - 1 if we know what it will be.
-    // But since we don't have the current state here easily, we'll let the next render handle it via an effect or similar.
-    // For now, let's just use a simple state update.
-    setSelectedItemIdx(null); // Reset first to avoid stale index issues
+    setSelectedItemIdx(null);
   }, []);
 
-  // Effect to auto-select the latest item when a cell's items change
   useEffect(() => {
-    if (selectedCell) {
-        const count = cells[selectedCell]?.items.length || 0;
-        if (count > 0 && selectedItemIdx === null) {
-            setSelectedItemIdx(count - 1);
-        }
+    if (initialImage && !initializedRef.current && Object.keys(cells).length > 0) {
+      initializedRef.current = true;
+      handleAddImage(initialImage, '0-0');
     }
-  }, [cells, selectedCell, selectedItemIdx]);
+  }, [cells, handleAddImage, initialImage]);
+
+  useEffect(() => {
+    if (!editMode?.isActive) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setEditMode(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editMode]);
+
+  useEffect(() => {
+    if (!editMode?.isActive) {
+      setCropMode(false);
+    }
+  }, [editMode]);
 
   const handleUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     const cellKey = targetUploadCellRef.current;
-    console.log('========== [ImageGridEditor] handleUpload START ==========');
-    console.log('[ImageGridEditor] targetUploadCellRef.current:', cellKey);
-    console.log('[ImageGridEditor] selectedCell (state):', selectedCell);
-    console.log('[ImageGridEditor] fileName:', file?.name);
-    console.log('[ImageGridEditor] cells state keys:', Object.keys(cells));
-    
-    if (!file) {
-      console.warn('[ImageGridEditor] No file selected');
-      return;
-    }
+    if (!file) return;
     if (!cellKey) {
-      console.error('[ImageGridEditor] ERROR: cellKey is null! selectedCell is:', selectedCell);
       alert('请先点击选择一个宫格单元格');
       return;
     }
-    
-    // 直接上传并添加到单元格，不需要裁剪
-    console.log('[ImageGridEditor] Directly uploading file to cell:', cellKey);
+
     setIsSaving(true);
     try {
       const formData = new FormData();
       formData.append('file', file);
-      console.log('[ImageGridEditor] Directly uploading to /api/vfs/files/upload');
       const res = await fetch('/api/vfs/files/upload', { method: 'POST', body: formData });
-      console.log('[ImageGridEditor] Direct upload response status:', res.status);
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Upload failed: ${res.status} - ${errorText}`);
-      }
+      if (!res.ok) throw new Error('Upload failed');
       const json = await res.json();
-      console.log('[ImageGridEditor] Direct upload response JSON:', json);
       const nodeId = json.data?.id;
       if (nodeId) {
-        const url = `/api/vfs/nodes/${encodeURIComponent(nodeId)}/download`;
-        console.log('[ImageGridEditor] Direct upload SUCCESS, calling handleAddImage with:', { url, cellKey });
-        handleAddImage(url, cellKey);
-        console.log('[ImageGridEditor] Direct upload complete, END ==========');
-      } else {
-        console.error('[ImageGridEditor] Direct upload - No nodeId in response:', json);
-        alert('上传失败：服务器返回的数据无效');
+        handleAddImage(`/api/vfs/nodes/${encodeURIComponent(nodeId)}/thumbnail`, cellKey);
       }
-    } catch (err) {
-      console.error('[ImageGridEditor] Direct upload failed:', err);
+    } catch (error) {
+      console.error('Upload failed:', error);
       alert('上传图片失败，请重试');
     } finally {
       setIsSaving(false);
+      e.target.value = '';
     }
-    e.target.value = '';
-  }, []);
-
-  // Pre-fill initial image
-  useEffect(() => {
-    if (initialImage && !initializedRef.current && Object.keys(cells).length > 0) {
-      initializedRef.current = true;
-      console.log('[ImageGridEditor] Initializing with initialImage');
-      handleAddImage(initialImage, '0-0');
-    }
-  }, [initialImage, cells, handleAddImage]);
-
-  const onCropConfirm = useCallback(async (blob: Blob) => {
-    if (!cropTarget) {
-      console.error('[ImageGridEditor] onCropConfirm: cropTarget is null!');
-      return;
-    }
-    const { url: cropUrl, cellKey } = cropTarget;
-    console.log('========== [ImageGridEditor] onCropConfirm START ==========');
-    console.log('[ImageGridEditor] cropTarget:', cropTarget);
-    console.log('[ImageGridEditor] cellKey:', cellKey);
-    console.log('[ImageGridEditor] cropUrl:', cropUrl);
-    
-    try {
-      const formData = new FormData();
-      formData.append('file', blob, `crop_${Date.now()}.png`);
-      console.log('[ImageGridEditor] Uploading to /api/vfs/files/upload');
-      const res = await fetch('/api/vfs/files/upload', { method: 'POST', body: formData });
-      console.log('[ImageGridEditor] Upload response status:', res.status);
-      if (!res.ok) {
-        const errorText = await res.text();
-        throw new Error(`Upload failed: ${res.status} - ${errorText}`);
-      }
-      const json = await res.json();
-      console.log('[ImageGridEditor] Upload response JSON:', json);
-      const nodeId = json.data?.id;
-      if (nodeId) {
-        const url = `/api/vfs/nodes/${encodeURIComponent(nodeId)}/download`;
-        console.log('[ImageGridEditor] SUCCESS - Calling handleAddImage with:', { url, cellKey });
-        handleAddImage(url, cellKey);
-        console.log('[ImageGridEditor] handleAddImage called, onCropConfirm END ==========');
-      } else {
-        console.error('[ImageGridEditor] ERROR: No nodeId in response:', json);
-        alert('上传失败：服务器返回的数据无效');
-      }
-    } catch (err) {
-      console.error('[ImageGridEditor] Upload failed:', err);
-      alert('上传图片失败，请重试');
-    } finally {
-      setCropTarget(null);
-    }
-  }, [cropTarget, handleAddImage]);
+  }, [handleAddImage]);
 
   const handleUpdateItem = useCallback((cellKey: string, idx: number, updates: Partial<GridItem>) => {
-    setCells(prev => {
+    setCells((prev) => {
       const cell = prev[cellKey];
       if (!cell || !cell.items[idx]) return prev;
-      const newItems = [...cell.items];
-      newItems[idx] = { ...newItems[idx], ...updates };
-      return { ...prev, [cellKey]: { items: newItems } };
+      const nextItems = [...cell.items];
+      nextItems[idx] = { ...nextItems[idx], ...updates };
+      return { ...prev, [cellKey]: { items: nextItems } };
     });
   }, []);
 
   const handleMoveLayer = useCallback((cellKey: string, idx: number, direction: 'up' | 'down') => {
-    setCells(prev => {
+    setCells((prev) => {
       const cell = prev[cellKey];
       if (!cell) return prev;
+
       const items = [...cell.items];
-      let newIdx = idx;
+      let nextIndex = idx;
       if (direction === 'up' && idx < items.length - 1) {
         [items[idx], items[idx + 1]] = [items[idx + 1], items[idx]];
-        newIdx = idx + 1;
+        nextIndex = idx + 1;
       } else if (direction === 'down' && idx > 0) {
         [items[idx], items[idx - 1]] = [items[idx - 1], items[idx]];
-        newIdx = idx - 1;
+        nextIndex = idx - 1;
       } else {
-          return prev;
+        return prev;
       }
-      setSelectedItemIdx(newIdx); // This is fine here as it's not inside a nested state setter anymore if we are careful
+
+      setSelectedItemIdx(nextIndex);
       return { ...prev, [cellKey]: { items } };
     });
   }, []);
+
+  const handleDeleteSelected = useCallback(() => {
+    if (!selectedCell || selectedItemIdx === null) return;
+
+    setCells((prev) => {
+      const cell = prev[selectedCell];
+      if (!cell) return prev;
+      return {
+        ...prev,
+        [selectedCell]: {
+          items: cell.items.filter((_, index) => index !== selectedItemIdx),
+        },
+      };
+    });
+    setSelectedItemIdx(null);
+  }, [selectedCell, selectedItemIdx]);
+
+  const handleCropConfirm = useCallback(async (blob: Blob) => {
+    if (!editMode) return;
+
+    setCropMode(false);
+    setIsSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', blob, `grid_crop_${Date.now()}.png`);
+      const res = await fetch('/api/vfs/files/upload', { method: 'POST', body: formData });
+      if (!res.ok) throw new Error(await res.text());
+
+      const json = await res.json();
+      const fileNodeId = json?.data?.id as string | undefined;
+      if (!fileNodeId) throw new Error('上传裁切图片失败');
+
+      updateItemById(editMode.cellKey, editMode.itemId, {
+        url: `/api/vfs/nodes/${encodeURIComponent(fileNodeId)}/download`,
+      });
+    } catch (error) {
+      console.error('[ImageGridEditorModal] crop upload failed:', error);
+      alert('裁切图片失败，请重试');
+    } finally {
+      setIsSaving(false);
+    }
+  }, [editMode, updateItemById]);
 
   const handleSave = useCallback(async () => {
     if (!gridRef.current) return;
     setIsSaving(true);
     try {
-      // Hide controls/outlines before capture
-      const dataUrl = await htmlToImage.toPng(gridRef.current, {
-        pixelRatio: 2,
-        quality: 1,
-      });
-      
+      const dataUrl = await htmlToImage.toPng(gridRef.current, { pixelRatio: 2, quality: 1 });
       const blob = await (await fetch(dataUrl)).blob();
       const formData = new FormData();
       formData.append('file', blob, `grid_${Date.now()}.png`);
-      
       const res = await fetch('/api/vfs/files/upload', { method: 'POST', body: formData });
       if (!res.ok) throw new Error('Failed to save to VFS');
       const json = await res.json();
       const nodeId = json.data?.id;
-      
       if (nodeId) {
         onSave(`/api/vfs/nodes/${encodeURIComponent(nodeId)}/download`, nodeId);
         onClose();
       }
-    } catch (err) {
-      console.error('Export failed:', err);
+    } catch (error) {
+      console.error('Export failed:', error);
       alert('保存失败，请稍后重试');
     } finally {
       setIsSaving(false);
     }
-  }, [onSave, onClose]);
+  }, [onClose, onSave]);
 
-  const selectedItem = selectedCell && selectedItemIdx !== null ? cells[selectedCell]?.items[selectedItemIdx] : null;
+  const cellKeys = useMemo(() => {
+    const keys: string[] = [];
+    for (let r = 0; r < rows; r += 1) {
+      for (let c = 0; c < cols; c += 1) {
+        keys.push(getCellKey(r, c));
+      }
+    }
+    return keys;
+  }, [rows, cols]);
 
-  // Debug: log cells state changes
-  useEffect(() => {
-    console.log('[ImageGridEditor] cells state updated:', Object.keys(cells).map(k => `${k}:${cells[k]?.items?.length || 0}个`));
-  }, [cells]);
+  const selectedItems = selectedCell ? (cells[selectedCell]?.items || []) : [];
+  const selectedItem = selectedItemIdx !== null ? selectedItems[selectedItemIdx] ?? null : null;
+  const editItem = editMode?.isActive
+    ? cells[editMode.cellKey]?.items.find((item) => item.id === editMode.itemId) ?? null
+    : null;
 
   return createPortal(
     <div className="fixed inset-0 z-[10000] bg-black/90 flex flex-col backdrop-blur-md text-textMain">
-      {/* Header */}
       <div className="flex items-center justify-between px-6 py-4 border-b border-border/40 bg-surface/50">
         <div className="flex items-center gap-4">
           <h2 className="text-lg font-semibold flex items-center gap-2">
@@ -318,22 +359,23 @@ export default function ImageGridEditorModal({ initialImage, onSave, onClose }: 
             <div className="flex items-center gap-2">
               <span>布局:</span>
               <div className="flex items-center gap-1 bg-background/50 rounded-lg p-1 border border-border/20">
-                <button onClick={() => setRows(Math.max(1, rows - 1))} className="p-1 hover:text-textMain"><Minus size={14}/></button>
+                <button type="button" onClick={() => setRows(Math.max(1, rows - 1))} className="p-1 hover:text-textMain"><Minus size={14} /></button>
                 <span className="w-8 text-center text-textMain font-medium">{rows}行</span>
-                <button onClick={() => setRows(Math.min(5, rows + 1))} className="p-1 hover:text-textMain"><Plus size={14}/></button>
+                <button type="button" onClick={() => setRows(Math.min(5, rows + 1))} className="p-1 hover:text-textMain"><Plus size={14} /></button>
               </div>
               <div className="flex items-center gap-1 bg-background/50 rounded-lg p-1 border border-border/20">
-                <button onClick={() => setCols(Math.max(1, cols - 1))} className="p-1 hover:text-textMain"><Minus size={14}/></button>
+                <button type="button" onClick={() => setCols(Math.max(1, cols - 1))} className="p-1 hover:text-textMain"><Minus size={14} /></button>
                 <span className="w-8 text-center text-textMain font-medium">{cols}列</span>
-                <button onClick={() => setCols(Math.min(5, cols + 1))} className="p-1 hover:text-textMain"><Plus size={14}/></button>
+                <button type="button" onClick={() => setCols(Math.min(5, cols + 1))} className="p-1 hover:text-textMain"><Plus size={14} /></button>
               </div>
             </div>
             <div className="flex items-center gap-2">
               <span>比例:</span>
               <div className="flex gap-1">
-                {ASPECT_RATIOS.map(ar => (
-                  <button 
+                {ASPECT_RATIOS.map((ar) => (
+                  <button
                     key={ar.label}
+                    type="button"
                     onClick={() => setAspectRatio(ar.value)}
                     className={`px-2 py-1 rounded-md text-xs transition-colors ${aspectRatio === ar.value ? 'bg-accent/20 text-accent font-medium' : 'hover:bg-white/5'}`}
                   >
@@ -345,26 +387,17 @@ export default function ImageGridEditorModal({ initialImage, onSave, onClose }: 
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button 
-            onClick={onClose}
-            className="px-4 py-2 rounded-xl hover:bg-white/10 text-textMuted transition-colors flex items-center gap-2"
-          >
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-xl hover:bg-white/10 text-textMuted transition-colors flex items-center gap-2">
             <X size={18} /> 取消
           </button>
-          <button 
-            onClick={handleSave}
-            disabled={isSaving}
-            className="px-6 py-2 rounded-xl bg-accent hover:bg-accent/80 text-white font-medium transition-colors flex items-center gap-2 shadow-lg shadow-accent/20"
-          >
+          <button type="button" onClick={handleSave} disabled={isSaving} className="px-6 py-2 rounded-xl bg-accent hover:bg-accent/80 text-white font-medium transition-colors flex items-center gap-2 shadow-lg shadow-accent/20">
             {isSaving ? <Loader2 size={18} className="animate-spin" /> : <Save size={18} />}
             完成并入库
           </button>
         </div>
       </div>
 
-      {/* Main Content */}
       <div className="flex-1 flex overflow-hidden">
-        {/* Left Sidebar: Assets & Tools */}
         <div className="w-80 border-r border-border/40 bg-surface/30 p-4 flex flex-col gap-6 overflow-y-auto">
           <div>
             <h3 className="text-xs font-bold text-textMuted uppercase tracking-wider mb-4">当前单元格</h3>
@@ -372,15 +405,15 @@ export default function ImageGridEditorModal({ initialImage, onSave, onClose }: 
               <div className="space-y-4">
                 <div className="bg-background/40 rounded-xl p-4 border border-border/20">
                   <div className="text-sm font-medium mb-3 flex items-center justify-between">
-                    <span>图层 ({cells[selectedCell]?.items.length || 0})</span>
-                    <button 
+                    <span>图层 ({selectedItems.length})</span>
+                    <button
+                      type="button"
                       onClick={() => {
                         const targetCell = selectedCell || Object.keys(cells)[0];
-                        if (targetCell) {
-                          setSelectedCell(targetCell);
-                          targetUploadCellRef.current = targetCell;
-                          setTimeout(() => uploadInputRef.current?.click(), 50);
-                        }
+                        if (!targetCell) return;
+                        setSelectedCell(targetCell);
+                        targetUploadCellRef.current = targetCell;
+                        setTimeout(() => uploadInputRef.current?.click(), 50);
                       }}
                       className="p-1 hover:text-accent transition-colors"
                       title="添加图片"
@@ -388,205 +421,126 @@ export default function ImageGridEditorModal({ initialImage, onSave, onClose }: 
                       <Plus size={18} />
                     </button>
                   </div>
+
                   <div className="space-y-2">
-                    {[...(cells[selectedCell]?.items || [])].reverse().map((item, reverseIdx, arr) => {
+                    {[...selectedItems].reverse().map((item, reverseIdx, arr) => {
                       const idx = arr.length - 1 - reverseIdx;
                       return (
-                        <div 
+                        <div
                           key={item.id}
                           onClick={() => setSelectedItemIdx(idx)}
-                          className={`group flex items-center gap-3 p-2 rounded-lg cursor-pointer border transition-all ${
-                            selectedItemIdx === idx ? 'bg-accent/10 border-accent/40' : 'bg-black/20 border-transparent hover:border-border/40'
-                          }`}
+                          className={`group flex items-center gap-3 p-2 rounded-lg cursor-pointer border transition-all ${selectedItemIdx === idx ? 'bg-accent/10 border-accent/40' : 'bg-black/20 border-transparent hover:border-border/40'}`}
                         >
-                          <img src={item.url} className="w-10 h-10 rounded object-cover border border-white/10" />
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs truncate text-textMain font-medium">Layer {idx + 1}</div>
+                          <img src={item.url} alt={`图层 ${idx + 1}`} className="w-10 h-10 rounded object-cover border border-white/10" />
+                          <div className="min-w-0 flex-1">
+                            <div className="truncate text-sm text-textMain">图层 {idx + 1}</div>
+                            <div className="text-xs text-textMuted">{Math.round(item.scale * 100)}% · X {Math.round(item.x)} · Y {Math.round(item.y)}</div>
                           </div>
-                          <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleMoveLayer(selectedCell, idx, 'up'); }}
-                              className="p-1 hover:text-textMain"
-                              title="上移 (置前)"
-                            ><ChevronUp size={14}/></button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleMoveLayer(selectedCell, idx, 'down'); }}
-                              className="p-1 hover:text-textMain"
-                              title="下移 (置后)"
-                            ><ChevronDown size={14}/></button>
-                            <button 
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCells(prev => ({
-                                  ...prev,
-                                  [selectedCell]: { items: prev[selectedCell].items.filter((_, i) => i !== idx) }
-                                }));
-                                if (selectedItemIdx === idx) setSelectedItemIdx(null);
-                              }}
-                              className="p-1 hover:text-red-400"
-                              title="删除图层"
-                            ><Trash2 size={14}/></button>
+                          <div className="flex items-center gap-1 opacity-70 group-hover:opacity-100">
+                            <button type="button" onClick={(event) => { event.stopPropagation(); handleMoveLayer(selectedCell, idx, 'up'); }} className="p-1 hover:text-accent" title="上移图层"><ChevronUp size={16} /></button>
+                            <button type="button" onClick={(event) => { event.stopPropagation(); handleMoveLayer(selectedCell, idx, 'down'); }} className="p-1 hover:text-accent" title="下移图层"><ChevronDown size={16} /></button>
                           </div>
                         </div>
                       );
                     })}
-                    {(!cells[selectedCell]?.items.length) && (
-                      <div className="text-center py-8 border border-dashed border-border/20 rounded-lg">
-                        <button 
-                          onClick={() => uploadInputRef.current?.click()}
-                          className="text-xs text-textMuted hover:text-accent transition-colors flex flex-col items-center gap-2"
-                        >
-                          <Upload size={20} />
-                          点击上传图片
-                        </button>
-                      </div>
-                    )}
                   </div>
                 </div>
-
-                {selectedItem && (
-                  <div className="bg-background/40 rounded-xl p-4 border border-border/20 space-y-4">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-medium">变换</div>
-                      <button 
-                        onClick={() => handleUpdateItem(selectedCell, selectedItemIdx!, { scale: 1, x: 0, y: 0 })}
-                        className="text-[10px] bg-accent/20 text-accent px-2 py-0.5 rounded hover:bg-accent/30 transition-colors"
-                      >
-                        铺满
-                      </button>
-                    </div>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-textMuted">缩放</span>
-                        <div className="flex items-center gap-3">
-                          <button onClick={() => handleUpdateItem(selectedCell, selectedItemIdx!, { scale: Math.max(0.1, selectedItem.scale - 0.1) })} className="p-1 hover:text-textMain"><Minimize size={14}/></button>
-                          <span className="w-10 text-center font-mono">{(selectedItem.scale * 100).toFixed(0)}%</span>
-                          <button onClick={() => handleUpdateItem(selectedCell, selectedItemIdx!, { scale: Math.min(5, selectedItem.scale + 0.1) })} className="p-1 hover:text-textMain"><Maximize size={14}/></button>
-                        </div>
-                      </div>
-                      <input 
-                          type="range" min="10" max="500" value={selectedItem.scale * 100}
-                          onChange={(e) => handleUpdateItem(selectedCell, selectedItemIdx!, { scale: parseInt(e.target.value) / 100 })}
-                          className="w-full accent-accent h-1.5 rounded-lg appearance-none bg-border/40 cursor-pointer"
-                        />
-                      <div className="flex items-center justify-between text-xs pt-1">
-                        <span className="text-textMuted">位置 X</span>
-                        <span className="font-mono">{selectedItem.x}%</span>
-                      </div>
-                      <input 
-                        type="range" min="-100" max="100" value={selectedItem.x}
-                        onChange={(e) => handleUpdateItem(selectedCell, selectedItemIdx!, { x: parseInt(e.target.value) })}
-                        className="w-full accent-accent h-1.5 rounded-lg appearance-none bg-border/40 cursor-pointer"
-                      />
-                      <div className="flex items-center justify-between text-xs pt-1">
-                        <span className="text-textMuted">位置 Y</span>
-                        <span className="font-mono">{selectedItem.y}%</span>
-                      </div>
-                      <input 
-                        type="range" min="-100" max="100" value={selectedItem.y}
-                        onChange={(e) => handleUpdateItem(selectedCell, selectedItemIdx!, { y: parseInt(e.target.value) })}
-                        className="w-full accent-accent h-1.5 rounded-lg appearance-none bg-border/40 cursor-pointer"
-                      />
-                    </div>
-                  </div>
-                )}
               </div>
             ) : (
-              <div className="flex flex-col items-center justify-center py-20 text-textMuted">
-                <ImageIcon size={40} strokeWidth={1} className="mb-4 opacity-20" />
-                <p className="text-xs text-center">点击右侧网格单元<br/>开始编辑</p>
-              </div>
+              <div className="text-sm text-textMuted">请选择一个宫格单元格</div>
             )}
           </div>
+
+          {selectedItem && selectedCell && selectedItemIdx !== null && (
+            <div className="bg-background/40 rounded-xl p-4 border border-border/20 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-textMuted uppercase tracking-wider">图片变换</h3>
+                <button type="button" onClick={handleDeleteSelected} className="p-2 rounded-lg hover:bg-red-500/10 hover:text-red-300" title="删除当前图片"><Trash2 size={16} /></button>
+              </div>
+
+              <div className="grid gap-3 text-sm">
+                <label className="grid gap-2">
+                  <span className="text-textMuted">横向位置</span>
+                  <input type="range" min={-50} max={50} step={1} value={selectedItem.x} onChange={(event) => handleUpdateItem(selectedCell, selectedItemIdx, { x: Number(event.target.value) })} />
+                </label>
+                <label className="grid gap-2">
+                  <span className="text-textMuted">纵向位置</span>
+                  <input type="range" min={-50} max={50} step={1} value={selectedItem.y} onChange={(event) => handleUpdateItem(selectedCell, selectedItemIdx, { y: Number(event.target.value) })} />
+                </label>
+                <label className="grid gap-2">
+                  <span className="text-textMuted">缩放比例</span>
+                  <input type="range" min={0.1} max={5} step={0.1} value={selectedItem.scale} onChange={(event) => handleUpdateItem(selectedCell, selectedItemIdx, { scale: Number(event.target.value) })} />
+                </label>
+                <label className="grid gap-2">
+                  <span className="text-textMuted">旋转角度</span>
+                  <input type="range" min={-180} max={180} step={1} value={selectedItem.rotation ?? 0} onChange={(event) => handleUpdateItem(selectedCell, selectedItemIdx, { rotation: Number(event.target.value) })} />
+                </label>
+              </div>
+
+              <div className="rounded-xl bg-black/20 border border-white/5 p-3 text-xs text-textMuted space-y-2">
+                <div className="flex items-center gap-2"><Move size={14} /> 左键拖拽移动图片</div>
+                <div className="flex items-center gap-2"><MousePointer2 size={14} /> 中键按住后滚轮缩放</div>
+                <div>双击图片进入编辑模式，ESC 可退出</div>
+              </div>
+            </div>
+          )}
         </div>
 
-        {/* Center: Canvas Area */}
-        <div className="flex-1 bg-black/40 p-12 flex items-center justify-center overflow-hidden">
-          <div 
-            className="shadow-2xl shadow-black/80 relative transition-all duration-300"
-            style={{
-              width: `min(calc(100vw - 400px), calc((100vh - 200px) * ${aspectRatio}))`,
-              aspectRatio: aspectRatio,
-            }}
-          >
-            <div 
+        <div className="flex-1 p-6 overflow-auto">
+          <div className="mx-auto w-full max-w-[calc(100vw-420px)] flex items-center justify-center min-h-full">
+            <div
               ref={gridRef}
-              className="w-full h-full grid bg-surface border border-white/5 overflow-hidden"
+              className="grid gap-0 border border-border/30 bg-black/20 p-0 shadow-2xl overflow-hidden"
               style={{
-                gridTemplateRows: `repeat(${rows}, 1fr)`,
-                gridTemplateColumns: `repeat(${cols}, 1fr)`,
-                gap: '1px',
-                background: 'rgba(255,255,255,0.05)',
+                gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                aspectRatio: `${aspectRatio}`,
+                maxWidth: 'min(100%, calc(100vw - 420px))',
+                maxHeight: 'calc(100vh - 160px)',
+                width: `min(calc((100vh - 160px) * ${aspectRatio}), calc(100vw - 420px))`,
+                height: 'auto',
               }}
             >
-              {rows > 0 && Array.from({ length: rows * cols }).map((_, i) => {
-                const r = Math.floor(i / cols);
-                const c = i % cols;
-                const key = `${r}-${c}`;
-                const isActive = selectedCell === key;
-                const cellItems = cells[key]?.items || [];
-                
-                if (i === 0) {
-                  console.log('[ImageGridEditor] ===== GRID RENDER START =====');
-                  console.log('[ImageGridEditor] rows:', rows, 'cols:', cols);
-                  console.log('[ImageGridEditor] cells state:', JSON.stringify(
-                    Object.keys(cells).reduce((acc, k) => {
-                      acc[k] = cells[k]?.items?.length || 0;
-                      return acc;
-                    }, {} as Record<string, number>)
-                  ));
-                  console.log('[ImageGridEditor] selectedCell:', selectedCell);
-                  console.log('[ImageGridEditor] RENDER cell:', key, 'isActive:', isActive, 'cellItems count:', cellItems.length);
-                }
-                
+              {cellKeys.map((cellKey) => {
+                const [row, col] = cellKey.split('-').map(Number);
                 return (
-                  <div 
-                    key={key}
-                    onClick={(e) => {
-                      const isPlusClick = (e.target as HTMLElement).closest('.plus-trigger');
-                      setSelectedCell(key);
-                      setSelectedItemIdx(cellItems.length > 0 ? 0 : null);
-                      
-                      // Always update target cell for upload - this ensures we can always upload
-                      targetUploadCellRef.current = key;
-                      
-                      // Trigger upload when clicking on an empty cell or explicitly on plus button
-                      if (!cellItems.length || isPlusClick) {
-                        setTimeout(() => uploadInputRef.current?.click(), 50);
-                      }
+                  <div
+                    key={cellKey}
+                    ref={(element) => {
+                      if (element) cellRefs.current.set(cellKey, element);
+                      else cellRefs.current.delete(cellKey);
                     }}
-                    className={`relative group bg-surfaceHighlight overflow-hidden cursor-pointer transition-all duration-200 ${
-                      isActive ? 'ring-2 ring-inset ring-accent z-10 shadow-lg shadow-accent/20' : 'hover:bg-white/5 border border-white/5'
-                    }`}
+                    className="relative min-h-[160px] h-full"
                   >
-                    {cellItems.map((item, idx) => (
-                      <div 
-                        key={item.id}
-                        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                        style={{
-                          zIndex: idx,
-                          transform: `translate(${item.x}%, ${item.y}%) scale(${item.scale})`,
-                        }}
-                      >
-                        <img 
-                          src={item.url} 
-                          className="w-full h-full object-cover" 
-                          alt={`Layer ${idx + 1}`}
-                          onLoad={(e) => {
-                            console.log(`[ImageGridEditor] RENDER Image loaded in cell ${key}:`, { idx, url: item.url, naturalWidth: e.currentTarget.naturalWidth });
-                          }}
-                          onError={() => console.error(`[ImageGridEditor] RENDER Image failed to load in cell ${key}:`, item.url)}
-                        />
-                      </div>
-                    ))}
-                    
-                    {!cellItems.length && (
-                      <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity plus-trigger">
-                         <div className="w-10 h-10 rounded-full bg-accent/20 border border-accent flex items-center justify-center text-accent shadow-lg shadow-accent/20">
-                           <Plus size={20} />
-                         </div>
-                      </div>
-                    )}
+                    <GridCell
+                      cellKey={cellKey}
+                      row={row}
+                      col={col}
+                      items={cells[cellKey]?.items || []}
+                      isActive={selectedCell === cellKey}
+                      onSelect={(key) => {
+                        setSelectedCell(key);
+                        setSelectedItemIdx(null);
+                      }}
+                      onItemUpdate={(itemId, updates) => updateItemById(cellKey, itemId, updates)}
+                      onItemSelect={setSelectedItemIdx}
+                      selectedItemIdx={selectedCell === cellKey ? selectedItemIdx : null}
+                      draggingItemId={draggingItemId}
+                      zoomingItemId={zoomingItemId}
+                      onImageDragStart={(event, item) => handleDragStart(event, item, cellKey)}
+                      onImageZoomStart={handleZoomStart}
+                      onImageWheelZoom={handleWheelZoom}
+                      onUploadClick={() => {
+                        setSelectedCell(cellKey);
+                        targetUploadCellRef.current = cellKey;
+                        setTimeout(() => uploadInputRef.current?.click(), 50);
+                      }}
+                      onImageDoubleClick={(item) => {
+                        const idx = (cells[cellKey]?.items || []).findIndex((candidate) => candidate.id === item.id);
+                        setSelectedCell(cellKey);
+                        if (idx !== -1) setSelectedItemIdx(idx);
+                        setEditMode({ isActive: true, cellKey, itemId: item.id });
+                      }}
+                    />
                   </div>
                 );
               })}
@@ -595,50 +549,67 @@ export default function ImageGridEditorModal({ initialImage, onSave, onClose }: 
         </div>
       </div>
 
-      {/* Hidden Upload */}
       <input ref={uploadInputRef} type="file" accept="image/*" className="hidden" onChange={handleUpload} />
 
-      {/* Crop Overlay */}
-      {cropTarget && (
-        <ImageCropOverlay 
-          thumbUrl={cropTarget.url}
-          fullUrl={cropTarget.url}
-          onConfirm={onCropConfirm}
-          onCancel={() => setCropTarget(null)}
-          onUseOriginal={async (blob: Blob) => {
-            console.log('[ImageGridEditor] onUseOriginal called with blob, uploading directly...');
-            try {
-              const formData = new FormData();
-              formData.append('file', blob, `original_${Date.now()}.png`);
-              console.log('[ImageGridEditor] onUseOriginal - uploading to /api/vfs/files/upload');
-              const res = await fetch('/api/vfs/files/upload', { method: 'POST', body: formData });
-              console.log('[ImageGridEditor] onUseOriginal - upload response status:', res.status);
-              if (!res.ok) {
-                const errorText = await res.text();
-                throw new Error(`Upload failed: ${res.status} - ${errorText}`);
-              }
-              const json = await res.json();
-              console.log('[ImageGridEditor] onUseOriginal - upload response JSON:', json);
-              const nodeId = json.data?.id;
-              if (nodeId) {
-                const url = `/api/vfs/nodes/${encodeURIComponent(nodeId)}/download`;
-                console.log('[ImageGridEditor] onUseOriginal - SUCCESS, calling handleAddImage with:', { url, cellKey: cropTarget.cellKey });
-                handleAddImage(url, cropTarget.cellKey);
-                console.log('[ImageGridEditor] onUseOriginal - handleAddImage called, END');
-              } else {
-                console.error('[ImageGridEditor] onUseOriginal - No nodeId in response:', json);
-                alert('上传失败：服务器返回的数据无效');
-              }
-            } catch (err) {
-              console.error('[ImageGridEditor] onUseOriginal - Upload failed:', err);
-              alert('上传图片失败，请重试');
-            } finally {
-              setCropTarget(null);
-            }
-          }}
+      {zoomToast && <ZoomToast message={zoomToast} />}
+
+      {editMode?.isActive && editItem && (
+        <div className="fixed inset-0 z-[10001] bg-black/95 flex flex-col">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+            <div>
+              <div className="text-lg font-semibold">编辑模式</div>
+              <div className="text-sm text-textMuted">当前提供大图预览、裁切入口、旋转与重置能力。</div>
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setCropMode(true)}
+                className="px-4 py-2 rounded-xl hover:bg-white/10"
+              >
+                裁切
+              </button>
+              <button
+                type="button"
+                onClick={() => updateItemById(editMode.cellKey, editMode.itemId, { x: 0, y: 0, scale: 1, rotation: 0 })}
+                className="px-4 py-2 rounded-xl hover:bg-white/10"
+              >
+                重置
+              </button>
+              <button type="button" onClick={() => setEditMode(null)} className="px-4 py-2 rounded-xl bg-accent text-white hover:bg-accent/80">完成</button>
+            </div>
+          </div>
+
+          <div className="relative flex-1 flex items-center justify-center overflow-hidden p-8">
+            <img
+              src={editItem.url}
+              alt="编辑中的图片"
+              className="max-w-full max-h-full object-contain"
+              style={{ transform: transformToCSS({ x: editItem.x, y: editItem.y, scale: editItem.scale, rotation: editItem.rotation ?? 0 }) }}
+            />
+            <div
+              className="absolute inset-8 pointer-events-none grid border border-white/20 opacity-20"
+              style={{
+                gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))`,
+              }}
+            >
+              {cellKeys.map((key) => (
+                <div key={key} className="border border-white/20" />
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {cropMode && editMode?.isActive && editItem && (
+        <ImageCropOverlay
+          thumbUrl={editItem.url}
+          fullUrl={editItem.url}
+          onConfirm={(blob) => void handleCropConfirm(blob)}
+          onCancel={() => setCropMode(false)}
         />
       )}
     </div>,
-    document.body
+    document.body,
   );
 }

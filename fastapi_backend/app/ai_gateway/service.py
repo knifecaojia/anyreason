@@ -18,6 +18,7 @@ from app.core.exceptions import AppError
 from app.crypto import build_fernet
 from app.log import logger
 from app.models import AIModelBinding, AIModelConfig, AIUsageEvent
+from app.services.credit_price_service import credit_price_service
 from app.services.credit_service import credit_service
 
 
@@ -254,7 +255,11 @@ class AIGatewayService:
             default_binding_key="chatbox",
         )
 
-        credits_cost = int(credits_cost or 0)
+        # Use dynamic pricing from credit_price_service
+        from app.models import AIModelConfig
+        model_config = await db.get(AIModelConfig, cfg_id)
+        credits_cost = credit_price_service.get_model_cost(model_config) if model_config else 1
+
         consumed_credits = 0
         if credits_cost > 0:
             await credit_service.adjust_balance(
@@ -379,9 +384,11 @@ class AIGatewayService:
             if spec:
                 param_json = validate_video_request(spec, param_json)
 
-        # Calculate cost (TODO: Dynamic pricing based on model metadata)
-        credits_cost = 10 if category == "video" else 5
-        
+        # Use dynamic pricing from credit_price_service
+        from app.models import AIModelConfig
+        model_config = await db.get(AIModelConfig, cfg_id)
+        credits_cost = credit_price_service.get_model_cost(model_config) if model_config else credit_price_service.get_cost_by_category(category)
+
         consumed_credits = 0
         if credits_cost > 0:
             await credit_service.adjust_balance(

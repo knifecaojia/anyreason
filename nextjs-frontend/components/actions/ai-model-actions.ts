@@ -65,6 +65,7 @@ export type AIModelConfig = {
   base_url?: string | null;
   enabled: boolean;
   sort_order: number;
+  credits_cost: number;
   has_api_key: boolean;
   plaintext_api_key?: string | null;
   api_keys_info?: AIModelKeyInfo[] | null;

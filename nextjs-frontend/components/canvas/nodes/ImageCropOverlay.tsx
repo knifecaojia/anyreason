@@ -176,7 +176,7 @@ export default function ImageCropOverlay({ thumbUrl, fullUrl, onConfirm, onCance
   return createPortal(
     <div
       ref={containerRef}
-      className="fixed inset-0 z-[9998] bg-black/70 flex items-center justify-center backdrop-blur-sm"
+      className="fixed inset-0 z-[10002] bg-black/70 flex items-center justify-center backdrop-blur-sm"
       onClick={(e) => { if (e.target === containerRef.current) onCancel(); }}
     >
       <div className="relative max-w-[85vw] max-h-[85vh] flex flex-col items-center gap-3">

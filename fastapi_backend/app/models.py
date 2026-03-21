@@ -185,6 +185,7 @@ class AIModelConfig(Base):
     api_keys_info = Column(JSONB, nullable=True)
     enabled = Column(Boolean, nullable=False, server_default=text("true"), default=True)
     sort_order = Column(Integer, nullable=False, server_default=text("0"))
+    credits_cost = Column(Integer, nullable=False, server_default=text("0"))
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
     updated_at = Column(DateTime(timezone=True), nullable=False, server_default=text("now()"))
 

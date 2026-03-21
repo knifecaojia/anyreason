@@ -332,6 +332,11 @@ export default function BatchVideoPage() {
 
   const splitSourceToCards = async (source: UploadedSource) => {
     if (!currentJob) return;
+    // 防止重复拆分
+    if (source.processed) {
+      toast.info("该图片已经拆分过了");
+      return;
+    }
     if (!selectedExcelColumn || excelMappings.length === 0) {
       toast.error("请先上传 Excel 并选择要处理的列");
       setActiveTab("script-prep");
@@ -1127,7 +1132,10 @@ export default function BatchVideoPage() {
             const source = uploadedSources.find((s) => s.id === pendingSplitSourceId);
             if (source) {
               setPendingSplitSourceId(null);
-              await splitSourceToCards(source);
+              // 使用更新后的 source（包含 linkedCellKey）执行拆分
+              const cellLabel = `${cell.columnKey}${cell.rowIndex + 1}`;
+              const updatedSource = { ...source, linkedCellKey: cell.id, linkedCellLabel: cellLabel };
+              await splitSourceToCards(updatedSource);
             }
           }
         }}

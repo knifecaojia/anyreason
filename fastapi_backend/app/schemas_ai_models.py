@@ -26,6 +26,7 @@ class AIModelConfigRead(BaseModel):
     base_url: str | None = None
     enabled: bool
     sort_order: int
+    credits_cost: int
     has_api_key: bool
     plaintext_api_key: str | None = None
     api_keys_info: list[AIModelKeyInfo] | None = None
@@ -45,6 +46,7 @@ class AdminAIModelConfigCreateRequest(BaseModel):
     api_keys_info: list[AIModelKeyInfo] | None = None
     enabled: bool = True
     sort_order: int = 0
+    credits_cost: int = 0
 
 
 class AdminAIModelConfigUpdateRequest(BaseModel):
@@ -57,6 +59,7 @@ class AdminAIModelConfigUpdateRequest(BaseModel):
     api_keys_info: list[AIModelKeyInfo] | None = None
     enabled: bool | None = None
     sort_order: int | None = None
+    credits_cost: int | None = None
 
 
 class AIModelBindingRead(BaseModel):

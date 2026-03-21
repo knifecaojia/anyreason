@@ -93,6 +93,7 @@ def _cfg_read(row) -> AIModelConfigRead:
         base_url=row.base_url,
         enabled=bool(row.enabled),
         sort_order=int(row.sort_order or 0),
+        credits_cost=int(row.credits_cost or 0),
         has_api_key=bool(row.encrypted_api_key or row.plaintext_api_key or row.api_keys_info),
         plaintext_api_key=row.plaintext_api_key,
         api_keys_info=row.api_keys_info,

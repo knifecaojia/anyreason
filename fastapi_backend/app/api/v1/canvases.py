@@ -194,6 +194,7 @@ async def upsert_canvas_nodes(
             canvas_id=canvas_id,
             frontend_node_id=item.frontend_node_id,
             node_type=item.node_type,
+            status="pending",
             source_storyboard_id=item.source_storyboard_id,
             source_asset_id=item.source_asset_id,
             config_json=item.config_json,
@@ -201,6 +202,7 @@ async def upsert_canvas_nodes(
             constraint="uq_canvas_nodes_canvas_frontend_id",
             set_={
                 "node_type": item.node_type,
+                "status": "pending",
                 "source_storyboard_id": item.source_storyboard_id,
                 "source_asset_id": item.source_asset_id,
                 "config_json": item.config_json,

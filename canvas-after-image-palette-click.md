@@ -1,0 +1,86 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e69]:
+    - banner [ref=e70]:
+      - generic [ref=e71]:
+        - button "返回画布列表 (ESC)" [ref=e72] [cursor=pointer]:
+          - img [ref=e73]
+        - button "redis-fix-verify-canvas" [ref=e75] [cursor=pointer]:
+          - generic [ref=e76]: redis-fix-verify-canvas
+          - img [ref=e77]
+      - generic [ref=e200]:
+        - img [ref=e201]
+        - text: 已保存
+    - generic [ref=e84]:
+      - generic [ref=e86]:
+        - application [ref=e87]:
+          - generic "Control Panel" [ref=e90]:
+            - button "Zoom In" [ref=e91] [cursor=pointer]:
+              - img [ref=e92]
+            - button "Zoom Out" [ref=e94] [cursor=pointer]:
+              - img [ref=e95]
+            - button "Fit View" [ref=e97] [cursor=pointer]:
+              - img [ref=e98]
+            - button "Toggle Interactivity" [ref=e100] [cursor=pointer]:
+              - img [ref=e101]
+          - link "React Flow attribution" [ref=e104] [cursor=pointer]:
+            - /url: https://reactflow.dev
+            - text: React Flow
+        - generic [ref=e106]:
+          - button "展开节点库" [ref=e107] [cursor=pointer]:
+            - img [ref=e108]
+          - generic "文本笔记" [ref=e111]:
+            - img [ref=e112]
+          - generic "剧本节点" [ref=e115]:
+            - img [ref=e116]
+          - generic "分镜节点" [ref=e119]:
+            - img [ref=e120]
+          - generic "提示词" [ref=e125]:
+            - img [ref=e126]
+          - generic "文本生成" [ref=e128]:
+            - img [ref=e129]
+          - generic "图片节点" [ref=e131]:
+            - img [ref=e132]
+          - generic "视频节点" [ref=e136]:
+            - img [ref=e137]
+          - generic "拆分节点" [ref=e139]:
+            - img [ref=e140]
+          - generic "提取节点" [ref=e146]:
+            - img [ref=e147]
+          - generic "资产节点" [ref=e152]:
+            - img [ref=e153]
+          - generic "分组节点" [ref=e157]:
+            - img [ref=e158]
+        - generic [ref=e165]:
+          - button "已保存" [ref=e203] [cursor=pointer]:
+            - img [ref=e204]
+            - generic [ref=e169]: 已保存
+          - button "导入" [ref=e171] [cursor=pointer]:
+            - img [ref=e172]
+            - generic [ref=e175]: 导入
+          - button "导出" [ref=e176] [cursor=pointer]:
+            - img [ref=e177]
+            - generic [ref=e180]: 导出
+      - generic [ref=e181]:
+        - generic [ref=e182]:
+          - generic [ref=e183]:
+            - button "剧本" [ref=e184] [cursor=pointer]
+            - button "故事板" [ref=e185] [cursor=pointer]
+            - button "资产库" [ref=e186] [cursor=pointer]
+            - button "画布详情" [ref=e187] [cursor=pointer]
+          - button "▸" [ref=e188] [cursor=pointer]
+        - generic [ref=e190]:
+          - generic [ref=e191]:
+            - generic [ref=e192]: 剧本
+            - combobox [ref=e193]:
+              - option "选择剧本" [selected]
+              - option "123"
+              - option "测试剧本"
+          - generic [ref=e194]:
+            - generic [ref=e195]: 分集
+            - combobox [disabled] [ref=e196]:
+              - option "选择分集" [selected]
+          - generic [ref=e197]:
+            - generic [ref=e198]: 镜头列表
+            - generic [ref=e199]: 请选择剧本和分集
+  - region "Notifications alt+T"
+  - alert [ref=e25]

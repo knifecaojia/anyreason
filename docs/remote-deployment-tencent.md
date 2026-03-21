@@ -246,7 +246,10 @@ ssh -i C:\Users\Administrator\.ssh\id_ed25519 root@101.34.74.166 "docker exec do
 ### 默认管理员账户
 
 - **邮箱**: `admin@example.com`
-- **密码**: `1235anyreason1235`
+- **密码**: `12345678`
+
+> [!NOTE]
+> 此密码已通过 Playwright 实际登录验证。若远程部署时登录失败，需检查 `.env` 中的 `DEFAULT_ADMIN_PASSWORD` 配置或确认数据库中用户记录存在。
 
 ### 环境变量
 
@@ -538,3 +541,137 @@ Location: http://<host>/api/v1/tasks/...
 2. 查 preview API 是否从 `task.input_json` 提取 `prompt`
 3. 查数据库里 `tasks.input_json.prompt` 是否真的有值
 4. 如果值为空，再继续追前端提交 / 后端入库链路
+
+### 7. 容器重启不等于代码更新（镜像构建 vs 文件挂载）
+
+**现象**：
+- 本地修改了 `canvases.py` 或 `proxy.ts` 后，在宿主机上重启容器
+- 远程服务仍然报旧错误，例如 `/studio` 仍然跳转到登录页，`/api/canvases` 仍然 500
+
+**根因**：
+Docker 镜像是一次性打包的。修改宿主机文件再重启容器，**不会更新容器内已经打包好的代码**。除非使用 volume 挂载（本地开发模式），否则必须重新 `docker compose build` 重建镜像。
+
+**正确流程**：
+```bash
+# 必须重新构建镜像
+cd /root/anyreason/docker-deploy
+docker compose build backend
+docker compose up -d backend
+```
+
+### 8. 紧急修复：向运行中的容器注入文件
+
+**适用场景**：
+- 远程 `docker build` 因网络问题（如 uv installer 下载 `unexpected EOF`）失败
+- 需要临时恢复服务，不能等待构建修复
+
+**操作步骤**（以修复 `canvases.py` 为例）：
+
+```bash
+# 1. 在本地准备好修复后的文件
+# 2. 复制到容器内
+docker cp canvases.py <container_name>:/app/app/routers/canvases.py
+
+# 3. 重启容器让代码生效
+docker compose restart backend
+```
+
+**验证修复**：
+```bash
+# 确认容器内文件已更新
+docker exec <container_name> sed -n '20,30p' /app/app/routers/canvases.py
+```
+
+> [!WARNING]
+> 这是临时应急手段，不等于正确部署。事后仍需修复构建问题并重新构建镜像。
+
+### 9. `/studio` 认证失败的排查方法
+
+**现象**：
+- 登录成功后访问 `/studio` 被重定向到 `/login?next=%2Fstudio`
+- 页面不报错，但用户被踢回登录页
+
+**诊断工具：Playwright**
+
+使用 Playwright 模拟完整登录流程：
+
+```python
+async def test_studio_access():
+    await page.goto("http://101.34.74.166/login")
+    await page.fill('input[name="email"]', "admin@example.com")
+    await page.fill('input[name="password"]', "12345678")
+    await page.click('button[type="submit"]')
+    await page.wait_for_url("**/dashboard")
+    
+    # 进入 studio
+    await page.goto("http://101.34.74.166/studio")
+    
+    # 检查是否留在 studio 或被踢回 login
+    print(page.url)  # 如果是 /studio 则正常，如果是 /login 说明认证失败
+```
+
+**常见根因：middleware 中 SDK 调用在 Server Runtime 不稳定**
+
+`nextjs-frontend/proxy.ts` 中若使用 SDK（如 `usersCurrentUser()`），在 Next.js Server Runtime 中可能表现不稳定。
+
+**解决方案**：将 middleware 中的认证检查改为直接 `fetch` 后端 API：
+
+```typescript
+// 不推荐（SDK 在 server runtime 可能不稳定）
+const session = await usersCurrentUser();
+
+// 推荐（直接 fetch 更可靠）
+const res = await fetch(`${process.env.BACKEND_URL}/api/v1/users/me`, {
+    headers: { cookie: request.headers.get('cookie') ?? '' }
+});
+if (!res.ok) return NextResponse.redirect(new URL('/login', request.url));
+```
+
+### 10. Canvas 创建 500 根因：数据库 NOT NULL 约束冲突
+
+**现象**：
+- 前端点击"创建 Canvas"返回 500
+- 后端日志显示：`null value in column "status" of relation "canvases" violates not-null constraint`
+
+**根因**：
+远程后端容器中的 `canvases.py` 代码版本较旧，创建 canvas 时没有设置 `status="draft"`，导致写入数据库时该字段为 NULL，触发 PostgreSQL 的 NOT NULL 约束。
+
+**修复方法**：
+1. 确认本地 `canvases.py` 中创建逻辑包含 `status="draft"`
+2. 重新构建后端镜像并部署
+3. 或使用前述文件注入方法临时修复
+
+### 11. 验证容器代码与宿主机文件是否一致
+
+**场景**：
+- Dockerfile 构建因网络问题失败或下载了错误版本
+- 容器可能运行的是旧镜像，但 `docker ps` 显示 "running"
+
+**排查步骤**：
+
+```bash
+# 1. 检查宿主机文件（可能已更新）
+cat /root/anyreason/fastapi_backend/app/routers/canvases.py | grep -A5 "def create_canvas"
+
+# 2. 检查容器内文件（实际运行的代码）
+docker exec docker-deploy-backend-1 sed -n '50,60p' /app/app/routers/canvases.py
+
+# 3. 如果不一致，说明容器没有使用新镜像
+docker images | grep anyreason
+docker compose ps
+```
+
+### 12. 网络问题导致 Dockerfile 构建失败的连锁反应
+
+**现象**：
+- `docker compose build` 失败，错误信息包含 `unexpected EOF` 或 `curl: (56) Recv failure`
+- 常见于下载 uv installer 或其他远程资源时网络中断
+
+**后果**：
+- 构建失败后，现有容器继续运行旧版本镜像
+- `docker ps` 显示服务 "running"，但代码仍是旧的
+
+**预防措施**：
+- 提前准备好 uv 等工具的离线包
+- 使用国内镜像源（如果适用）
+- 构建前检查网络连通性

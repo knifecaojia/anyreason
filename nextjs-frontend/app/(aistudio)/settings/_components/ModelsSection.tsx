@@ -914,6 +914,21 @@ export function ModelsSection(props: {
                     />
                   </div>
                   <div className="space-y-2">
+                    <label className="text-xs text-textMuted font-bold">积分价格</label>
+                    <input
+                      value={String(catalogDraft.credits_cost ?? 0)}
+                      onChange={(e) => setCatalogDraft((p: any) => ({ ...p, credits_cost: Number(e.target.value || 0) }))}
+                      className="w-full bg-surfaceHighlight border border-border rounded-lg p-3 text-sm outline-none focus:border-primary text-textMain"
+                      type="number"
+                      min="0"
+                      step="1"
+                      disabled={catalogConfigSubmitting}
+                    />
+                    <p className="text-[11px] text-textMuted">
+                      0表示使用默认定价（文本1积分/图片5积分/视频50积分）
+                    </p>
+                  </div>
+                  <div className="space-y-2">
                     <label className="text-xs text-textMuted font-bold">启用</label>
                     <div className="flex items-center gap-2 pt-2">
                       <input
