@@ -23,7 +23,7 @@ async def resolve_text_model_for_pydantic_ai(
     binding_key: str | None,
     ai_model_config_id: UUID | None,
 ) -> PydanticAIResolvedModel:
-    cfg, cfg_id, resolved_binding_key = await ai_gateway_service._resolve_model_config(
+    cfg, cfg_id, resolved_binding_key, _ = await ai_gateway_service._resolve_model_config(
         db=db,
         category="text",
         binding_key=binding_key,
