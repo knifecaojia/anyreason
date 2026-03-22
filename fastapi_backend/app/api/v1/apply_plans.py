@@ -485,7 +485,7 @@ async def api_execute_apply_plan(
             if existing_asset and a.first_appearance_episode:
                 # Try to extract episode number from "EP001" or similar
                 ep_num = None
-                ep_match = re.search(r"(\d+)", a.first_appearance_episode)
+                ep_match = re.search(r"(\d+)", str(a.first_appearance_episode))
                 if ep_match:
                     try:
                         ep_num = int(ep_match.group(1))
