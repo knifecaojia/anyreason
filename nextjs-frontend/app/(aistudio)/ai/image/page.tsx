@@ -4,6 +4,8 @@ import { useState, useCallback } from "react";
 import { MediaGenerationResponse, ModelCapabilities } from "@/lib/aistudio/types";
 import { generateMedia } from "@/components/actions/ai-media-actions";
 import { ModelSelector } from "@/components/ai/ModelSelector";
+import { CreditCostPreview } from "@/components/credits/CreditCostPreview";
+import { useCredits } from "@/components/credits/CreditsContext";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 
@@ -16,6 +18,7 @@ export default function ImageGenerationPage() {
     const [loading, setLoading] = useState(false);
     const [result, setResult] = useState<MediaGenerationResponse | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const { balance, refresh } = useCredits();
 
     const handleModelSelect = useCallback((code: string, c: ModelCapabilities) => {
         setSelectedModelCode(code);
@@ -39,6 +42,7 @@ export default function ImageGenerationPage() {
             setError(e.message || "生成失败");
         } finally {
             setLoading(false);
+            refresh().catch(console.error);
         }
     };
 
@@ -56,6 +60,20 @@ export default function ImageGenerationPage() {
                         negativePrompt={negativePrompt}
                         onNegativePromptChange={setNegativePrompt}
                     />
+                    <div className="flex items-center justify-between gap-3 rounded-lg border border-border/60 bg-background/40 p-3">
+                        <div className="min-w-0">
+                            <div className="text-xs font-medium text-foreground">生成前积分预估</div>
+                            <div className="text-[11px] text-muted-foreground">
+                                {selectedModelCode ? `当前模型：${selectedModelCode}` : "请选择模型后查看积分预估"}
+                            </div>
+                        </div>
+                        <CreditCostPreview
+                            category="image"
+                            userBalance={balance}
+                            size="sm"
+                            className="shrink-0"
+                        />
+                    </div>
                     <Button onClick={handleGenerate} disabled={loading || !prompt} className="w-full">
                         {loading ? "生成中..." : "生成图片"}
                     </Button>

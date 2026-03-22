@@ -260,38 +260,83 @@ class AIGatewayService:
         model_config = await db.get(AIModelConfig, cfg_id)
         credits_cost = credit_price_service.get_model_cost(model_config) if model_config else 1
 
+        # Track event data for creation after operation completes
+        event_data: dict[str, Any] = {
+            "manufacturer": cfg.manufacturer,
+            "model": cfg.model,
+            "has_attachments": bool(attachments),
+        }
+
         consumed_credits = 0
+        original_txn_id: str | None = None
+        error_code: str | None = None
+        event_id: str | None = None  # Initialize to avoid "possibly unbound" errors
+        placeholder_event: AIUsageEvent | None = None  # Track placeholder for update
+
         if credits_cost > 0:
-            await credit_service.adjust_balance(
+            # Pre-create placeholder event to get ID for linking
+            placeholder_event = AIUsageEvent(
+                user_id=user_id,
+                category="text",
+                binding_key=resolved_binding_key,
+                ai_model_config_id=cfg_id,
+                cost_credits=0,
+                latency_ms=0,
+                error_code=None,
+                raw_payload=event_data,
+            )
+            db.add(placeholder_event)
+            await db.flush()
+            event_id = str(placeholder_event.id)
+
+            account, txn = await credit_service.adjust_balance(
                 db=db,
                 user_id=user_id,
                 delta=-credits_cost,
                 reason="ai.consume",
                 actor_user_id=None,
-                meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                meta={
+                    "trace_type": "ai",
+                    "category": "text",
+                    "binding_key": resolved_binding_key,
+                    "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                    "ai_usage_event_id": event_id,
+                    "refunded": False,
+                },
                 allow_negative=False,
             )
             await db.commit()
             consumed_credits = credits_cost
+            original_txn_id = str(txn.id) if txn else None
 
         started = time.perf_counter()
-        error_code: str | None = None
         raw: dict[str, Any] | None = None
         try:
             provider = provider_factory.get_text_provider(manufacturer=cfg.manufacturer)
             merged_messages = _merge_attachments(messages, attachments)
             raw = await provider.chat_completions(cfg=cfg, messages=merged_messages, timeout_seconds=60.0)
             return raw
-        except AppError:
+        except AppError as e:
             error_code = "app_error"
-            if consumed_credits > 0:
+            if consumed_credits > 0 and original_txn_id:
                 await credit_service.adjust_balance(
                     db=db,
                     user_id=user_id,
                     delta=consumed_credits,
                     reason="ai.refund",
                     actor_user_id=None,
-                    meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={
+                        "trace_type": "ai",
+                        "category": "text",
+                        "binding_key": resolved_binding_key,
+                        "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                        "ai_usage_event_id": event_id if credits_cost > 0 else None,
+                        "refunded": True,
+                        "original_transaction_id": original_txn_id,
+                        "original_delta": -consumed_credits,
+                        "error_code": "app_error",
+                        "error_message": str(e.msg) if hasattr(e, 'msg') else None,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
@@ -310,14 +355,25 @@ class AIGatewayService:
                     "raw_error": str(e),
                 }
             ).exception("ai_gateway.chat_text_failed")
-            if consumed_credits > 0:
+            if consumed_credits > 0 and original_txn_id:
                 await credit_service.adjust_balance(
                     db=db,
                     user_id=user_id,
                     delta=consumed_credits,
                     reason="ai.refund",
                     actor_user_id=None,
-                    meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={
+                        "trace_type": "ai",
+                        "category": "text",
+                        "binding_key": resolved_binding_key,
+                        "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                        "ai_usage_event_id": event_id if credits_cost > 0 else None,
+                        "refunded": True,
+                        "original_transaction_id": original_txn_id,
+                        "original_delta": -consumed_credits,
+                        "error_code": "upstream_error",
+                        "error_message": friendly_msg,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
@@ -329,8 +385,20 @@ class AIGatewayService:
                 await concurrency_manager.release_key(cfg.config_id, cfg.api_key)
 
             latency_ms = int((time.perf_counter() - started) * 1000)
-            db.add(
-                AIUsageEvent(
+            event_data["refunded"] = bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None)
+            event_data["result_keys"] = list(raw.keys()) if isinstance(raw, dict) else []
+
+            # Update the placeholder event with final values instead of creating new row
+            # This ensures credit_transactions.meta.ai_usage_event_id points to the correct event
+            if placeholder_event is not None:
+                placeholder_event.cost_credits = consumed_credits  # type: ignore[assignment]
+                placeholder_event.latency_ms = latency_ms  # type: ignore[assignment]
+                placeholder_event.error_code = error_code  # type: ignore[assignment]
+                placeholder_event.raw_payload = event_data  # type: ignore[assignment]
+            else:
+                # Edge case: no placeholder was created (credits_cost was 0)
+                # Create a final event without linking (no transaction meta to update)
+                final_event = AIUsageEvent(
                     user_id=user_id,
                     category="text",
                     binding_key=resolved_binding_key,
@@ -338,15 +406,9 @@ class AIGatewayService:
                     cost_credits=consumed_credits,
                     latency_ms=latency_ms,
                     error_code=error_code,
-                    raw_payload={
-                        "manufacturer": cfg.manufacturer,
-                        "model": cfg.model,
-                        "has_attachments": bool(attachments),
-                        "refunded": bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None),
-                        "result_keys": list(raw.keys()) if isinstance(raw, dict) else [],
-                    },
+                    raw_payload=event_data,
                 )
-            )
+                db.add(final_event)
             try:
                 await db.commit()
             except Exception:
@@ -389,22 +451,56 @@ class AIGatewayService:
         model_config = await db.get(AIModelConfig, cfg_id)
         credits_cost = credit_price_service.get_model_cost(model_config) if model_config else credit_price_service.get_cost_by_category(category)
 
+        # Track event data for creation after operation completes
+        event_data: dict[str, Any] = {
+            "manufacturer": cfg.manufacturer,
+            "model": cfg.model,
+            "param_json": param_json,
+        }
+
         consumed_credits = 0
+        original_txn_id: str | None = None
+        event_id: str | None = None
+        error_code: str | None = None
+        placeholder_event: AIUsageEvent | None = None  # Track placeholder for update
+
         if credits_cost > 0:
-            await credit_service.adjust_balance(
+            # Pre-create placeholder event to get ID for linking
+            placeholder_event = AIUsageEvent(
+                user_id=user_id,
+                category=category,
+                binding_key=resolved_binding_key,
+                ai_model_config_id=cfg_id,
+                cost_credits=0,
+                latency_ms=0,
+                error_code=None,
+                raw_payload=event_data,
+            )
+            db.add(placeholder_event)
+            await db.flush()
+            event_id = str(placeholder_event.id)
+
+            account, txn = await credit_service.adjust_balance(
                 db=db,
                 user_id=user_id,
                 delta=-credits_cost,
                 reason="ai.consume",
                 actor_user_id=None,
-                meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                meta={
+                    "trace_type": "ai",
+                    "category": category,
+                    "binding_key": resolved_binding_key,
+                    "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                    "ai_usage_event_id": event_id,
+                    "refunded": False,
+                },
                 allow_negative=False,
             )
             await db.commit()
             consumed_credits = credits_cost
+            original_txn_id = str(txn.id) if txn else None
 
         started = time.perf_counter()
-        error_code: str | None = None
         response: MediaResponse | None = None
         
         try:
@@ -435,16 +531,27 @@ class AIGatewayService:
             response = await provider.generate(request)
             return response
             
-        except AppError:
+        except AppError as e:
             error_code = "app_error"
-            if consumed_credits > 0:
+            if consumed_credits > 0 and original_txn_id:
                 await credit_service.adjust_balance(
                     db=db,
                     user_id=user_id,
                     delta=consumed_credits,
                     reason="ai.refund",
                     actor_user_id=None,
-                    meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={
+                        "trace_type": "ai",
+                        "category": category,
+                        "binding_key": resolved_binding_key,
+                        "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                        "ai_usage_event_id": event_id,
+                        "refunded": True,
+                        "original_transaction_id": original_txn_id,
+                        "original_delta": -consumed_credits,
+                        "error_code": "app_error",
+                        "error_message": str(e.msg) if hasattr(e, 'msg') else None,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
@@ -453,14 +560,25 @@ class AIGatewayService:
         except Exception as e:
             error_code = "upstream_error"
             friendly_msg = _extract_api_error(e)
-            if consumed_credits > 0:
+            if consumed_credits > 0 and original_txn_id:
                 await credit_service.adjust_balance(
                     db=db,
                     user_id=user_id,
                     delta=consumed_credits,
                     reason="ai.refund",
                     actor_user_id=None,
-                    meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={
+                        "trace_type": "ai",
+                        "category": category,
+                        "binding_key": resolved_binding_key,
+                        "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                        "ai_usage_event_id": event_id,
+                        "refunded": True,
+                        "original_transaction_id": original_txn_id,
+                        "original_delta": -consumed_credits,
+                        "error_code": "upstream_error",
+                        "error_message": friendly_msg,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
@@ -477,8 +595,20 @@ class AIGatewayService:
                 await concurrency_manager.release_key(cfg.config_id, cfg.api_key)
 
             latency_ms = int((time.perf_counter() - started) * 1000)
-            db.add(
-                AIUsageEvent(
+            event_data["refunded"] = bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None)
+            event_data["url"] = response.url if response else None
+            event_data["usage_id"] = response.usage_id if response else None
+
+            # Update the placeholder event with final values instead of creating new row
+            # This ensures credit_transactions.meta.ai_usage_event_id points to the correct event
+            if placeholder_event is not None:
+                placeholder_event.cost_credits = consumed_credits  # type: ignore[assignment]
+                placeholder_event.latency_ms = latency_ms  # type: ignore[assignment]
+                placeholder_event.error_code = error_code  # type: ignore[assignment]
+                placeholder_event.raw_payload = event_data  # type: ignore[assignment]
+            else:
+                # Edge case: no placeholder was created (credits_cost was 0)
+                final_event = AIUsageEvent(
                     user_id=user_id,
                     category=category,
                     binding_key=resolved_binding_key,
@@ -486,16 +616,9 @@ class AIGatewayService:
                     cost_credits=consumed_credits,
                     latency_ms=latency_ms,
                     error_code=error_code,
-                    raw_payload={
-                        "manufacturer": cfg.manufacturer,
-                        "model": cfg.model,
-                        "param_json": param_json,
-                        "refunded": bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None),
-                        "url": response.url if response else None,
-                        "usage_id": response.usage_id if response else None
-                    },
+                    raw_payload=event_data,
                 )
-            )
+                db.add(final_event)
             try:
                 await db.commit()
             except Exception:
@@ -596,18 +719,29 @@ class AIGatewayService:
 
         credits_cost = 10 if category == "video" else 5
         consumed_credits = 0
+        original_txn_id: str | None = None
         if credits_cost > 0:
-            await credit_service.adjust_balance(
+            account, txn = await credit_service.adjust_balance(
                 db=db,
                 user_id=user_id,
                 delta=-credits_cost,
                 reason="ai.consume",
                 actor_user_id=None,
-                meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                meta={
+                    "trace_type": "ai",
+                    "category": category,
+                    "binding_key": resolved_binding_key,
+                    "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                    "manufacturer": cfg.manufacturer,
+                    "model": cfg.model,
+                    "ai_usage_event_id": None,  # Async - event created on completion
+                    "refunded": False,
+                },
                 allow_negative=False,
             )
             await db.commit()
             consumed_credits = credits_cost
+            original_txn_id = str(txn.id) if txn else None
 
         try:
             from app.models import AIManufacturer
@@ -642,12 +776,25 @@ class AIGatewayService:
             ref.meta["concurrency_api_key"] = cfg.api_key
             return ref
 
-        except AppError:
-            if consumed_credits > 0:
+        except AppError as e:
+            if consumed_credits > 0 and original_txn_id:
                 await credit_service.adjust_balance(
                     db=db, user_id=user_id, delta=consumed_credits,
                     reason="ai.refund", actor_user_id=None,
-                    meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={
+                        "trace_type": "ai",
+                        "category": category,
+                        "binding_key": resolved_binding_key,
+                        "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                        "manufacturer": cfg.manufacturer,
+                        "model": cfg.model,
+                        "ai_usage_event_id": None,  # Async - event created on completion
+                        "refunded": True,
+                        "original_transaction_id": original_txn_id,
+                        "original_delta": -consumed_credits,
+                        "error_code": "app_error",
+                        "error_message": str(e.msg) if hasattr(e, 'msg') else None,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
@@ -659,11 +806,24 @@ class AIGatewayService:
             raise
         except Exception as e:
             friendly_msg = _extract_api_error(e)
-            if consumed_credits > 0:
+            if consumed_credits > 0 and original_txn_id:
                 await credit_service.adjust_balance(
                     db=db, user_id=user_id, delta=consumed_credits,
                     reason="ai.refund", actor_user_id=None,
-                    meta={"category": category, "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={
+                        "trace_type": "ai",
+                        "category": category,
+                        "binding_key": resolved_binding_key,
+                        "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                        "manufacturer": cfg.manufacturer,
+                        "model": cfg.model,
+                        "ai_usage_event_id": None,  # Async - event created on completion
+                        "refunded": True,
+                        "original_transaction_id": original_txn_id,
+                        "original_delta": -consumed_credits,
+                        "error_code": "upstream_error",
+                        "error_message": friendly_msg,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
@@ -750,45 +910,88 @@ class AIGatewayService:
 
         credits_cost = int(credits_cost or 0)
         consumed_credits = 0
+        original_txn_id: str | None = None
+        event_id: str | None = None
+        placeholder_event: AIUsageEvent | None = None  # Track placeholder for update
+        
+        # Track event data for creation after operation completes
+        event_data: dict[str, Any] = {
+            "manufacturer": cfg.manufacturer,
+            "model": cfg.model,
+            "has_attachments": bool(attachments),
+        }
+
         if credits_cost > 0:
+            # Pre-create placeholder event to get ID for linking
+            placeholder_event = AIUsageEvent(
+                user_id=user_id,
+                category="text",
+                binding_key=resolved_binding_key,
+                ai_model_config_id=cfg_id,
+                cost_credits=0,
+                latency_ms=0,
+                error_code=None,
+                raw_payload=event_data,
+            )
+            db.add(placeholder_event)
+            await db.flush()
+            event_id = str(placeholder_event.id)
+
             try:
-                await credit_service.adjust_balance(
+                account, txn = await credit_service.adjust_balance(
                     db=db,
                     user_id=user_id,
                     delta=-credits_cost,
                     reason="ai.consume",
                     actor_user_id=None,
-                    meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={
+                        "trace_type": "ai",
+                        "category": "text",
+                        "binding_key": resolved_binding_key,
+                        "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                        "ai_usage_event_id": event_id,
+                        "refunded": False,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
                 consumed_credits = credits_cost
+                original_txn_id = str(txn.id) if txn else None
             except AppError as e:
                 yield {"type": "error", "message": str(e.msg), "code": int(e.code or 400)}
                 return
 
         started = time.perf_counter()
         error_code: str | None = None
-        emitted_any = False
         output_parts: list[str] = []
         try:
             provider = provider_factory.get_text_provider(manufacturer=cfg.manufacturer)
             merged_messages = _merge_attachments(messages, attachments)
             async for delta in provider.chat_completions_stream(cfg=cfg, messages=merged_messages, timeout_seconds=60.0):
-                emitted_any = True
                 output_parts.append(delta)
                 yield {"type": "delta", "delta": delta}
             yield {"type": "done", "output_text": "".join(output_parts)}
         except AppError as e:
             error_code = "app_error"
-            if consumed_credits > 0:
+            if consumed_credits > 0 and original_txn_id:
                 await credit_service.adjust_balance(
                     db=db,
                     user_id=user_id,
                     delta=consumed_credits,
                     reason="ai.refund",
                     actor_user_id=None,
-                    meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={
+                        "trace_type": "ai",
+                        "category": "text",
+                        "binding_key": resolved_binding_key,
+                        "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                        "ai_usage_event_id": event_id,
+                        "refunded": True,
+                        "original_transaction_id": original_txn_id,
+                        "original_delta": -consumed_credits,
+                        "error_code": "app_error",
+                        "error_message": str(e.msg) if hasattr(e, 'msg') else None,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
@@ -808,14 +1011,25 @@ class AIGatewayService:
                     "raw_error": str(e),
                 }
             ).exception("ai_gateway.chat_text_stream_failed")
-            if consumed_credits > 0:
+            if consumed_credits > 0 and original_txn_id:
                 await credit_service.adjust_balance(
                     db=db,
                     user_id=user_id,
                     delta=consumed_credits,
                     reason="ai.refund",
                     actor_user_id=None,
-                    meta={"category": "text", "binding_key": resolved_binding_key, "manufacturer": cfg.manufacturer, "model": cfg.model},
+                    meta={
+                        "trace_type": "ai",
+                        "category": "text",
+                        "binding_key": resolved_binding_key,
+                        "ai_model_config_id": str(cfg_id) if cfg_id else None,
+                        "ai_usage_event_id": event_id,
+                        "refunded": True,
+                        "original_transaction_id": original_txn_id,
+                        "original_delta": -consumed_credits,
+                        "error_code": "upstream_error",
+                        "error_message": friendly_msg,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
@@ -828,8 +1042,19 @@ class AIGatewayService:
                 await concurrency_manager.release_key(cfg.config_id, cfg.api_key)
 
             latency_ms = int((time.perf_counter() - started) * 1000)
-            db.add(
-                AIUsageEvent(
+            event_data["refunded"] = bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None)
+            event_data["output_chars"] = sum(len(x) for x in output_parts)
+
+            # Update the placeholder event with final values instead of creating new row
+            # This ensures credit_transactions.meta.ai_usage_event_id points to the correct event
+            if placeholder_event is not None:
+                placeholder_event.cost_credits = consumed_credits  # type: ignore[assignment]
+                placeholder_event.latency_ms = latency_ms  # type: ignore[assignment]
+                placeholder_event.error_code = error_code  # type: ignore[assignment]
+                placeholder_event.raw_payload = event_data  # type: ignore[assignment]
+            else:
+                # Edge case: no placeholder was created (credits_cost was 0)
+                final_event = AIUsageEvent(
                     user_id=user_id,
                     category="text",
                     binding_key=resolved_binding_key,
@@ -837,15 +1062,9 @@ class AIGatewayService:
                     cost_credits=consumed_credits,
                     latency_ms=latency_ms,
                     error_code=error_code,
-                    raw_payload={
-                        "manufacturer": cfg.manufacturer,
-                        "model": cfg.model,
-                        "has_attachments": bool(attachments),
-                        "refunded": bool(consumed_credits == 0 and credits_cost > 0 and error_code is not None),
-                        "output_chars": sum(len(x) for x in output_parts),
-                    },
+                    raw_payload=event_data,
                 )
-            )
+                db.add(final_event)
             try:
                 await db.commit()
             except Exception:

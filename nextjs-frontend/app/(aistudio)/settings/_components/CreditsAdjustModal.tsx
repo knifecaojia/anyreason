@@ -1,6 +1,9 @@
 "use client";
 
-import { X } from "lucide-react";
+import { X, ArrowDownCircle, ArrowUpCircle, UserCircle, Bot, RefreshCw } from "lucide-react";
+import { normalizeTransaction } from "@/components/credits/credits-history-normalizer";
+import type { CreditHistoryRow } from "@/components/credits/credits-history-types";
+import type { CreditTransaction } from "@/components/actions/credits-actions";
 
 export function CreditsAdjustModal(props: {
   open: boolean;
@@ -17,7 +20,7 @@ export function CreditsAdjustModal(props: {
   creditsLoading: boolean;
   submitCreditsAdjust: () => Promise<void>;
   submitCreditsSet: () => Promise<void>;
-  creditsTransactions: any[];
+  creditsTransactions: CreditTransaction[];
 }) {
   const {
     open,
@@ -113,22 +116,187 @@ export function CreditsAdjustModal(props: {
         </div>
 
         <div className="bg-surfaceHighlight/20 border border-border rounded-xl overflow-hidden">
-          <div className="px-4 py-3 border-b border-border text-sm font-bold text-textMain">最近流水</div>
-          <div className="max-h-64 overflow-y-auto divide-y divide-border">
+          <div className="px-4 py-3 border-b border-border text-sm font-bold text-textMain">最近流水（可追溯）</div>
+          <div className="max-h-80 overflow-y-auto divide-y divide-border">
             {creditsTransactions.length === 0 && (
               <div className="px-4 py-6 text-sm text-textMuted">{creditsLoading ? "加载中..." : "暂无流水"}</div>
             )}
-            {creditsTransactions.map((t) => (
-              <div key={t.id} className="px-4 py-3 flex items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="text-xs text-textMain font-mono truncate">{t.reason}</div>
-                  <div className="text-xs text-textMuted font-mono truncate">{new Date(t.created_at).toLocaleString()}</div>
-                </div>
-                <div className="text-xs text-textMain font-mono">
-                  {t.delta > 0 ? `+${t.delta}` : `${t.delta}`} → {t.balance_after}
-                </div>
-              </div>
-            ))}
+            {creditsTransactions.map((t) => {
+              // Normalize raw transaction for richer display
+              const row: CreditHistoryRow = normalizeTransaction(t);
+              
+              return (
+                <TransactionRow key={t.id} row={row} rawMeta={t.meta} />
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// =============================================================================
+// Transaction Row Component - Richer Admin Traceability Display
+// =============================================================================
+
+/**
+ * Badge component for trace type indication.
+ * Distinguishes AI consume, Agent execution, Admin adjustments, and Init events.
+ */
+function TraceTypeBadge(props: { traceType: string; isRefund: boolean }) {
+  const { traceType, isRefund } = props;
+  
+  if (isRefund) {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-green-500/20 text-green-400 border border-green-500/30">
+        <RefreshCw size={10} />
+        退款
+      </span>
+    );
+  }
+  
+  switch (traceType) {
+    case "ai":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-500/20 text-blue-400 border border-blue-500/30">
+          <Bot size={10} />
+          AI
+        </span>
+      );
+    case "agent":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-purple-500/20 text-purple-400 border border-purple-500/30">
+          <Bot size={10} />
+          智能体
+        </span>
+      );
+    case "admin":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-orange-500/20 text-orange-400 border border-orange-500/30">
+          <UserCircle size={10} />
+          管理员
+        </span>
+      );
+    case "init":
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-500/20 text-gray-400 border border-gray-500/30">
+          初始化
+        </span>
+      );
+    default:
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-gray-500/20 text-gray-400 border border-gray-500/30">
+          未知
+        </span>
+      );
+  }
+}
+
+/**
+ * Delta display with colored indicator.
+ */
+function DeltaDisplay(props: { delta: number; category: string }) {
+  const { delta, category } = props;
+  const isPositive = delta > 0;
+  const isRefund = category === "refund";
+  
+  let colorClass = "text-textMain";
+  if (isRefund || isPositive) {
+    colorClass = "text-green-400";
+  } else {
+    colorClass = "text-red-400";
+  }
+  
+  const Icon = isPositive ? ArrowUpCircle : ArrowDownCircle;
+  
+  return (
+    <span className={`inline-flex items-center gap-1 font-mono text-sm font-bold ${colorClass}`}>
+      <Icon size={14} />
+      {isPositive ? `+${delta}` : delta}
+    </span>
+  );
+}
+
+/**
+ * Single transaction row with enriched traceability display.
+ */
+function TransactionRow(props: { row: CreditHistoryRow; rawMeta?: Record<string, unknown> }) {
+  const { row, rawMeta } = props;
+  
+  // Extract admin notes if available
+  const adminNotes = row.traceType === "admin" && rawMeta?.notes 
+    ? String(rawMeta.notes) 
+    : null;
+  
+  // Extract original transaction ID for refunds
+  const originalTxId = row.isRefund && rawMeta?.original_transaction_id
+    ? String(rawMeta.original_transaction_id)
+    : null;
+  
+  // Extract linked event ID for AI/Agent operations
+  const linkedEventId = row.linkedEventId 
+    ? String(row.linkedEventId).substring(0, 8) + "..." 
+    : null;
+  
+  return (
+    <div className="px-4 py-3 hover:bg-surfaceHighlight/10 transition-colors">
+      <div className="flex items-start justify-between gap-3">
+        {/* Left: trace type badge and operation info */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <TraceTypeBadge traceType={row.traceType} isRefund={row.isRefund} />
+            <span className="text-sm font-medium text-textMain truncate">{row.operationLabel}</span>
+          </div>
+          
+          {/* Secondary info row */}
+          <div className="flex items-center gap-3 mt-1 flex-wrap">
+            <span className="text-xs text-textMuted">{row.formattedTime}</span>
+            
+            {/* Model display for AI operations */}
+            {row.modelDisplay && (
+              <span className="text-xs text-textMuted/70 font-mono">
+                模型: {row.modelDisplay}
+              </span>
+            )}
+            
+            {/* AI category for AI operations */}
+            {row.aiCategory && row.traceType === "ai" && (
+              <span className="text-xs text-textMuted/70">
+                类型: {row.aiCategory === "text" ? "文本" : row.aiCategory === "image" ? "图像" : row.aiCategory === "video" ? "视频" : row.aiCategory}
+              </span>
+            )}
+          </div>
+          
+          {/* Admin notes */}
+          {adminNotes && (
+            <div className="mt-1 text-xs text-textMuted/70 italic">
+              备注: {adminNotes}
+            </div>
+          )}
+          
+          {/* Debug IDs for traceability */}
+          {(linkedEventId || originalTxId) && (
+            <div className="mt-1 flex items-center gap-2">
+              {linkedEventId && (
+                <span className="text-[10px] text-textMuted/50 font-mono">
+                  事件: {linkedEventId}
+                </span>
+              )}
+              {originalTxId && (
+                <span className="text-[10px] text-textMuted/50 font-mono">
+                  原交易: {originalTxId.substring(0, 8)}...
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+        
+        {/* Right: delta and balance */}
+        <div className="text-right shrink-0">
+          <DeltaDisplay delta={row.delta} category={row.category} />
+          <div className="text-xs text-textMuted mt-0.5">
+            余额 → {row.balanceAfter}
           </div>
         </div>
       </div>

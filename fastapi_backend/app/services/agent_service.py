@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import Any
 from uuid import UUID
 
@@ -9,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai_gateway import ai_gateway_service
 from app.core.exceptions import AppError
-from app.models import AIModelConfig, Agent
+from app.models import AIModelConfig, Agent, AIUsageEvent
 from app.services.credit_service import credit_service
 
 
@@ -186,22 +187,58 @@ class AgentService:
             raise AppError(msg="Agent model not configured", code=400, status_code=400)
 
         cost = int(agent.credits_per_call or 0)
+        event_id: str | None = None
+        original_txn_id: str | None = None
+        placeholder_event: AIUsageEvent | None = None  # Track placeholder for update
+
+        # Track event data for creation after operation completes
+        event_data: dict[str, Any] = {
+            "agent_id": str(agent.id),
+            "agent_name": agent.name,
+        }
+
         if cost > 0:
-            await credit_service.adjust_balance(
+            # Pre-create AIUsageEvent for traceability (agents are text-only currently)
+            placeholder_event = AIUsageEvent(
+                user_id=user_id,
+                category="text",
+                binding_key=None,
+                ai_model_config_id=agent.ai_model_config_id,
+                cost_credits=0,
+                latency_ms=None,
+                error_code=None,
+                raw_payload=event_data,
+            )
+            db.add(placeholder_event)
+            await db.flush()
+            event_id = str(placeholder_event.id)
+
+            account, txn = await credit_service.adjust_balance(
                 db=db,
                 user_id=user_id,
                 delta=-cost,
                 reason="agent.consume",
                 actor_user_id=None,
-                meta={"agent_id": str(agent.id)},
+                meta={
+                    "trace_type": "agent",
+                    "agent_id": str(agent.id),
+                    "agent_name": agent.name,
+                    "ai_model_config_id": str(agent.ai_model_config_id),
+                    "ai_usage_event_id": event_id,
+                    "refunded": False,
+                },
                 allow_negative=False,
             )
             await db.commit()
+            original_txn_id = str(txn.id) if txn else None
 
         messages: list[dict] = []
         if (agent.system_prompt or "").strip():
             messages.append({"role": "system", "content": agent.system_prompt})
         messages.append({"role": "user", "content": user_prompt})
+
+        started = time.perf_counter()
+        error_code: str | None = None
 
         try:
             raw = await ai_gateway_service.chat_text(
@@ -211,17 +248,29 @@ class AgentService:
                 model_config_id=agent.ai_model_config_id,
                 messages=messages,
                 attachments=[],
-                credits_cost=0,
+                credits_cost=0,  # Agent handles its own charging
             )
-        except AppError:
-            if cost > 0:
+        except AppError as e:
+            error_code = "app_error"
+            if cost > 0 and original_txn_id:
                 await credit_service.adjust_balance(
                     db=db,
                     user_id=user_id,
                     delta=cost,
                     reason="agent.refund",
                     actor_user_id=None,
-                    meta={"agent_id": str(agent.id)},
+                    meta={
+                        "trace_type": "agent",
+                        "agent_id": str(agent.id),
+                        "agent_name": agent.name,
+                        "ai_model_config_id": str(agent.ai_model_config_id),
+                        "ai_usage_event_id": event_id,
+                        "refunded": True,
+                        "original_transaction_id": original_txn_id,
+                        "original_delta": -cost,
+                        "error_code": "app_error",
+                        "error_message": str(e.msg) if hasattr(e, 'msg') else None,
+                    },
                     allow_negative=False,
                 )
                 await db.commit()
@@ -232,6 +281,42 @@ class AgentService:
             output_text = raw.get("choices", [{}])[0].get("message", {}).get("content") or ""
         except Exception:
             output_text = ""
+
+        # Update placeholder AIUsageEvent with final values instead of creating new row
+        # This ensures credit_transactions.meta.ai_usage_event_id points to the correct event
+        if placeholder_event is not None:
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            event_data["output_chars"] = len(output_text)
+            event_data["refunded"] = False
+
+            placeholder_event.cost_credits = cost  # type: ignore[assignment]
+            placeholder_event.latency_ms = latency_ms  # type: ignore[assignment]
+            placeholder_event.error_code = error_code  # type: ignore[assignment]
+            placeholder_event.raw_payload = event_data  # type: ignore[assignment]
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
+        elif cost == 0:
+            # Edge case: no cost, create event without linkage
+            latency_ms = int((time.perf_counter() - started) * 1000)
+            event_data["output_chars"] = len(output_text)
+            event_data["refunded"] = False
+            final_event = AIUsageEvent(
+                user_id=user_id,
+                category="text",
+                binding_key=None,
+                ai_model_config_id=agent.ai_model_config_id,
+                cost_credits=0,
+                latency_ms=latency_ms,
+                error_code=error_code,
+                raw_payload=event_data,
+            )
+            db.add(final_event)
+            try:
+                await db.commit()
+            except Exception:
+                await db.rollback()
 
         return str(output_text), raw
 

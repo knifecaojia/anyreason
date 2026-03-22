@@ -1,0 +1,18 @@
+Task 16 backend pytest verification
+
+Commands run:
+- pytest "tests/routes/test_credits.py" -q
+- pytest "tests/routes/test_agents.py" -q
+
+Results:
+- test_credits.py: 5 passed
+- test_agents.py: 4 passed
+
+Coverage added in test_credits.py:
+- /api/v1/credits/my/transactions returns enriched agent traceability fields
+- /api/v1/credits/admin/users/{user_id} returns enriched admin history fields
+- refund transactions are visible with linkage back to the original consume transaction
+
+Warnings observed:
+- Existing Pydantic deprecation warnings in batch video schemas and fastapi_mail schemas
+- No test failures

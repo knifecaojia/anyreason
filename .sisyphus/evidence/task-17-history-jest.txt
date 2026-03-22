@@ -1,0 +1,11 @@
+Task 17 history-related frontend Jest coverage
+
+History/data logic coverage now includes:
+- getOperationLabel uses backend-provided operation_display when present
+- detectTraceType derives agent trace from legacy meta fields
+- detectCategory classifies refunded positive-delta transactions as refunds
+- normalizeTransaction preserves refund linkage, trace type, model display, and signed delta formatting
+
+Balance-related unit coverage includes:
+- CreditsContext.refresh() updates global balance from creditsMy()
+- CreditsContext.refresh() preserves existing balance on refresh failure

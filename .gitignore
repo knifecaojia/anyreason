@@ -66,3 +66,4 @@ next-env.d.ts
 fastapi_backend/data/ai_config_sync.json
 fastapi_backend/data/ai_config_backup.json
 *.zip
+refs/cos.csv

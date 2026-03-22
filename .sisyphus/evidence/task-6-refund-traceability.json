@@ -1,0 +1,143 @@
+{
+  "task": "6 - Backend Transaction/Event Traceability Enhancements",
+  "component": "Refund Traceability",
+  "date": "2026-03-22",
+
+  "bug_fix_2026-03-22": {
+    "issue": "Placeholder AIUsageEvent pattern created NEW event row in finally block instead of updating placeholder",
+    "impact": "credit_transactions.meta.ai_usage_event_id pointed to wrong event row (placeholder with cost=0)",
+    "fix": "Updated placeholder event attributes instead of creating new row",
+    "affected_methods": ["chat_text", "chat_text_stream", "generate_media"]
+  },
+
+  "refund_linkage_contract": {
+    "primary_mechanism": "original_transaction_id in refund transaction meta",
+    "fallback_mechanism": "timestamp proximity + category + model correlation",
+    "ai_usage_event_linkage": "ai_usage_event_id in transaction meta"
+  },
+
+  "ai_usage_event_update_pattern": {
+    "step_1": "Create placeholder AIUsageEvent with cost_credits=0, flush to get ID",
+    "step_2": "Store placeholder event ID in credit_transactions.meta.ai_usage_event_id",
+    "step_3": "Execute AI operation",
+    "step_4": "In finally block: UPDATE placeholder event with final cost_credits, latency_ms, error_code, raw_payload",
+    "step_5": "Commit - single event row with correct data, linked from transaction"
+  },
+
+  "refund_meta_structure": {
+    "ai.refund": {
+      "trace_type": "ai",
+      "category": "string (text|image|video)",
+      "binding_key": "string | null",
+      "ai_model_config_id": "string (UUID)",
+      "ai_usage_event_id": "string (UUID) - SAME row as consume, updated with final values",
+      "refunded": true,
+      "original_transaction_id": "string (UUID of original ai.consume)",
+      "original_delta": "int (negative value of original debit)",
+      "error_code": "string (app_error|upstream_error)",
+      "error_message": "string | null"
+    },
+    "agent.refund": {
+      "trace_type": "agent",
+      "agent_id": "string (UUID)",
+      "agent_name": "string",
+      "ai_model_config_id": "string (UUID)",
+      "ai_usage_event_id": "string (UUID) - updated with final values",
+      "refunded": true,
+      "original_transaction_id": "string (UUID of original agent.consume)",
+      "original_delta": "int (negative value of original debit)",
+      "error_code": "string",
+      "error_message": "string | null"
+    }
+  },
+
+  "example_refund_chain": {
+    "original_consume": {
+      "id": "txn-001",
+      "delta": -1,
+      "reason": "ai.consume",
+      "meta": {
+        "trace_type": "ai",
+        "category": "text",
+        "ai_usage_event_id": "evt-001",
+        "refunded": false
+      }
+    },
+    "refund_transaction": {
+      "id": "txn-002",
+      "delta": 1,
+      "reason": "ai.refund",
+      "meta": {
+        "trace_type": "ai",
+        "category": "text",
+        "ai_usage_event_id": "evt-001",
+        "refunded": true,
+        "original_transaction_id": "txn-001",
+        "original_delta": -1,
+        "error_code": "upstream_error",
+        "error_message": "API timeout"
+      }
+    },
+    "linked_usage_event": {
+      "id": "evt-001",
+      "category": "text",
+      "cost_credits": 1,
+      "error_code": "upstream_error",
+      "raw_payload": {
+        "manufacturer": "openai",
+        "model": "gpt-4",
+        "refunded": true
+      }
+    }
+  },
+
+  "consume_refund_paths_implemented": {
+    "ai.consume/ai.refund": {
+      "chat_text": {
+        "status": "implemented",
+        "ai_usage_event_pattern": "placeholder_update",
+        "linkage_fields": ["ai_usage_event_id", "original_transaction_id", "original_delta"]
+      },
+      "chat_text_stream": {
+        "status": "implemented",
+        "ai_usage_event_pattern": "placeholder_update",
+        "linkage_fields": ["ai_usage_event_id", "original_transaction_id", "original_delta"]
+      },
+      "generate_media": {
+        "status": "implemented",
+        "ai_usage_event_pattern": "placeholder_update",
+        "linkage_fields": ["ai_usage_event_id", "original_transaction_id", "original_delta"]
+      },
+      "submit_media_async": {
+        "status": "implemented",
+        "ai_usage_event_pattern": "none",
+        "note": "Async operation - AIUsageEvent created separately on completion",
+        "linkage_fields": ["original_transaction_id", "original_delta"]
+      }
+    },
+    "agent.consume/agent.refund": {
+      "run_text_agent": {
+        "status": "implemented",
+        "ai_usage_event_pattern": "placeholder_update",
+        "linkage_fields": ["ai_usage_event_id", "original_transaction_id", "original_delta"],
+        "note": "Agents are text-only currently. FIXED: was creating new row, now updates placeholder."
+      }
+    }
+  },
+
+  "verification": {
+    "tests_passed": [
+      "tests/routes/test_credits.py::test_admin_adjust_user_credits",
+      "tests/routes/test_agents.py::test_agent_run_consumes_credits",
+      "tests/routes/test_agents.py::test_agent_run_refunds_on_llm_error",
+      "tests/ai_gateway/test_non_media_regression.py (17 tests)"
+    ],
+    "traceability_guarantees": [
+      "Every consume has unique ai_usage_event_id",
+      "credit_transactions.meta.ai_usage_event_id points to SINGLE event row with final values",
+      "Every refund links back to original_transaction_id",
+      "Refunds include original_delta for verification",
+      "Error codes preserved for debugging"
+    ]
+  }
+}

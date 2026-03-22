@@ -19,6 +19,7 @@ from app.schemas_credits import (
     CreditRedeemRequest,
     CreditTopupIntentRequest,
     CreditTransactionRead,
+    CreditTransactionAdminRead,
 )
 from app.schemas_response import ResponseBase
 from app.services.credit_service import credit_service
@@ -43,6 +44,16 @@ async def my_credit_transactions(
     db: AsyncSession = Depends(get_async_session),
     user: User = Depends(current_active_user),
 ) -> ResponseBase[list[CreditTransactionRead]]:
+    """Get user's credit transaction history with traceability fields.
+    
+    Returns transactions with computed fields:
+    - trace_type: discriminator ('ai', 'agent', 'admin', 'init')
+    - operation_display: human-readable operation description
+    - is_refund: whether this is a refund
+    - linked_event_id: linked AIUsageEvent ID
+    - category: AI operation category (text/image/video)
+    - model_display: model name for display
+    """
     q = (
         select(CreditTransaction)
         .where(CreditTransaction.user_id == user.id)
@@ -63,6 +74,13 @@ async def admin_get_user_credits(
     limit: int = 50,
     db: AsyncSession = Depends(get_async_session),
 ) -> ResponseBase[dict]:
+    """Admin view of user credits with extended traceability info.
+    
+    Returns full transaction details including:
+    - All user-facing fields
+    - Full meta for debugging
+    - linked_event_id for correlation with AIUsageEvents
+    """
     acc = (await db.execute(select(UserCreditAccount).where(UserCreditAccount.user_id == user_id))).scalars().first()
     if not acc:
         raise AppError(msg="积分账户不存在", code=404, status_code=404)
@@ -79,7 +97,7 @@ async def admin_get_user_credits(
         msg="OK",
         data={
             "account": CreditAccountRead.model_validate(acc),
-            "transactions": [CreditTransactionRead.model_validate(t) for t in tx_rows],
+            "transactions": [CreditTransactionAdminRead.model_validate(t) for t in tx_rows],
         },
     )
 
@@ -96,13 +114,19 @@ async def admin_adjust_user_credits(
     db: AsyncSession = Depends(get_async_session),
     actor: User = Depends(require_permissions(["system.credits"])),
 ) -> ResponseBase[CreditAccountRead]:
-    account = await credit_service.adjust_balance(
+    # Build meta with trace_type and optional notes
+    meta = body.meta or {}
+    meta["trace_type"] = "admin"
+    if body.notes:
+        meta["notes"] = body.notes
+
+    account, _ = await credit_service.adjust_balance(
         db=db,
         user_id=user_id,
         delta=body.delta,
         reason=body.reason or "admin.adjust",
         actor_user_id=actor.id,
-        meta=body.meta,
+        meta=meta,
         allow_negative=False,
     )
     await db.commit()
@@ -113,7 +137,7 @@ async def admin_adjust_user_credits(
         action="credits.adjust",
         resource_type="user",
         resource_id=user_id,
-        meta={"delta": body.delta, "reason": body.reason, "meta": body.meta or {}},
+        meta={"delta": body.delta, "reason": body.reason, "notes": body.notes, "meta": body.meta or {}},
     )
     return ResponseBase(code=200, msg="OK", data=CreditAccountRead.model_validate(account))
 
@@ -130,13 +154,19 @@ async def admin_set_user_credits(
     db: AsyncSession = Depends(get_async_session),
     actor: User = Depends(require_permissions(["system.credits"])),
 ) -> ResponseBase[CreditAccountRead]:
-    account = await credit_service.set_balance(
+    # Build meta with trace_type and optional notes
+    meta = body.meta or {}
+    meta["trace_type"] = "admin"
+    if body.notes:
+        meta["notes"] = body.notes
+
+    account, _ = await credit_service.set_balance(
         db=db,
         user_id=user_id,
         new_balance=body.balance,
         reason=body.reason or "admin.set",
         actor_user_id=actor.id,
-        meta=body.meta,
+        meta=meta,
     )
     await db.commit()
     await write_audit_log(
@@ -146,7 +176,7 @@ async def admin_set_user_credits(
         action="credits.set",
         resource_type="user",
         resource_id=user_id,
-        meta={"balance": body.balance, "reason": body.reason, "meta": body.meta or {}},
+        meta={"balance": body.balance, "reason": body.reason, "notes": body.notes, "meta": body.meta or {}},
     )
     return ResponseBase(code=200, msg="OK", data=CreditAccountRead.model_validate(account))
 

@@ -63,6 +63,13 @@ export type CreditTransaction = {
   actor_user_id?: string | null;
   meta?: Record<string, unknown>;
   created_at: string;
+  // Task 6 enriched fields for traceability
+  trace_type?: string | null;
+  operation_display?: string | null;
+  is_refund?: boolean;
+  linked_event_id?: string | null;
+  category?: string | null;
+  model_display?: string | null;
 };
 
 export async function creditsMy() {

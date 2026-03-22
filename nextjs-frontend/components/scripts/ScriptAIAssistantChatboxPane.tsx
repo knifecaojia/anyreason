@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { HelpCircle, Loader2, Send, Square, Image as ImageIcon, FileText, Maximize2, X } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { CreditCostPreview } from "@/components/credits/CreditCostPreview";
+import { useCredits } from "@/components/credits/CreditsContext";
 import { useTasks } from "@/components/tasks/TaskProvider";
 import type { TaskEventPayload } from "@/lib/tasks/types";
 
@@ -155,6 +157,7 @@ export function ScriptAIAssistantChatboxPane(props: {
 }) {
   const { projectId, scriptText, episodeHint, episodes = [], activeEpisodeId, onEpisodeChange } = props;
   const { subscribeTask } = useTasks();
+  const { balance, refresh } = useCredits();
 
   const [scenes, setScenes] = useState<SceneCatalogItem[]>([]);
   const [selectedScene, setSelectedScene] = useState<string>("");
@@ -223,6 +226,13 @@ export function ScriptAIAssistantChatboxPane(props: {
     }
     setRunning(false);
   }, []);
+
+  useEffect(() => {
+    if (!running) return;
+    return () => {
+      refresh().catch(console.error);
+    };
+  }, [running, refresh]);
 
   const applyPlan = useCallback(
     async (plan: any) => {
@@ -822,6 +832,13 @@ export function ScriptAIAssistantChatboxPane(props: {
           </div>
 
           <div className="border-t border-border bg-surface p-3">
+            <div className="mb-2">
+              <CreditCostPreview
+                category="text"
+                userBalance={balance}
+                size="sm"
+              />
+            </div>
             <div className="flex items-end gap-2">
               <div className="flex-1 rounded-2xl border border-border bg-background/20 overflow-hidden">
                 <textarea

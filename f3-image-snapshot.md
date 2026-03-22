@@ -1,0 +1,127 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e2]:
+    - complementary [ref=e3]:
+      - button [ref=e4] [cursor=pointer]:
+        - img [ref=e5]
+      - generic [ref=e7]:
+        - generic [ref=e8]:
+          - img [ref=e10]
+          - heading "言之有理" [level=1] [ref=e13]
+        - navigation [ref=e14]:
+          - link "工作台" [ref=e15] [cursor=pointer]:
+            - /url: /dashboard
+            - img [ref=e16]
+            - generic [ref=e21]: 工作台
+          - generic [ref=e22]:
+            - paragraph [ref=e23]: Production Pipeline
+            - link "剧本管理" [ref=e24] [cursor=pointer]:
+              - /url: /scripts
+              - img [ref=e25]
+              - generic [ref=e28]: 剧本管理
+            - link "资产管理" [ref=e29] [cursor=pointer]:
+              - /url: /assets
+              - img [ref=e30]
+              - generic [ref=e32]: 资产管理
+            - link "创作工坊" [ref=e33] [cursor=pointer]:
+              - /url: /studio
+              - img [ref=e34]
+              - generic [ref=e36]: 创作工坊
+            - link "批量视频" [ref=e37] [cursor=pointer]:
+              - /url: /batch-video
+              - img [ref=e38]
+              - generic [ref=e40]: 批量视频
+            - link "AI 场景管理" [ref=e41] [cursor=pointer]:
+              - /url: /ai-scenes
+              - img [ref=e42]
+              - generic [ref=e45]: AI 场景管理
+          - generic [ref=e46]:
+            - paragraph [ref=e47]: System
+            - link "项目归档" [ref=e48] [cursor=pointer]:
+              - /url: /projects
+              - img [ref=e49]
+              - generic [ref=e54]: 项目归档
+            - link "任务清单" [ref=e55] [cursor=pointer]:
+              - /url: /tasks
+              - img [ref=e56]
+              - generic [ref=e59]: 任务清单
+            - generic [ref=e60]:
+              - button "系统设置" [ref=e61] [cursor=pointer]:
+                - generic [ref=e62]:
+                  - img [ref=e63]
+                  - generic [ref=e66]: 系统设置
+                - img [ref=e67]
+              - generic [ref=e70]:
+                - link "模型引擎" [ref=e71] [cursor=pointer]:
+                  - /url: /settings?tab=models
+                  - img [ref=e72]
+                  - generic [ref=e75]: 模型引擎
+                - link "用户管理" [ref=e76] [cursor=pointer]:
+                  - /url: /settings?tab=users
+                  - img [ref=e77]
+                  - generic [ref=e82]: 用户管理
+                - link "角色管理" [ref=e83] [cursor=pointer]:
+                  - /url: /settings?tab=roles
+                  - img [ref=e84]
+                  - generic [ref=e86]: 角色管理
+                - link "权限管理" [ref=e87] [cursor=pointer]:
+                  - /url: /settings?tab=permissions
+                  - img [ref=e88]
+                  - generic [ref=e91]: 权限管理
+                - link "系统审计" [ref=e92] [cursor=pointer]:
+                  - /url: /settings?tab=audit
+                  - img [ref=e93]
+                  - generic [ref=e98]: 系统审计
+      - generic [ref=e100]:
+        - button "A admin@example.com admin" [ref=e101] [cursor=pointer]:
+          - generic [ref=e103]: A
+          - generic [ref=e104]:
+            - paragraph [ref=e105]: admin@example.com
+            - paragraph [ref=e106]: admin
+        - button "退出登录" [ref=e107] [cursor=pointer]:
+          - img [ref=e108]
+    - main [ref=e111]:
+      - generic [ref=e112]:
+        - generic [ref=e113]:
+          - generic [ref=e114]: Workspace
+          - img [ref=e115]
+          - generic [ref=e117]: 言之有理
+        - generic [ref=e118]:
+          - button "99199" [ref=e119] [cursor=pointer]:
+            - img [ref=e120]
+            - generic [ref=e125]: "99199"
+          - generic [ref=e126]:
+            - img [ref=e127]
+            - textbox "搜索项目、资产..." [ref=e130]
+          - button "系统通知" [ref=e132] [cursor=pointer]:
+            - img [ref=e133]
+      - generic [ref=e137]:
+        - generic [ref=e139]:
+          - heading "图片生成配置" [level=2] [ref=e140]
+          - generic [ref=e141]:
+            - generic [ref=e142]:
+              - text: 模型
+              - combobox [ref=e143] [cursor=pointer]:
+                - generic: 选择模型
+                - img [ref=e144]
+            - generic [ref=e147]:
+              - text: 提示词
+              - textbox "描述你想要的画面..." [ref=e148]
+            - generic [ref=e149]:
+              - text: 反向提示词 (可选)
+              - textbox "不希望出现的元素..." [ref=e150]
+          - generic [ref=e151]:
+            - generic [ref=e152]:
+              - generic [ref=e153]: 生成前积分预估
+              - generic [ref=e154]: 请选择模型后查看积分预估
+            - generic [ref=e156]:
+              - img [ref=e179]
+              - generic [ref=e162]: 计算中...
+          - button "生成图片" [disabled]
+        - generic [ref=e166]:
+          - generic [ref=e167]: 🎨
+          - paragraph [ref=e168]: 预览区域
+          - paragraph [ref=e169]: 配置参数并点击生成，结果将显示在这里
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e175] [cursor=pointer]:
+    - img [ref=e176]
+  - alert [ref=e181]

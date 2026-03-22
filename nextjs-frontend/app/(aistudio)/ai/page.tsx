@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CreditCostPreview } from "@/components/credits/CreditCostPreview";
+import { useCredits } from "@/components/credits/CreditsContext";
 
 type SceneCatalogItem = {
   scene_code: string;
@@ -53,6 +55,9 @@ export default function AIScenesRunnerPage() {
   const [plans, setPlans] = useState<any[]>([]);
   const [applyResult, setApplyResult] = useState<any | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  
+  // Credits integration
+  const { balance, refresh } = useCredits();
 
   const selected = useMemo(
     () => scenes.find((s) => s.scene_code === selectedScene) || null,
@@ -130,8 +135,10 @@ export default function AIScenesRunnerPage() {
     } finally {
       abortRef.current = null;
       setRunning(false);
+      // Refresh credits balance after operation completes
+      refresh().catch(console.error);
     }
-  }, [input, projectId, running, scriptText, selectedScene, storyboardId]);
+  }, [input, projectId, running, scriptText, selectedScene, storyboardId, refresh]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -204,6 +211,14 @@ export default function AIScenesRunnerPage() {
         </div>
 
         <div style={{ display: "grid", gap: 8, marginTop: 12 }}>
+          {/* Cost preview - visible before send */}
+          <div>
+            <CreditCostPreview
+              category="text"
+              userBalance={balance}
+              size="sm"
+            />
+          </div>
           <textarea value={input} onChange={(e) => setInput(e.target.value)} rows={3} placeholder="输入需求…" />
           <div style={{ border: "1px solid #f0f0f0", borderRadius: 8, padding: 12, minHeight: 160, whiteSpace: "pre-wrap" }}>
             {assistantText || (running ? "…" : "")}

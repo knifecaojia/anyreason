@@ -16,6 +16,7 @@ import {
   FileText,
   ChevronDown,
   Film,
+  Coins,
 
   Cpu,
   Users,
@@ -34,6 +35,8 @@ import type { Me } from "@/components/actions/me-actions";
 import { deleteMeAvatar, updateMeAvatar, updateMePassword } from "@/components/actions/me-actions";
 import { TaskProvider } from "@/components/tasks/TaskProvider";
 import { NotificationCenter } from "@/components/notifications/NotificationCenter";
+import { useCredits } from "@/components/credits/CreditsContext";
+import { CreditsHistoryDrawer } from "@/components/credits/CreditsHistoryDrawer";
 
 function SidebarGroup({
   icon: Icon,
@@ -187,6 +190,8 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
   const [profileError, setProfileError] = useState<string | null>(null);
   const [profileSubmitting, setProfileSubmitting] = useState(false);
   const [avatarCacheBust, setAvatarCacheBust] = useState(0);
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const { balance, isLoading: balanceLoading } = useCredits();
 
   useEffect(() => {
     document.documentElement.classList.add("dark");
@@ -262,9 +267,39 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
     return "言之有理";
   };
 
-  const isFullWidthPage = useMemo(() => {
-    return ["/storyboard", "/studio"].includes(pathname);
+  // 页面宽度模式：三档策略
+  type PageWidthMode = "immersive" | "workspace" | "admin";
+
+  const immersiveRoutes = ["/storyboard", "/studio"];
+  const workspacePrefixes = [
+    "/dashboard",
+    "/scripts",
+    "/extraction",
+    "/assets",
+    "/batch-video",
+    "/ai/image",
+    "/ai/video",
+  ];
+  const adminPrefixes = ["/settings", "/chat"];
+
+  const pageWidthMode = useMemo<PageWidthMode>(() => {
+    if (immersiveRoutes.includes(pathname)) return "immersive";
+    if (workspacePrefixes.some((prefix) => pathname.startsWith(prefix))) return "workspace";
+    return "admin";
   }, [pathname]);
+
+  // 内容容器样式根据页面模式变化
+  const contentContainerClassName = useMemo(() => {
+    switch (pageWidthMode) {
+      case "immersive":
+        return "flex-1 relative overflow-hidden p-0";
+      case "workspace":
+        return "flex-1 relative overflow-auto px-4 py-4 lg:px-6 lg:py-6";
+      case "admin":
+      default:
+        return "flex-1 relative overflow-auto p-8";
+    }
+  }, [pageWidthMode]);
 
   return (
     <TaskProvider>
@@ -582,7 +617,23 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
             <span className="text-textMain font-medium">{getPageTitle()}</span>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex items-center gap-4">
+            {/* Credits Balance Badge */}
+            <button
+              type="button"
+              onClick={() => setHistoryDrawerOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 border border-primary/20 hover:bg-primary/20 transition-colors group"
+              title="查看积分流水"
+            >
+              <Coins
+                size={16}
+                className={`text-primary ${balanceLoading ? "animate-pulse" : ""}`}
+              />
+              <span className="text-sm font-semibold text-primary group-hover:text-blue-300 transition-colors">
+                {balance}
+              </span>
+            </button>
+
             <div className="relative group hidden md:block">
               <Search
                 className="absolute left-3 top-1/2 -translate-y-1/2 text-textMuted group-focus-within:text-primary transition-colors"
@@ -598,11 +649,7 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
           </div>
         </header>
 
-        <div
-          className={`flex-1 relative ${
-            isFullWidthPage ? "overflow-hidden p-0" : "overflow-auto p-8"
-          }`}
-        >
+        <div className={contentContainerClassName}>
           {children}
         </div>
       </main>
@@ -619,6 +666,12 @@ export function AppLayout({ children, me }: { children: React.ReactNode; me: Me 
           setProfileAvatarBase64(r.dataBase64);
           setProfileAvatarContentType(r.contentType);
         }}
+      />
+
+      {/* Credits History Drawer */}
+      <CreditsHistoryDrawer
+        open={historyDrawerOpen}
+        onClose={() => setHistoryDrawerOpen(false)}
       />
       </div>
     </TaskProvider>

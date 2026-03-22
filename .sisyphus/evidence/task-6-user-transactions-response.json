@@ -1,0 +1,112 @@
+{
+  "task": "6 - Backend Transaction/Event Traceability Enhancements",
+  "component": "User Transactions Response",
+  "date": "2026-03-22",
+  
+  "schema_contract": {
+    "CreditTransactionRead": {
+      "base_fields": [
+        "id: UUID",
+        "user_id: UUID",
+        "delta: int",
+        "balance_after: int",
+        "reason: str",
+        "actor_user_id: UUID | null",
+        "meta: dict[str, Any]",
+        "created_at: datetime"
+      ],
+      "computed_traceability_fields": [
+        {
+          "name": "trace_type",
+          "type": "str | None",
+          "description": "Discriminator: 'ai', 'agent', 'admin', or 'init'"
+        },
+        {
+          "name": "operation_display",
+          "type": "str | None",
+          "description": "Human-readable operation description"
+        },
+        {
+          "name": "is_refund",
+          "type": "bool",
+          "description": "Whether this is a refund transaction"
+        },
+        {
+          "name": "linked_event_id",
+          "type": "UUID | None",
+          "description": "Linked AIUsageEvent ID for correlation"
+        },
+        {
+          "name": "category",
+          "type": "str | None",
+          "description": "AI operation category (text/image/video)"
+        },
+        {
+          "name": "model_display",
+          "type": "str | None",
+          "description": "Model name for display"
+        }
+      ]
+    }
+  },
+
+  "example_user_transaction_response": {
+    "id": "550e8400-e29b-41d4-a716-446655440001",
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "delta": -1,
+    "balance_after": 99,
+    "reason": "ai.consume",
+    "actor_user_id": null,
+    "meta": {
+      "trace_type": "ai",
+      "category": "text",
+      "binding_key": "chatbox",
+      "ai_model_config_id": "550e8400-e29b-41d4-a716-446655440002",
+      "ai_usage_event_id": "550e8400-e29b-41d4-a716-446655440003",
+      "refunded": false,
+      "manufacturer": "openai",
+      "model": "gpt-4"
+    },
+    "created_at": "2026-03-22T10:30:00Z",
+    "trace_type": "ai",
+    "operation_display": "文本生成: gpt-4",
+    "is_refund": false,
+    "linked_event_id": "550e8400-e29b-41d4-a716-446655440003",
+    "category": "text",
+    "model_display": "gpt-4"
+  },
+
+  "operation_display_formats": {
+    "ai.text": "文本生成: {model}",
+    "ai.image": "图像生成: {model}",
+    "ai.video": "视频生成: {model}",
+    "ai.unknown": "AI操作: {category}",
+    "agent": "智能体: {agent_name}",
+    "admin": "管理员调整",
+    "init": "账户初始化"
+  },
+
+  "admin_extended_schema": {
+    "CreditTransactionAdminRead": {
+      "extends": "CreditTransactionRead",
+      "additional_fields": [
+        {
+          "name": "raw_payload",
+          "type": "dict[str, Any] | None",
+          "description": "Raw AIUsageEvent payload for debugging"
+        }
+      ]
+    }
+  },
+
+  "verification": {
+    "tests_passed": [
+      "tests/routes/test_credits.py::test_my_credits_returns_balance",
+      "tests/routes/test_credits.py::test_admin_adjust_user_credits",
+      "tests/routes/test_agents.py::test_agent_run_consumes_credits",
+      "tests/routes/test_agents.py::test_agent_run_refunds_on_llm_error",
+      "tests/ai_gateway/test_non_media_regression.py (17 tests)"
+    ],
+    "lsp_diagnostics": "Clean - No errors in modified files"
+  }
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { BaseEdge, getBezierPath } from '@/lib/canvas/xyflow-compat';
+import { BaseEdge, getBezierPath, useReactFlow } from '@/lib/canvas/xyflow-compat';
 import type { PortDataType } from '@/lib/canvas/types';
 import { PORT_COLORS } from '@/lib/canvas/port-system';
 
@@ -34,6 +34,8 @@ export default function TypedEdge({
   const color = portType ? PORT_COLORS[portType] : DEFAULT_COLOR;
   const strokeWidth = selected ? 2.5 : 1.5;
 
+  const { deleteElements } = useReactFlow();
+
   const [edgePath] = getBezierPath({
     sourceX,
     sourceY,
@@ -42,6 +44,10 @@ export default function TypedEdge({
     sourcePosition,
     targetPosition,
   });
+
+  const handleDoubleClick = () => {
+    deleteElements({ edges: [{ id }] });
+  };
 
   return (
     <>
@@ -73,6 +79,16 @@ export default function TypedEdge({
               }
             : {}),
         }}
+      />
+
+      {/* Invisible wider path for easier interaction */}
+      <path
+        d={edgePath}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={20}
+        style={{ cursor: 'pointer' }}
+        onDoubleClick={handleDoubleClick}
       />
 
       {/* Inline keyframes for the flow animation */}

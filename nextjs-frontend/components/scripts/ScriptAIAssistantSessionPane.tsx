@@ -12,6 +12,8 @@ import {
   ChatSessionList,
   ChatMessageList,
 } from "@/components/ai-chat";
+import { CreditCostPreview } from "@/components/credits/CreditCostPreview";
+import { useCredits } from "@/components/credits/CreditsContext";
 import { useTasks } from "@/components/tasks/TaskProvider";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 
@@ -171,6 +173,7 @@ export function ScriptAIAssistantSessionPane({
   onSelectEpisode,
 }: ScriptAIAssistantSessionPaneProps) {
   const { subscribeTask, upsertTask } = useTasks();
+  const { balance, refresh } = useCredits();
   const [activeTaskId, setActiveTaskId] = useState<string | null>(null);
   const [scenes, setScenes] = useState<SceneCatalogItem[]>([]);
   const [scenesLoading, setScenesLoading] = useState(true);
@@ -1012,6 +1015,14 @@ export function ScriptAIAssistantSessionPane({
                 <Square size={16} />
                 停止
               </button>
+            </div>
+
+            <div className="mt-2">
+              <CreditCostPreview
+                category="text"
+                userBalance={balance}
+                size="sm"
+              />
             </div>
 
             {errorText && (

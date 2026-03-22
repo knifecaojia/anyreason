@@ -12,6 +12,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, X, ZoomIn, AlertCircle, Image as ImageIcon, Play, Pause, Repeat, Video, Clock, Send, Trash2, Square, Paperclip, User, Bot } from "lucide-react";
 import { aiAdminListModelConfigs, type AIModelConfig } from "@/components/actions/ai-model-actions";
+import { CreditCostPreview } from "@/components/credits/CreditCostPreview";
+import { useCredits } from "@/components/credits/CreditsContext";
 
 // --------------- Types ---------------
 
@@ -345,6 +347,9 @@ function TextPanel({
   const [modelConfigs, setModelConfigs] = useState<AIModelConfig[]>([]);
   const [selectedConfigId, setSelectedConfigId] = useState("");
   const [supportsImage, setSupportsImage] = useState(false);
+  
+  // Credits integration
+  const { balance, refresh } = useCredits();
 
   // --- Chat state ---
   const [input, setInput] = useState("");
@@ -507,6 +512,8 @@ function TextPanel({
     } finally {
       setIsStreaming(false);
       abortRef.current = null;
+      // Refresh credits balance after operation completes
+      refresh().catch(console.error);
     }
   };
 
@@ -627,6 +634,15 @@ function TextPanel({
               </button>
             </div>
           )}
+          {/* Cost preview - visible before send */}
+          <div className="mb-2">
+            <CreditCostPreview
+              category="text"
+              modelConfigId={selectedConfigId}
+              userBalance={balance}
+              size="sm"
+            />
+          </div>
           <div className="flex items-end gap-2">
             {supportsImage && (
               <>

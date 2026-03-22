@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { CreditCostPreview } from "@/components/credits/CreditCostPreview";
+import { useCredits } from "@/components/credits/CreditsContext";
 
 type SceneCatalogItem = {
   scene_code: string;
@@ -57,6 +59,9 @@ export function ScriptAIAssistantPane(props: {
   const [applyResult, setApplyResult] = useState<any | null>(null);
   const [assetSelections, setAssetSelections] = useState<Record<string, Record<string, boolean>>>({});
   const abortRef = useRef<AbortController | null>(null);
+  
+  // Credits integration
+  const { balance, refresh } = useCredits();
 
   const selected = useMemo(() => scenes.find((s) => s.scene_code === selectedScene) || null, [scenes, selectedScene]);
 
@@ -125,8 +130,10 @@ export function ScriptAIAssistantPane(props: {
     } finally {
       abortRef.current = null;
       setRunning(false);
+      // Refresh credits balance after operation completes
+      refresh().catch(console.error);
     }
-  }, [episodeHint?.episode_code, episodeHint?.episode_id, input, projectId, running, scriptText, selectedScene]);
+  }, [episodeHint?.episode_code, episodeHint?.episode_id, input, projectId, running, scriptText, selectedScene, refresh]);
 
   const stop = useCallback(() => {
     abortRef.current?.abort();
@@ -244,6 +251,15 @@ export function ScriptAIAssistantPane(props: {
                 </div>
               </div>
             ) : null}
+
+            {/* Cost preview - visible before send */}
+            <div>
+              <CreditCostPreview
+                category="text"
+                userBalance={balance}
+                size="sm"
+              />
+            </div>
 
             <textarea
               value={input}

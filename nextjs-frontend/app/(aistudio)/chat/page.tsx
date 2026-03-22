@@ -19,6 +19,8 @@ import {
   Layers,
 } from "lucide-react";
 import { AssetList } from "@/components/chat/AssetCard";
+import { CreditCostPreview } from "@/components/credits/CreditCostPreview";
+import { useCredits } from "@/components/credits/CreditsContext";
 
 type SceneItem = {
   scene_code: string;
@@ -120,6 +122,9 @@ export default function ChatPage() {
   const abortRef = useRef<AbortController | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamingMessageIdRef = useRef<string | null>(null);
+  
+  // Credits integration
+  const { balance, refresh } = useCredits();
 
   const selectedSceneInfo = useMemo(
     () => scenes.find((s) => s.scene_code === selectedScene) || null,
@@ -274,8 +279,10 @@ export default function ChatPage() {
       setMessages((prev) =>
         prev.map((m) => (m.isStreaming ? { ...m, isStreaming: false } : m))
       );
+      // Refresh credits balance after operation completes
+      refresh().catch(console.error);
     }
-  }, [input, selectedScene, isStreaming]);
+  }, [input, selectedScene, isStreaming, refresh]);
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
@@ -411,6 +418,14 @@ export default function ChatPage() {
 
           <div className="p-4 border-t border-border bg-surface/50">
             <div className="max-w-4xl mx-auto">
+              {/* Cost preview - visible before send */}
+              <div className="mb-2">
+                <CreditCostPreview
+                  category="text"
+                  userBalance={balance}
+                  size="sm"
+                />
+              </div>
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <textarea

@@ -1,0 +1,17 @@
+Task 17 frontend Jest verification
+
+Command run:
+- pnpm exec jest __tests__/components/credits/CreditCostPreview.test.tsx __tests__/components/credits/credits-history-normalizer.test.ts __tests__/components/credits/CreditsContext.test.tsx --runInBand
+
+Result:
+- Test Suites: 3 passed, 3 total
+- Tests: 10 passed, 10 total
+
+Covered units:
+- CreditCostPreview warning/error/fallback/loading states
+- CreditsContext refresh success/failure behavior
+- credits-history-normalizer trace/refund normalization behavior
+
+Notes:
+- Existing baseline-browser-mapping freshness warning was emitted by the Jest environment bootstrap
+- No test failures remain
