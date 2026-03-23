@@ -1,0 +1,149 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button "首页" [ref=e6] [cursor=pointer]:
+          - generic [ref=e7]: 首页
+        - button "返回画布列表 (ESC)" [ref=e8] [cursor=pointer]:
+          - img [ref=e9]
+        - button "111" [ref=e11] [cursor=pointer]:
+          - generic [ref=e12]: "111"
+          - img [ref=e13]
+      - generic [ref=e17]:
+        - img [ref=e18]
+        - text: 已保存
+    - generic [ref=e20]:
+      - generic [ref=e22]:
+        - application [ref=e23]:
+          - generic [ref=e25]:
+            - generic:
+              - generic:
+                - img:
+                  - group "Edge from 1774240613130-74fdc8f6979608 to 1774234159579-7e322444e0b268" [ref=e26] [cursor=pointer]
+              - generic:
+                - group [ref=e29]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e30]:
+                    - generic [ref=e31]:
+                      - link "下载" [ref=e32] [cursor=pointer]:
+                        - /url: /api/vfs/nodes/29913979-7b02-4161-8113-4967e1378d76/download
+                        - img [ref=e33]
+                      - generic [ref=e36]: "|"
+                      - button "截图 (框选裁切)" [ref=e37] [cursor=pointer]:
+                        - img [ref=e38]
+                      - generic [ref=e41]: "|"
+                      - button "多宫格编辑" [ref=e42] [cursor=pointer]:
+                        - img [ref=e43]
+                      - generic [ref=e47]: "|"
+                      - button "▶ 重新生成" [disabled] [ref=e48]
+                    - generic [ref=e50]:
+                      - generic [ref=e51]:
+                        - generic [ref=e52]: 图片
+                        - generic [ref=e53]:
+                          - generic [ref=e54]: 512x286
+                          - button "上传图片" [ref=e55] [cursor=pointer]:
+                            - img [ref=e56]
+                      - img "Generated" [ref=e60]
+                      - generic [ref=e62]:
+                        - generic [ref=e63]: aliyun/qwen-image-max
+                        - generic [ref=e64]: ·
+                        - generic [ref=e65]: 1:1 512x286
+                - group [ref=e66]
+                - group [ref=e69]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e72]:
+                    - generic [ref=e73]:
+                      - generic [ref=e74]: 图片
+                      - generic [ref=e75]:
+                        - generic [ref=e76]: 1664x928
+                        - button "上传图片" [ref=e77] [cursor=pointer]:
+                          - img [ref=e78]
+                        - button "多宫格编辑" [ref=e81] [cursor=pointer]:
+                          - img [ref=e82]
+                    - textbox "输入提示词..." [ref=e87]
+                    - generic [ref=e89]:
+                      - button "aliyun/qwen-image-max" [ref=e91] [cursor=pointer]:
+                        - generic [ref=e92]: aliyun/qwen-image-max
+                        - img [ref=e93]
+                      - button "1:1 · 1664x928" [ref=e96] [cursor=pointer]:
+                        - generic [ref=e97]: 1:1 · 1664x928
+                        - img [ref=e98]
+                      - button "▶" [disabled] [ref=e101]
+          - generic "Control Panel" [ref=e102]:
+            - button "Zoom In" [ref=e103] [cursor=pointer]:
+              - img [ref=e104]
+            - button "Zoom Out" [ref=e106] [cursor=pointer]:
+              - img [ref=e107]
+            - button "Fit View" [ref=e109] [cursor=pointer]:
+              - img [ref=e110]
+            - button "Toggle Interactivity" [ref=e112] [cursor=pointer]:
+              - img [ref=e113]
+          - link "React Flow attribution" [ref=e116] [cursor=pointer]:
+            - /url: https://reactflow.dev
+            - text: React Flow
+        - generic [ref=e118]:
+          - button "展开节点库" [ref=e119] [cursor=pointer]:
+            - img [ref=e120]
+          - generic "文本笔记" [ref=e123]:
+            - img [ref=e124]
+          - generic "剧本节点" [ref=e127]:
+            - img [ref=e128]
+          - generic "分镜节点" [ref=e131]:
+            - img [ref=e132]
+          - generic "提示词" [ref=e137]:
+            - img [ref=e138]
+          - generic "文本生成" [ref=e140]:
+            - img [ref=e141]
+          - generic "图片节点" [ref=e143]:
+            - img [ref=e144]
+          - generic "视频节点" [ref=e148]:
+            - img [ref=e149]
+          - generic "拆分节点" [ref=e151]:
+            - img [ref=e152]
+          - generic "提取节点" [ref=e158]:
+            - img [ref=e159]
+          - generic "资产节点" [ref=e164]:
+            - img [ref=e165]
+          - generic "分组节点" [ref=e169]:
+            - img [ref=e170]
+        - generic [ref=e177]:
+          - button "已保存" [ref=e178] [cursor=pointer]:
+            - img [ref=e179]
+            - generic [ref=e181]: 已保存
+          - button "导入" [ref=e183] [cursor=pointer]:
+            - img [ref=e184]
+            - generic [ref=e187]: 导入
+          - button "导出" [ref=e188] [cursor=pointer]:
+            - img [ref=e189]
+            - generic [ref=e192]: 导出
+      - generic [ref=e193]:
+        - generic [ref=e194]:
+          - generic [ref=e195]:
+            - button "剧本" [ref=e196] [cursor=pointer]
+            - button "故事板" [ref=e197] [cursor=pointer]
+            - button "资产库" [ref=e198] [cursor=pointer]
+            - button "画布详情" [ref=e199] [cursor=pointer]
+          - button "▸" [ref=e200] [cursor=pointer]
+        - generic [ref=e202]:
+          - generic [ref=e203]:
+            - generic [ref=e204]: 剧本
+            - combobox [ref=e205]:
+              - option "选择剧本" [selected]
+              - option "1"
+          - generic [ref=e206]:
+            - generic [ref=e207]: 分集
+            - combobox [disabled] [ref=e208]:
+              - option "选择分集" [selected]
+          - generic [ref=e209]:
+            - generic [ref=e210]: 镜头列表
+            - generic [ref=e211]: 请选择剧本和分集
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e217] [cursor=pointer]:
+    - img [ref=e218]
+  - alert [ref=e221]

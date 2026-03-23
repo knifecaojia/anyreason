@@ -232,9 +232,10 @@ class AssetImageGenerateHandler(BaseTaskHandler):
 
         if url.startswith("http://") or url.startswith("https://"):
             try:
-                # 优先用 MinIO 认证客户端下载（避免 bucket 未公开时 403）
-                from app.storage.minio_client import download_minio_bytes
-                minio_result = download_minio_bytes(url)
+                # 优先用存储提供者下载（避免 bucket 未公开时 403）
+                from app.storage import get_storage_provider
+                provider = get_storage_provider()
+                minio_result = provider.download_by_url(url)
                 if minio_result is not None:
                     data, ct = minio_result
                 else:

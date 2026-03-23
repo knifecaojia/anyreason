@@ -17,6 +17,20 @@ import {
 } from '@/lib/canvas/node-registry';
 import { ChevronDown, ChevronRight, ChevronLeft, PanelLeftOpen } from 'lucide-react';
 
+const HIDDEN_NODE_LIBRARY_TYPES = new Set([
+  'promptNode',
+  'scriptNode',
+  'storyboardNode',
+  'groupNode',
+  'slicerNode',
+  'candidateNode',
+  'assetNode',
+]);
+
+function isVisibleInNodeLibrary(reg: NodeTypeRegistration) {
+  return !HIDDEN_NODE_LIBRARY_TYPES.has(reg.type);
+}
+
 /** Group metadata with Chinese labels */
 const NODE_GROUPS: { group: NodeGroup; label: string }[] = [
   { group: 'creation', label: '创作组' },
@@ -81,7 +95,7 @@ function NodeGroupSection({
   defaultExpanded?: boolean;
 }) {
   const [expanded, setExpanded] = useState(defaultExpanded);
-  const nodeTypes = getNodeTypesByGroup(group);
+  const nodeTypes = getNodeTypesByGroup(group).filter(isVisibleInNodeLibrary);
 
   if (nodeTypes.length === 0) return null;
 
@@ -113,7 +127,7 @@ export default function NodeLibrary() {
 
   // --- Collapsed: slim icon strip ---
   if (!expanded) {
-    const allTypes = Array.from(getAllNodeTypes().values());
+    const allTypes = Array.from(getAllNodeTypes().values()).filter(isVisibleInNodeLibrary);
     return (
       <div className="absolute top-4 left-4 bg-surface/90 backdrop-blur border border-border rounded-xl shadow-xl z-10 flex flex-col items-center py-2 px-1 gap-1">
         {/* Expand button */}

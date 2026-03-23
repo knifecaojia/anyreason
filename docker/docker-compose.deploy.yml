@@ -90,11 +90,18 @@ services:
       RESET_PASSWORD_SECRET_KEY: ${RESET_PASSWORD_SECRET_KEY:-dev-reset-password-secret-change-me}
       VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      # Object storage: set OBJECT_STORAGE_PROVIDER=cos and add COS_* vars to switch to Tencent COS
+      OBJECT_STORAGE_PROVIDER: ${OBJECT_STORAGE_PROVIDER:-minio}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
+      # COS_SECRET_ID: ${COS_SECRET_ID}
+      # COS_SECRET_KEY: ${COS_SECRET_KEY}
+      # COS_REGION: ${COS_REGION}
+      # COS_BUCKET: ${COS_BUCKET}
+      # COS_DOMAIN: ${COS_DOMAIN}
     volumes:
       - ../fastapi_backend:/app
       - fastapi-venv:/app/.venv
@@ -124,11 +131,18 @@ services:
       VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       OPENAPI_OUTPUT_FILE: /app/shared-data/openapi.json
+      # Object storage: set OBJECT_STORAGE_PROVIDER=cos and add COS_* vars to switch to Tencent COS
+      OBJECT_STORAGE_PROVIDER: ${OBJECT_STORAGE_PROVIDER:-minio}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
+      # COS_SECRET_ID: ${COS_SECRET_ID}
+      # COS_SECRET_KEY: ${COS_SECRET_KEY}
+      # COS_REGION: ${COS_REGION}
+      # COS_BUCKET: ${COS_BUCKET}
+      # COS_DOMAIN: ${COS_DOMAIN}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -160,11 +174,18 @@ services:
       RESET_PASSWORD_SECRET_KEY: ${RESET_PASSWORD_SECRET_KEY:-dev-reset-password-secret-change-me}
       VERIFICATION_SECRET_KEY: ${VERIFICATION_SECRET_KEY:-dev-verification-secret-change-me}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      # Object storage: set OBJECT_STORAGE_PROVIDER=cos and add COS_* vars to switch to Tencent COS
+      OBJECT_STORAGE_PROVIDER: ${OBJECT_STORAGE_PROVIDER:-minio}
       MINIO_ENDPOINT: ${MINIO_ENDPOINT:-http://minio:9000}
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-${MINIO_ROOT_USER:-minioadmin}}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-${MINIO_ROOT_PASSWORD:-minioadmin}}
       MINIO_SECURE: ${MINIO_SECURE:-false}
       MINIO_BUCKET_SCRIPTS: ${MINIO_BUCKET_SCRIPTS:-anyreason-scripts}
+      # COS_SECRET_ID: ${COS_SECRET_ID}
+      # COS_SECRET_KEY: ${COS_SECRET_KEY}
+      # COS_REGION: ${COS_REGION}
+      # COS_BUCKET: ${COS_BUCKET}
+      # COS_DOMAIN: ${COS_DOMAIN}
     volumes:
       - ../fastapi_backend:/app
       - fastapi-venv:/app/.venv

@@ -18,7 +18,7 @@ from app.schemas_response import ResponseBase
 from app.services.script_parse_service import script_parse_service
 from app.services.script_service import script_service
 from app.services.script_structure_service import script_structure_service
-from app.storage import get_minio_client
+from app.storage import get_storage_provider
 from app.users import current_user_via_any
 from app.repositories import asset_repository
 
@@ -27,6 +27,28 @@ router = APIRouter()
 
 MAX_SCRIPT_BYTES = 20 * 1024 * 1024
 ASPECT_RATIO_CHOICES = {"16:9", "9:16", "4:3", "3:4", "1:1", "21:9"}
+_STREAM_CHUNK_SIZE = 32 * 1024
+
+
+def _iter_stream_chunks(obj) -> bytes:
+    """Yield chunks from a storage response object.
+
+    MinIO's urllib3.HTTPResponse supports ``.stream(chunk_size)`` but COS's
+    ``_CosStreamWrapper`` only supports ``.read()``.  We try ``.stream()`` first
+    and fall back to reading the full body and yielding in fixed-size slices.
+    """
+    try:
+        for chunk in obj.stream(_STREAM_CHUNK_SIZE):
+            yield chunk
+        return
+    except (AttributeError, TypeError):
+        pass
+    # Fallback: read entire body at once and slice into chunks
+    data = obj.read()
+    offset = 0
+    while offset < len(data):
+        yield data[offset : offset + _STREAM_CHUNK_SIZE]
+        offset += _STREAM_CHUNK_SIZE
 
 
 @router.get("", response_model=ResponseBase[Page[ScriptRead]])
@@ -176,11 +198,9 @@ async def download_script(
     if not script:
         raise AppError(msg="Script not found or not authorized", code=404, status_code=404)
 
-    client = get_minio_client()
+    provider = get_storage_provider()
     try:
-        obj = await run_in_threadpool(
-            lambda: client.get_object(script.minio_bucket, script.minio_key)
-        )
+        obj = await run_in_threadpool(provider.get_object, script.minio_bucket, script.minio_key)
     except Exception:
         raise AppError(msg="对象存储读取失败", code=500, status_code=500)
 
@@ -189,7 +209,7 @@ async def download_script(
 
     def iterator():
         try:
-            for chunk in obj.stream(32 * 1024):
+            for chunk in _iter_stream_chunks(obj):
                 yield chunk
         finally:
             obj.close()
@@ -214,11 +234,9 @@ async def get_script_panorama(
     if not getattr(script, "panorama_minio_bucket", None) or not getattr(script, "panorama_minio_key", None):
         raise AppError(msg="Panorama not found", code=404, status_code=404)
 
-    client = get_minio_client()
+    provider = get_storage_provider()
     try:
-        obj = await run_in_threadpool(
-            lambda: client.get_object(script.panorama_minio_bucket, script.panorama_minio_key)
-        )
+        obj = await run_in_threadpool(provider.get_object, script.panorama_minio_bucket, script.panorama_minio_key)
     except Exception:
         raise AppError(msg="对象存储读取失败", code=500, status_code=500)
 
@@ -227,7 +245,7 @@ async def get_script_panorama(
 
     def iterator():
         try:
-            for chunk in obj.stream(32 * 1024):
+            for chunk in _iter_stream_chunks(obj):
                 yield chunk
         finally:
             obj.close()
@@ -252,11 +270,9 @@ async def get_script_panorama_thumbnail(
     if not getattr(script, "panorama_thumb_minio_bucket", None) or not getattr(script, "panorama_thumb_minio_key", None):
         raise AppError(msg="Panorama thumbnail not found", code=404, status_code=404)
 
-    client = get_minio_client()
+    provider = get_storage_provider()
     try:
-        obj = await run_in_threadpool(
-            lambda: client.get_object(script.panorama_thumb_minio_bucket, script.panorama_thumb_minio_key)
-        )
+        obj = await run_in_threadpool(provider.get_object, script.panorama_thumb_minio_bucket, script.panorama_thumb_minio_key)
     except Exception:
         raise AppError(msg="对象存储读取失败", code=500, status_code=500)
 
@@ -265,7 +281,7 @@ async def get_script_panorama_thumbnail(
 
     def iterator():
         try:
-            for chunk in obj.stream(32 * 1024):
+            for chunk in _iter_stream_chunks(obj):
                 yield chunk
         finally:
             obj.close()

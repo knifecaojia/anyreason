@@ -32,7 +32,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.models import Canvas, CanvasNode, FileNode, Storyboard, Task
-from app.storage.minio_client import get_minio_client
+from app.storage import get_storage_provider
 from app.tasks.handlers.base import BaseTaskHandler
 from app.tasks.reporter import TaskReporter
 
@@ -180,10 +180,10 @@ class CanvasExportHandler(BaseTaskHandler):
 
     @staticmethod
     async def _read_minio_object(*, bucket: str, key: str) -> bytes:
-        client = get_minio_client()
+        provider = get_storage_provider()
 
         def _op() -> bytes:
-            obj = client.get_object(bucket_name=bucket, object_name=key)
+            obj = provider.get_object(bucket=bucket, object_name=key)
             try:
                 return obj.read()
             finally:

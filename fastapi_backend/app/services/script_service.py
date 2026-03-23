@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import re
 from uuid import UUID, uuid4
 
@@ -11,7 +10,7 @@ from starlette.concurrency import run_in_threadpool
 from app.config import settings
 from app.models import Project, Script
 from app.repositories import script_repository
-from app.storage import get_minio_client
+from app.storage import get_storage_provider
 from app.storage.image_thumbs import generate_thumbnail, should_generate_thumbnail
 
 
@@ -31,37 +30,18 @@ def _slug(value: str) -> str:
 
 
 async def _ensure_bucket(bucket: str) -> None:
-    client = get_minio_client()
-
-    def _op():
-        if not client.bucket_exists(bucket):
-            client.make_bucket(bucket)
-
-    await run_in_threadpool(_op)
+    provider = get_storage_provider()
+    await run_in_threadpool(provider.ensure_bucket, bucket)
 
 
 async def _put_object(*, bucket: str, key: str, data: bytes, content_type: str | None) -> None:
-    client = get_minio_client()
-
-    def _op():
-        client.put_object(
-            bucket_name=bucket,
-            object_name=key,
-            data=io.BytesIO(data),
-            length=len(data),
-            content_type=content_type or "application/octet-stream",
-        )
-
-    await run_in_threadpool(_op)
+    provider = get_storage_provider()
+    await run_in_threadpool(provider.put_bytes, bucket, key, data, content_type)
 
 
 async def _remove_object(*, bucket: str, key: str) -> None:
-    client = get_minio_client()
-
-    def _op():
-        client.remove_object(bucket_name=bucket, object_name=key)
-
-    await run_in_threadpool(_op)
+    provider = get_storage_provider()
+    await run_in_threadpool(provider.delete_object, bucket, key)
 
 
 class ScriptService:

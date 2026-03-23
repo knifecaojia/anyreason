@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect, type ReactNode } from 'react';
+import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { Handle, Position } from '@/lib/canvas/xyflow-compat';
 import type { PortDefinition } from '@/lib/canvas/types';
+import { useHandlerContextMenu } from '@/lib/canvas/canvas-context';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
 export interface NodeShellProps {
@@ -27,28 +28,65 @@ const HANDLE_STYLE: React.CSSProperties = {
   background: '#374151', border: '3px solid #1f2937',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: 14, fontWeight: 700, color: '#9ca3af',
-  top: '50%', zIndex: 30,
+  top: '50%', zIndex: 30, pointerEvents: 'all',
 };
 
-function PortHandles({ ports, selected = false }: { ports: PortDefinition[]; selected?: boolean }) {
+function PortHandles({ 
+  nodeId,
+  ports, 
+  selected = false,
+}: { 
+  nodeId: string;
+  ports: PortDefinition[]; 
+  selected?: boolean;
+}) {
   const hasInput = ports.some((p) => p.direction === 'input');
   const hasOutput = ports.some((p) => p.direction === 'output');
+  const onHandlerContextMenu = useHandlerContextMenu();
+
+  const handleInputContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!onHandlerContextMenu) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onHandlerContextMenu(e, nodeId, 'in', 'input');
+  }, [onHandlerContextMenu, nodeId]);
+
+  const handleOutputContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!onHandlerContextMenu) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onHandlerContextMenu(e, nodeId, 'out', 'output');
+  }, [onHandlerContextMenu, nodeId]);
 
   return (
     <>
       {hasInput && (
-        <Handle id="in" type="target" position={Position.Left}
+        <>
+        <Handle
+          id="in"
+          type="target"
+          position={Position.Left}
           className="node-handle-in"
-          style={HANDLE_STYLE}>
+          style={HANDLE_STYLE}
+          onContextMenu={handleInputContextMenu}
+        >
           <span className="pointer-events-none select-none leading-none">+</span>
         </Handle>
+        </>
       )}
       {hasOutput && (
-        <Handle id="out" type="source" position={Position.Right}
+        <>
+        <Handle
+          id="out"
+          type="source"
+          position={Position.Right}
           className="node-handle-out"
-          style={HANDLE_STYLE}>
+          style={HANDLE_STYLE}
+          onContextMenu={handleOutputContextMenu}
+        >
           <span className="pointer-events-none select-none leading-none">+</span>
         </Handle>
+        </>
       )}
     </>
   );
@@ -178,7 +216,7 @@ export default function NodeShell({
         }`}
         style={{ minHeight: 40 }}
       >
-        {hasPorts ? <PortHandles ports={ports} selected={selected} /> : <DefaultPortHandles />}
+        {hasPorts ? <PortHandles nodeId={nodeId} ports={ports} selected={selected} /> : <DefaultPortHandles />}
         <div className="px-3 py-2 text-xs font-medium truncate">
           {Icon && <Icon size={14} />}
           {title}
@@ -195,7 +233,7 @@ export default function NodeShell({
           selected ? 'ring-2 ring-primary' : ''
         }`}
       >
-        {hasPorts ? <PortHandles ports={ports} selected={selected} /> : <DefaultPortHandles />}
+        {hasPorts ? <PortHandles nodeId={nodeId} ports={ports} selected={selected} /> : <DefaultPortHandles />}
         <TitleBar
           title={title}
           icon={Icon}
@@ -215,7 +253,7 @@ export default function NodeShell({
         selected ? 'ring-2 ring-primary' : ''
       }`}
     >
-      {hasPorts ? <PortHandles ports={ports} selected={selected} /> : <DefaultPortHandles />}
+      {hasPorts ? <PortHandles nodeId={nodeId} ports={ports} selected={selected} /> : <DefaultPortHandles />}
       <TitleBar
         title={title}
         icon={Icon}

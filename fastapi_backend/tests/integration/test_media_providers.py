@@ -132,9 +132,11 @@ async def test_vidu_provider_failure_extracts_richer_error_message():
 
 @pytest.mark.asyncio
 async def test_gemini_provider():
-    with patch("app.ai_gateway.providers.media.gemini.get_minio_client") as mock_get_minio:
-        mock_minio = MagicMock()
-        mock_get_minio.return_value = mock_minio
+    with patch("app.ai_gateway.providers.media.gemini.get_storage_provider") as mock_get_storage:
+        mock_storage = MagicMock()
+        mock_storage.put_bytes.return_value = None
+        mock_storage.build_url.return_value = "http://localhost/vfs/generated/gemini/test-image.png"
+        mock_get_storage.return_value = mock_storage
 
         provider = GeminiMediaProvider(api_key="test_key")
 
@@ -162,4 +164,4 @@ async def test_gemini_provider():
             res = await provider.generate(req)
 
             assert "generated/gemini/" in res.url
-            mock_minio.put_object.assert_called_once()
+            mock_storage.put_bytes.assert_called_once()

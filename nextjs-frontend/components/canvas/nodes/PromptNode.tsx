@@ -14,6 +14,7 @@ import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow-compat';
 import type { PromptNodeData } from '@/lib/canvas/types';
 import { propagateData } from '@/lib/canvas/data-flow';
+import { useHandlerContextMenu } from '@/lib/canvas/canvas-context';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import PromptTemplateModal, { type PromptPreset } from '@/components/canvas/PromptTemplateModal';
 import { BookOpen } from 'lucide-react';
@@ -24,7 +25,7 @@ const HANDLE_STYLE: React.CSSProperties = {
   background: '#374151', border: '3px solid #1f2937',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: 14, fontWeight: 700, color: '#9ca3af',
-  top: '50%', zIndex: 30,
+  top: '50%', zIndex: 30, pointerEvents: 'all',
 };
 
 export default function PromptNode(props: NodeProps) {
@@ -38,6 +39,7 @@ export default function PromptNode(props: NodeProps) {
   const getEdges = rf.getEdges as () => any[];
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const onHandlerContextMenu = useHandlerContextMenu();
 
   const content = data.content ?? '';
   const charCount = content.length;
@@ -53,6 +55,62 @@ export default function PromptNode(props: NodeProps) {
       propagateData(props.id, 'out', newContent, currentNodes, currentEdges, rf.setNodes);
     }, 300);
   }, [data, props.id, updateNodeData, getNodes, getEdges, rf.setNodes]);
+
+  const handleInputContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!onHandlerContextMenu) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onHandlerContextMenu(e, props.id, 'in', 'input');
+  }, [onHandlerContextMenu, props.id]);
+
+  const handleOutputContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!onHandlerContextMenu) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onHandlerContextMenu(e, props.id, 'out', 'output');
+  }, [onHandlerContextMenu, props.id]);
+
+  const forwardHandlePointerDown = useCallback((handleId: 'in' | 'out') => (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button === 2) return;
+    const overlay = e.currentTarget;
+    overlay.style.pointerEvents = 'none';
+
+    const restore = () => {
+      overlay.style.pointerEvents = 'auto';
+      window.removeEventListener('mouseup', restore, true);
+      window.removeEventListener('dragend', restore, true);
+    };
+
+    window.addEventListener('mouseup', restore, true);
+    window.addEventListener('dragend', restore, true);
+
+    const target = document.querySelector(`[data-nodeid="${props.id}"][data-handleid="${handleId}"]`) as HTMLElement | null;
+    if (!target) return;
+
+    const base = {
+      bubbles: true,
+      cancelable: true,
+      clientX: e.clientX,
+      clientY: e.clientY,
+      button: e.button,
+      buttons: e.buttons,
+      ctrlKey: e.ctrlKey,
+      shiftKey: e.shiftKey,
+      altKey: e.altKey,
+      metaKey: e.metaKey,
+    };
+
+    if (typeof PointerEvent !== 'undefined') {
+      target.dispatchEvent(new PointerEvent('pointerdown', {
+        ...base,
+        pointerId: 1,
+        pointerType: 'mouse',
+        isPrimary: true,
+      }));
+    }
+
+    target.dispatchEvent(new MouseEvent('mousedown', base));
+  }, [props.id]);
 
   // Icon mode
   if (renderLevel === 'icon') {
@@ -79,15 +137,29 @@ export default function PromptNode(props: NodeProps) {
       {/* Input handle — optional upstream text */}
       <Handle id="in" type="target" position={Position.Left}
         className="node-handle-in"
+        onContextMenu={handleInputContextMenu}
         style={HANDLE_STYLE}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
+      <div
+        className="absolute rounded-full cursor-context-menu"
+        style={{ left: -14, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, zIndex: 40 }}
+        onMouseDown={forwardHandlePointerDown('in')}
+        onContextMenu={handleInputContextMenu}
+      />
       {/* Output handle */}
       <Handle id="out" type="source" position={Position.Right}
         className="node-handle-out"
+        onContextMenu={handleOutputContextMenu}
         style={HANDLE_STYLE}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
+      <div
+        className="absolute rounded-full cursor-context-menu"
+        style={{ right: -14, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, zIndex: 40 }}
+        onMouseDown={forwardHandlePointerDown('out')}
+        onContextMenu={handleOutputContextMenu}
+      />
 
       <div
         className={`rounded-xl border bg-canvasNode overflow-hidden flex flex-col relative ${

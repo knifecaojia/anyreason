@@ -188,6 +188,23 @@ registerNodeType({
   ],
 });
 
+registerNodeType({
+  type: 'generatorNode',
+  label: '提示词',
+  group: 'creation',
+  icon: MessageCircle,
+  colorClass: GROUP_COLORS['creation'],
+  component: PromptNode,
+  defaultData: () => ({
+    kind: 'prompt',
+    content: '',
+  }),
+  ports: [
+    { id: 'in', direction: 'input', dataType: 'text', label: 'Input' },
+    { id: 'out', direction: 'output', dataType: 'text', label: 'Output' },
+  ],
+});
+
 // --- AI Generation Group ---
 
 registerNodeType({

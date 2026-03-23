@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.core.exceptions import AppError
 from app.models import Episode, Project, Storyboard, Script, AssetBinding
-from app.storage import get_minio_client
+from app.storage import get_storage_provider
 
 BODY_MARKER = "剧本正文"
 
@@ -251,10 +251,10 @@ def parse_episode_to_storyboards(ep_num: int, episode_text: str) -> list[ParsedS
 
 
 async def _read_script_text_from_minio(script: Script) -> str:
-    client = get_minio_client()
+    provider = get_storage_provider()
 
     def _op() -> bytes:
-        obj = client.get_object(bucket_name=script.minio_bucket, object_name=script.minio_key)
+        obj = provider.get_object(bucket=script.minio_bucket, object_name=script.minio_key)
         try:
             return obj.read()
         finally:

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import io
 import mimetypes
 import re
 from datetime import datetime, timezone
@@ -14,42 +13,23 @@ from starlette.concurrency import run_in_threadpool
 from app.core.exceptions import AppError
 from app.models import FileNode, Project, WorkspaceMember
 from app.config import settings
-from app.storage.minio_client import get_minio_client
+from app.storage import get_storage_provider
 from app.storage.image_thumbs import generate_thumbnail, should_generate_thumbnail
 
 
 async def _ensure_bucket(bucket: str) -> None:
-    client = get_minio_client()
-
-    def _op():
-        if not client.bucket_exists(bucket):
-            client.make_bucket(bucket)
-
-    await run_in_threadpool(_op)
+    provider = get_storage_provider()
+    await run_in_threadpool(provider.ensure_bucket, bucket)
 
 
 async def _put_object(*, bucket: str, key: str, data: bytes, content_type: str) -> None:
-    client = get_minio_client()
-
-    def _op():
-        client.put_object(
-            bucket_name=bucket,
-            object_name=key,
-            data=io.BytesIO(data),
-            length=len(data),
-            content_type=content_type,
-        )
-
-    await run_in_threadpool(_op)
+    provider = get_storage_provider()
+    await run_in_threadpool(provider.put_bytes, bucket, key, data, content_type)
 
 
 async def _remove_object(*, bucket: str, key: str) -> None:
-    client = get_minio_client()
-
-    def _op():
-        client.remove_object(bucket_name=bucket, object_name=key)
-
-    await run_in_threadpool(_op)
+    provider = get_storage_provider()
+    await run_in_threadpool(provider.delete_object, bucket, key)
 
 
 _INVALID_FILENAME_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]+")
@@ -462,10 +442,10 @@ class VFSService:
         if not node.minio_bucket or not node.minio_key:
             raise AppError(msg="File content not available", code=404, status_code=404)
 
-        client = get_minio_client()
+        provider = get_storage_provider()
 
         def _op() -> bytes:
-            obj = client.get_object(bucket_name=node.minio_bucket, object_name=node.minio_key)
+            obj = provider.get_object(bucket=node.minio_bucket, object_name=node.minio_key)
             try:
                 return obj.read()
             finally:
@@ -483,10 +463,10 @@ class VFSService:
         if not node.thumb_minio_bucket or not node.thumb_minio_key:
             raise AppError(msg="Thumbnail not available", code=404, status_code=404)
 
-        client = get_minio_client()
+        provider = get_storage_provider()
 
         def _op() -> bytes:
-            obj = client.get_object(bucket_name=node.thumb_minio_bucket, object_name=node.thumb_minio_key)
+            obj = provider.get_object(bucket=node.thumb_minio_bucket, object_name=node.thumb_minio_key)
             try:
                 return obj.read()
             finally:

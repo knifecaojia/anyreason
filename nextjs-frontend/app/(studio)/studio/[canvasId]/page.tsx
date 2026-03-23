@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { addEdge, Controls, ReactFlow, ReactFlowProvider, useEdgesState, useNodesState, useOnSelectionChange, useReactFlow } from "@xyflow/react";
 import { buildReactFlowNodeTypes, getNodeType, getAllNodeTypes } from "@/lib/canvas/node-registry";
@@ -19,6 +19,9 @@ import { createStoryboardNodesFromSlicerOutput, generateFullWorkflow } from "@/l
 import { needsMigration, migrateCanvasSnapshot } from "@/lib/canvas/migrate-canvas";
 import { syncAfterSave, startupSyncValidation, uploadCanvasThumbnail } from "@/lib/canvas/canvas-sync";
 import { ArrowLeft, Check, Loader2, AlertCircle, Pencil } from "lucide-react";
+
+import HandlerContextMenu from "@/components/canvas/HandlerContextMenu";
+import { CanvasProvider } from "@/lib/canvas/canvas-context";
 
 // ===== Shared types =====
 
@@ -129,6 +132,16 @@ function ensureNodeDimensions(node: any): any {
   };
 }
 
+function ensureEdgeType(edge: any): any {
+  if (edge?.type === TYPED_EDGE_TYPE) {
+    return edge;
+  }
+  return {
+    ...edge,
+    type: TYPED_EDGE_TYPE,
+  };
+}
+
 // ===== VFS helpers =====
 
 async function vfsListNodes(params: { parent_id?: string | null }): Promise<VfsNode[]> {
@@ -225,6 +238,15 @@ function ImmersiveToolbar({
   return (
     <header className="h-10 shrink-0 border-b border-border/50 bg-background/80 backdrop-blur flex items-center justify-between px-3 z-20 relative">
       <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={() => router.push("/dashboard")}
+          className="w-7 h-7 rounded-md hover:bg-surfaceHighlight flex items-center justify-center text-textMuted hover:text-textMain transition-colors"
+          title="返回主页"
+        >
+          <span className="text-[10px] font-medium">首页</span>
+        </button>
+
         <button
           type="button"
           onClick={() => router.push("/studio")}
@@ -504,7 +526,7 @@ function StudioCanvasEditor() {
               const parsed = JSON.parse(draft);
               if (!cancelled && parsed?.reactflow?.nodes && parsed?.reactflow?.edges) {
                 setNodes(parsed.reactflow.nodes.map(ensureNodeDimensions));
-                setEdges(parsed.reactflow.edges);
+                setEdges(parsed.reactflow.edges.map(ensureEdgeType));
                 if (parsed.reactflow.viewport) setViewport(parsed.reactflow.viewport);
                 // VFS name overrides DB name if present in draft
                 if (parsed.name) setCanvasName(parsed.name);
@@ -522,7 +544,7 @@ function StudioCanvasEditor() {
         if (!cancelled) {
           if (parsed?.reactflow?.nodes && parsed?.reactflow?.edges) {
             setNodes(parsed.reactflow.nodes.map(ensureNodeDimensions));
-            setEdges(parsed.reactflow.edges);
+            setEdges(parsed.reactflow.edges.map(ensureEdgeType));
             if (parsed.reactflow.viewport) setViewport(parsed.reactflow.viewport);
             // M3.4: Startup sync validation — repair VFS/DB drift (fire-and-forget)
             void startupSyncValidation(canvasId, parsed.reactflow.nodes);
@@ -761,9 +783,9 @@ function StudioCanvasEditor() {
           idMap.set(n.id, newId);
           return ensureNodeDimensions({ ...n, id: newId, position: { x: n.position.x + 50, y: n.position.y + 50 }, selected: false });
         });
-        const newEdges = clipboardRef.current.edges
-          .filter((ed: any) => idMap.has(ed.source) && idMap.has(ed.target))
-          .map((ed: any) => ({ ...ed, id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, source: idMap.get(ed.source)!, target: idMap.get(ed.target)!, selected: false }));
+         const newEdges = clipboardRef.current.edges
+           .filter((ed: any) => idMap.has(ed.source) && idMap.has(ed.target))
+           .map((ed: any) => ensureEdgeType({ ...ed, id: `${Date.now()}-${Math.random().toString(16).slice(2)}`, source: idMap.get(ed.source)!, target: idMap.get(ed.target)!, selected: false }));
         setNodes((ns) => ns.concat(newNodes as any));
         setEdges((es) => es.concat(newEdges as any));
         return;
@@ -821,6 +843,97 @@ function StudioCanvasEditor() {
       }
     }
   }, [setEdges, validateConnect, pushUndo, nodes, edges]);
+
+  const cleanupEdgeSideEffects = useCallback(async (edge: any) => {
+    const sourceNode = nodes.find((n) => n.id === edge.source);
+    const targetNode = nodes.find((n) => n.id === edge.target);
+
+    if (sourceNode?.type === 'assetNode' && targetNode?.type === 'storyboardNode' && edge.targetHandle === 'in') {
+      const assetId = (sourceNode.data as any)?.assetId as string | undefined;
+      const storyboardId = (targetNode.data as any)?.sourceStoryboardId as string | undefined;
+
+      if (assetId && storyboardId) {
+        try {
+          const res = await fetch(`/api/storyboards/${encodeURIComponent(storyboardId)}/asset-bindings`, {
+            cache: 'no-store',
+          });
+          if (!res.ok) return;
+          const json = await res.json() as { data?: { bindings?: Array<{ id: string; asset_entity_id: string }> } };
+          const binding = json.data?.bindings?.find((item) => item.asset_entity_id === assetId);
+          if (binding?.id) {
+            await fetch(`/api/asset-bindings/${encodeURIComponent(binding.id)}`, {
+              method: 'DELETE',
+            });
+          }
+        } catch (err) {
+          console.error('[AssetBinding] Cleanup on edge delete failed:', err);
+        }
+      }
+    }
+  }, [nodes]);
+
+  const onEdgeDoubleClick = useCallback((_event: React.MouseEvent, edge: any) => {
+    pushUndo({ nodes: nodes as any, edges: edges as any });
+    setEdges((current) => current.filter((item: any) => item.id !== edge.id) as any);
+    void cleanupEdgeSideEffects(edge);
+  }, [cleanupEdgeSideEffects, edges, nodes, pushUndo, setEdges]);
+
+  const onEdgeClick = useCallback((event: React.MouseEvent, edge: any) => {
+    if (event.detail < 2) return;
+    pushUndo({ nodes: nodes as any, edges: edges as any });
+    setEdges((current) => current.filter((item: any) => item.id !== edge.id) as any);
+    void cleanupEdgeSideEffects(edge);
+  }, [cleanupEdgeSideEffects, edges, nodes, pushUndo, setEdges]);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const handleEdgeDoubleClick = (event: MouseEvent) => {
+      const target = event.target;
+      let edgeId: string | null = null;
+
+      if (target instanceof Element) {
+        edgeId = target.closest('.react-flow__edge')?.getAttribute('data-id') ?? null;
+      }
+
+      if (!edgeId) {
+        const interactionPaths = Array.from(
+          wrapper.querySelectorAll('.react-flow__edge path[stroke="transparent"], .react-flow__edge .react-flow__edge-interaction')
+        );
+
+        for (const pathEl of interactionPaths) {
+          if (!(pathEl instanceof SVGGeometryElement)) continue;
+          const svg = pathEl.ownerSVGElement;
+          if (!svg) continue;
+          const point = svg.createSVGPoint();
+          point.x = event.clientX;
+          point.y = event.clientY;
+          const ctm = pathEl.getScreenCTM();
+          if (!ctm) continue;
+          const localPoint = point.matrixTransform(ctm.inverse());
+          if (typeof pathEl.isPointInStroke === 'function' && pathEl.isPointInStroke(localPoint)) {
+            edgeId = pathEl.closest('.react-flow__edge')?.getAttribute('data-id') ?? null;
+            if (edgeId) break;
+          }
+        }
+      }
+
+      if (!edgeId) return;
+
+      const edge = edges.find((item: any) => item.id === edgeId || `xy-edge__${item.id}` === edgeId);
+      if (!edge) return;
+
+      pushUndo({ nodes: nodes as any, edges: edges as any });
+      setEdges((current) => current.filter((item: any) => item.id !== edge.id) as any);
+      void cleanupEdgeSideEffects(edge);
+    };
+
+    wrapper.addEventListener('dblclick', handleEdgeDoubleClick, true);
+    return () => {
+      wrapper.removeEventListener('dblclick', handleEdgeDoubleClick, true);
+    };
+  }, [cleanupEdgeSideEffects, edges, nodes, pushUndo, setEdges]);
 
   // --- Drop ---
   const onDragOver = useCallback((event: React.DragEvent) => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; }, []);
@@ -905,9 +1018,177 @@ function StudioCanvasEditor() {
     }).catch(() => {});
   }, [canvasId]);
 
+  // Handler context menu callback - creates new node and auto-links it
+  const handleHandlerContextMenu = useCallback((
+    event: { clientX: number; clientY: number },
+    nodeId: string,
+    handleId: string,
+    direction: 'input' | 'output'
+  ) => {
+    const items = [
+      {
+        label: '创建图片节点',
+        onClick: () => {
+          const sourceNode = nodes.find((n) => n.id === nodeId);
+          if (!sourceNode) return;
+          
+          const newId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const offsetX = direction === 'output' ? 300 : -300;
+          const newPos = { 
+            x: sourceNode.position.x + offsetX, 
+            y: sourceNode.position.y 
+          };
+          
+          pushUndo({ nodes: nodes as any, edges: edges as any });
+          
+          // Create new image output node
+          const reg = getNodeType('imageOutputNode');
+          if (reg) {
+            const newNode = ensureNodeDimensions({
+              id: newId,
+              type: 'imageOutputNode',
+              position: newPos,
+              data: reg.defaultData(),
+            });
+            rfAddNodes([newNode as any]);
+            
+            // Create edge based on direction
+            if (direction === 'output') {
+              setEdges((eds) => [...eds, {
+                id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                source: nodeId,
+                target: newId,
+                sourceHandle: handleId,
+                targetHandle: 'in',
+                type: TYPED_EDGE_TYPE,
+                data: { relation: 'reference' },
+              } as any]);
+            } else {
+              setEdges((eds) => [...eds, {
+                id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                source: newId,
+                target: nodeId,
+                sourceHandle: 'out',
+                targetHandle: handleId,
+                type: TYPED_EDGE_TYPE,
+                data: { relation: 'reference' },
+              } as any]);
+            }
+          }
+        },
+      },
+      {
+        label: '创建视频节点',
+        onClick: () => {
+          const sourceNode = nodes.find((n) => n.id === nodeId);
+          if (!sourceNode) return;
+          
+          const newId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const offsetX = direction === 'output' ? 300 : -300;
+          const newPos = { 
+            x: sourceNode.position.x + offsetX, 
+            y: sourceNode.position.y 
+          };
+          
+          pushUndo({ nodes: nodes as any, edges: edges as any });
+          
+          const reg = getNodeType('videoOutputNode');
+          if (reg) {
+            const newNode = ensureNodeDimensions({
+              id: newId,
+              type: 'videoOutputNode',
+              position: newPos,
+              data: reg.defaultData(),
+            });
+            rfAddNodes([newNode as any]);
+            
+            if (direction === 'output') {
+              setEdges((eds) => [...eds, {
+                id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                source: nodeId,
+                target: newId,
+                sourceHandle: handleId,
+                targetHandle: 'in',
+                type: TYPED_EDGE_TYPE,
+                data: { relation: 'reference' },
+              } as any]);
+            } else {
+              setEdges((eds) => [...eds, {
+                id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                source: newId,
+                target: nodeId,
+                sourceHandle: 'out',
+                targetHandle: handleId,
+                type: TYPED_EDGE_TYPE,
+                data: { relation: 'reference' },
+              } as any]);
+            }
+          }
+        },
+      },
+      {
+        label: '创建提示词节点',
+        onClick: () => {
+          const sourceNode = nodes.find((n) => n.id === nodeId);
+          if (!sourceNode) return;
+          
+          const newId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+          const offsetX = direction === 'output' ? 300 : -300;
+          const newPos = { 
+            x: sourceNode.position.x + offsetX, 
+            y: sourceNode.position.y 
+          };
+          
+          pushUndo({ nodes: nodes as any, edges: edges as any });
+          
+          const reg = getNodeType('promptNode');
+          if (reg) {
+            const newNode = ensureNodeDimensions({
+              id: newId,
+              type: 'promptNode',
+              position: newPos,
+              data: reg.defaultData(),
+            });
+            rfAddNodes([newNode as any]);
+            
+            if (direction === 'output') {
+              setEdges((eds) => [...eds, {
+                id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                source: nodeId,
+                target: newId,
+                sourceHandle: handleId,
+                targetHandle: 'in',
+                type: TYPED_EDGE_TYPE,
+                data: { relation: 'reference' },
+              } as any]);
+            } else {
+              setEdges((eds) => [...eds, {
+                id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                source: newId,
+                target: nodeId,
+                sourceHandle: 'out',
+                targetHandle: handleId,
+                type: TYPED_EDGE_TYPE,
+                data: { relation: 'reference' },
+              } as any]);
+            }
+          }
+        },
+      },
+    ];
+
+    // Show context menu using the canvas context
+    // We'll use a simple approach - create a custom event or use the context directly
+    // For now, let's dispatch a custom event that HandlerContextMenu can listen to
+    window.dispatchEvent(new CustomEvent('show-handler-context-menu', {
+      detail: { x: event.clientX, y: event.clientY, items }
+    }));
+  }, [nodes, edges, rfAddNodes, pushUndo, setEdges]);
+
   return (
-    <div className="flex flex-col h-screen w-screen">
-      <ImmersiveToolbar canvasName={canvasName} onNameChange={handleCanvasNameChange} saveStatus={saveStatus} />
+    <CanvasProvider onHandlerContextMenu={handleHandlerContextMenu}>
+      <div className="flex flex-col h-screen w-screen">
+        <ImmersiveToolbar canvasName={canvasName} onNameChange={handleCanvasNameChange} saveStatus={saveStatus} />
 
       <div className="flex flex-1 overflow-hidden">
         {/* Canvas area */}
@@ -933,6 +1214,8 @@ function StudioCanvasEditor() {
               onNodeDrag={onNodeDrag}
               onNodeDragStop={onNodeDragStop}
               onNodeContextMenu={onNodeContextMenu}
+              onEdgeClick={onEdgeClick}
+              onEdgeDoubleClick={onEdgeDoubleClick}
               onPaneClick={closeContextMenu}
               nodeTypes={nodeTypes as any}
               edgeTypes={edgeTypes as any}
@@ -1107,6 +1390,8 @@ function StudioCanvasEditor() {
         </ReferenceDataBrowser>
       </div>
     </div>
+    <HandlerContextMenu />
+  </CanvasProvider>
   );
 }
 

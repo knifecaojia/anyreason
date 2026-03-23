@@ -13,12 +13,14 @@ import { createPortal } from 'react-dom';
 import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow-compat';
 import type { ImageOutputNodeData } from '@/lib/canvas/types';
+import { useHandlerContextMenu } from '@/lib/canvas/canvas-context';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import { useAIModelList } from '@/hooks/useAIModelList';
-import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon, Upload, Crop, Layers } from 'lucide-react';
+import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon, Upload, Crop, Layers, Grid2x2, Sparkles, Expand, SunMedium, Wand2, Eraser, Scissors } from 'lucide-react';
 import { collectUpstreamData, fetchRefImagesAsBase64 } from '@/lib/canvas/image-utils';
 import ImageCropOverlay from './ImageCropOverlay';
 import ImageGridEditorModal from './ImageGridEditorModal';
+import ImageGridSplitPicker from './ImageGridSplitPicker';
 
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const;
 const RESOLUTIONS = [
@@ -72,7 +74,7 @@ const HANDLE_STYLE: React.CSSProperties = {
   background: '#374151', border: '3px solid #1f2937',
   display: 'flex', alignItems: 'center', justifyContent: 'center',
   fontSize: 14, fontWeight: 700, color: '#9ca3af',
-  top: '50%', zIndex: 30,
+  top: '50%', zIndex: 30, pointerEvents: 'all',
 };
 
 export default function ImageOutputNode(props: NodeProps) {
@@ -90,6 +92,7 @@ export default function ImageOutputNode(props: NodeProps) {
   dataRef.current = data;
   const nodeIdRef = useRef(props.id);
   nodeIdRef.current = props.id;
+  const onHandlerContextMenu = useHandlerContextMenu();
 
   const rfAddNodes = rf.addNodes as (nodes: any[]) => void;
   const [showModelMenu, setShowModelMenu] = useState(false);
@@ -100,6 +103,9 @@ export default function ImageOutputNode(props: NodeProps) {
   const uploadInputRef = useRef<HTMLInputElement>(null);
   const [cropMode, setCropMode] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
+  const [gridMenuOpen, setGridMenuOpen] = useState(false);
+  const [gridSplitSize, setGridSplitSize] = useState<number | null>(null);
+  const [toolbarPinned, setToolbarPinned] = useState(false);
   const [ctxMenu, setCtxMenu] = useState<{ x: number; y: number } | null>(null);
   const { models: imageModels, selectedConfigId, selectModel } = useAIModelList('image', data.bindingKey ?? 'image-default', data.modelConfigId);
   const selectedModel = imageModels.find((m) => m.configId === selectedConfigId);
@@ -112,6 +118,137 @@ export default function ImageOutputNode(props: NodeProps) {
   const isProcessing = !!data.isProcessing;
   const hasImage = !!data.lastImage;
   const fullImageUrl = data.lastImageFull || data.lastImage || '';
+
+  const placeholderTools = useMemo(() => ([
+    { key: 'hd', label: '高清', icon: Sparkles },
+    { key: 'expand', label: '扩图', icon: Expand },
+    { key: 'multi-angle', label: '多角度', icon: Layers },
+    { key: 'lighting', label: '打光', icon: SunMedium },
+    { key: 'repaint', label: '局部重绘', icon: Wand2 },
+    { key: 'erase', label: '擦除', icon: Eraser },
+    { key: 'cutout', label: '抠图', icon: Scissors },
+  ]), []);
+
+  const createImageNodeFromBlob = useCallback(async (blob: Blob, options?: { suffix?: string; offsetIndex?: number }) => {
+    const formData = new FormData();
+    formData.append('file', blob, `${options?.suffix ?? 'image'}_${Date.now()}.png`);
+    const res = await fetch('/api/vfs/files/upload', { method: 'POST', body: formData });
+    if (!res.ok) throw new Error(await res.text());
+    const json = await res.json();
+    const fileNodeId = json?.data?.id as string | undefined;
+    if (!fileNodeId) throw new Error('上传图片失败');
+
+    const downloadUrl = `/api/vfs/nodes/${encodeURIComponent(fileNodeId)}/download`;
+    const thumbUrl = `/api/vfs/nodes/${encodeURIComponent(fileNodeId)}/thumbnail`;
+    const currentNode = getNodes().find((n: any) => n.id === props.id);
+    const baseWidth = currentNode?.measured?.width ?? currentNode?.width ?? 420;
+    const offsetIndex = options?.offsetIndex ?? 0;
+    const newPos = {
+      x: (currentNode?.position?.x ?? 0) + baseWidth + 40 + (offsetIndex % 4) * 24,
+      y: (currentNode?.position?.y ?? 0) + Math.floor(offsetIndex / 4) * 140,
+    };
+
+    rfAddNodes([{
+      id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+      type: 'imageOutputNode',
+      position: newPos,
+      width: 400,
+      height: 260,
+      data: {
+        lastImage: thumbUrl,
+        lastImageFull: downloadUrl,
+        isProcessing: false,
+        progress: 100,
+        aspectRatio: ratio,
+        resolution,
+        model: data.model,
+        modelConfigId: data.modelConfigId,
+        bindingKey: data.bindingKey,
+      },
+    } as any]);
+  }, [data.bindingKey, data.model, data.modelConfigId, getNodes, props.id, ratio, resolution, rfAddNodes]);
+
+  const handleGridSplitConfirm = useCallback(async (tiles: Array<{ blob: Blob; row: number; col: number; totalRows: number; totalCols: number }>) => {
+    try {
+      for (const [index, tile] of tiles.entries()) {
+        await createImageNodeFromBlob(tile.blob, {
+          suffix: `grid_${tile.row + 1}_${tile.col + 1}`,
+          offsetIndex: index,
+        });
+      }
+      setGridSplitSize(null);
+      setToolbarPinned(false);
+    } catch (err: any) {
+      console.error('[ImageOutputNode] grid split failed:', err);
+      updateNodeData(props.id, { ...dataRef.current, error: `宫格切分失败: ${String(err?.message || err)}` });
+    }
+  }, [createImageNodeFromBlob, props.id, updateNodeData]);
+
+  useEffect(() => {
+    if (!gridMenuOpen && !gridSplitSize) return;
+    setToolbarPinned(true);
+  }, [gridMenuOpen, gridSplitSize]);
+
+  useEffect(() => {
+    const handlePointerDown = (event: MouseEvent) => {
+      const target = event.target;
+      if (!(target instanceof HTMLElement)) return;
+      if (target.closest('[data-image-node-toolbar]')) return;
+      if (target.closest('[data-image-grid-split-picker]')) return;
+      setGridMenuOpen(false);
+      if (!gridSplitSize) setToolbarPinned(false);
+    };
+
+    document.addEventListener('mousedown', handlePointerDown);
+    return () => document.removeEventListener('mousedown', handlePointerDown);
+  }, [gridSplitSize]);
+
+  const showPlaceholderToolMessage = useCallback((label: string) => {
+    updateNodeData(props.id, {
+      ...dataRef.current,
+      error: `${label} 功能即将上线`,
+    });
+  }, [props.id, updateNodeData]);
+
+  const handleInputContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!onHandlerContextMenu) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onHandlerContextMenu(e, props.id, 'in', 'input');
+  }, [onHandlerContextMenu, props.id]);
+
+  const handleOutputContextMenu = useCallback((e: React.MouseEvent) => {
+    if (!onHandlerContextMenu) return;
+    e.preventDefault();
+    e.stopPropagation();
+    onHandlerContextMenu(e, props.id, 'out', 'output');
+  }, [onHandlerContextMenu, props.id]);
+
+  useEffect(() => {
+    if (!onHandlerContextMenu) return;
+
+    const inputHandle = document.querySelector(`[data-nodeid="${props.id}"][data-handleid="in"]`);
+    const outputHandle = document.querySelector(`[data-nodeid="${props.id}"][data-handleid="out"]`);
+
+    const bindMenu = (node: Element | null, handleId: 'in' | 'out', direction: 'input' | 'output') => {
+      if (!(node instanceof HTMLElement)) return () => {};
+      const listener = (event: MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onHandlerContextMenu(event as unknown as React.MouseEvent, props.id, handleId, direction);
+      };
+      node.addEventListener('contextmenu', listener);
+      return () => node.removeEventListener('contextmenu', listener);
+    };
+
+    const cleanupInput = bindMenu(inputHandle, 'in', 'input');
+    const cleanupOutput = bindMenu(outputHandle, 'out', 'output');
+
+    return () => {
+      cleanupInput();
+      cleanupOutput();
+    };
+  }, [onHandlerContextMenu, props.id]);
 
   // Dynamic resolution mode: 'tier' (Volcengine), 'fixed' (Aliyun pixel sizes), 'default' (standard/hd/2k/4k)
   const resolutionMode: 'tier' | 'fixed' | 'default' = caps?.resolution_tiers
@@ -325,47 +462,12 @@ export default function ImageOutputNode(props: NodeProps) {
     setCropMode(false);
     try {
       // Upload cropped image to VFS
-      const formData = new FormData();
-      formData.append('file', blob, `crop_${Date.now()}.png`);
-      const res = await fetch('/api/vfs/files/upload', { method: 'POST', body: formData });
-      if (!res.ok) throw new Error(await res.text());
-      const json = await res.json();
-      const fileNodeId = json?.data?.id as string | undefined;
-      if (!fileNodeId) throw new Error('上传裁切图片失败');
-      const downloadUrl = `/api/vfs/nodes/${encodeURIComponent(fileNodeId)}/download`;
-      const thumbUrl = `/api/vfs/nodes/${encodeURIComponent(fileNodeId)}/thumbnail`;
-
-      // Create new ImageOutputNode offset to the right of current node
-      const currentNode = getNodes().find((n: any) => n.id === props.id);
-      const offsetX = (currentNode?.measured?.width ?? currentNode?.width ?? 420) + 40;
-      const newPos = {
-        x: (currentNode?.position?.x ?? 0) + offsetX,
-        y: currentNode?.position?.y ?? 0,
-      };
-      const newId = `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      rfAddNodes([{
-        id: newId,
-        type: 'imageOutputNode',
-        position: newPos,
-        width: 400,
-        height: 260,
-        data: {
-          lastImage: thumbUrl,
-          lastImageFull: downloadUrl,
-          isProcessing: false,
-          progress: 100,
-          aspectRatio: ratio,
-          resolution: resolution,
-          model: data.model,
-          modelConfigId: data.modelConfigId,
-          bindingKey: data.bindingKey,
-        },
-      } as any]);
+      await createImageNodeFromBlob(blob, { suffix: 'crop', offsetIndex: 0 });
     } catch (err: any) {
       console.error('[ImageOutputNode] crop upload failed:', err);
       updateNodeData(props.id, { ...dataRef.current, error: `截图失败: ${String(err?.message || err)}` });
     }
-  }, [props.id, getNodes, rfAddNodes, ratio, resolution, data.model, data.modelConfigId, data.bindingKey, updateNodeData]);
+  }, [createImageNodeFromBlob, props.id, updateNodeData]);
 
   // Icon mode
   if (renderLevel === 'icon') {
@@ -392,13 +494,15 @@ export default function ImageOutputNode(props: NodeProps) {
       {/* Single input handle — accepts text + image connections */}
       <Handle id="in" type="target" position={Position.Left}
         className="node-handle-in"
-        style={HANDLE_STYLE}>
+        style={HANDLE_STYLE}
+        onContextMenu={handleInputContextMenu}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
       {/* Output handle */}
       <Handle id="out" type="source" position={Position.Right}
         className="node-handle-out"
-        style={HANDLE_STYLE}>
+        style={HANDLE_STYLE}
+        onContextMenu={handleOutputContextMenu}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
 
@@ -407,26 +511,73 @@ export default function ImageOutputNode(props: NodeProps) {
 
         {/* Floating toolbar — above card when image generated */}
         {hasImage && !isProcessing && (
-          <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-10 flex items-center gap-2 bg-surface/90 backdrop-blur rounded-full px-3 py-1.5 border border-border/30 shadow-lg opacity-0 group-hover:opacity-100 transition-opacity">
-            <a href={fullImageUrl} download className="nodrag text-textMuted hover:text-textMain transition-colors" title="下载">
-              <Download size={13} />
-            </a>
-            <span className="text-textMuted/30">|</span>
-            <button type="button" onClick={() => setCropMode(true)}
-              className="nodrag text-textMuted hover:text-textMain transition-colors" title="截图 (框选裁切)">
-              <Crop size={13} />
-            </button>
-            <span className="text-textMuted/30">|</span>
-            <button type="button" onClick={() => setEditorOpen(true)}
-              className="nodrag text-textMuted hover:text-textMain transition-colors" title="多宫格编辑">
-              <Layers size={13} />
-            </button>
-            <span className="text-textMuted/30">|</span>
-            <button type="button" onClick={handleGenerate}
-              disabled={!upstream.hasTextSource}
-              className="nodrag text-textMuted hover:text-textMain transition-colors text-[11px] disabled:opacity-30 disabled:cursor-not-allowed">
-              ▶ 重新生成
-            </button>
+          <div data-image-node-toolbar className={`absolute -top-[5.2rem] left-1/2 z-20 w-[min(92vw,32rem)] -translate-x-1/2 rounded-2xl border border-border/30 bg-surface/92 px-2.5 py-2 shadow-lg backdrop-blur transition-opacity ${toolbarPinned ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'}`}>
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-1.5">
+                <button type="button" onClick={() => setCropMode(true)}
+                  className="nodrag rounded-lg p-1.5 text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors" title="截图 (框选裁切)">
+                  <Crop size={13} />
+                </button>
+                <div className="relative">
+                  <button type="button" onClick={() => setGridMenuOpen((v) => !v)}
+                    className="nodrag rounded-lg p-1.5 text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors" title="宫格切分">
+                    <Grid2x2 size={13} />
+                  </button>
+                  {gridMenuOpen && (
+                    <div className="absolute left-1/2 top-full z-30 mt-2 w-36 -translate-x-1/2 rounded-xl border border-border/50 bg-background/95 p-1.5 shadow-xl backdrop-blur">
+                      {[
+                        { label: '4宫格 (2x2)', value: 2 },
+                        { label: '9宫格 (3x3)', value: 3 },
+                        { label: '16宫格 (4x4)', value: 4 },
+                        { label: '25宫格 (5x5)', value: 5 },
+                      ].map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => {
+                            setGridMenuOpen(false);
+                            setGridSplitSize(option.value);
+                            setToolbarPinned(true);
+                          }}
+                          className="block w-full rounded-lg px-2.5 py-1.5 text-left text-[12px] text-textMain hover:bg-surfaceHighlight transition-colors"
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <button type="button" onClick={() => setEditorOpen(true)}
+                  className="nodrag rounded-lg p-1.5 text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors" title="裁切 / 多宫格编辑">
+                  <Layers size={13} />
+                </button>
+                <a href={fullImageUrl} download className="nodrag rounded-lg p-1.5 text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors" title="下载">
+                  <Download size={13} />
+                </a>
+              </div>
+              <button type="button" onClick={handleGenerate}
+                disabled={!upstream.hasTextSource}
+                className="nodrag shrink-0 rounded-lg px-2 py-1 text-[11px] text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+                ▶ 重新生成
+              </button>
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 border-t border-border/30 pt-2">
+              {placeholderTools.map((tool) => {
+                const Icon = tool.icon;
+                return (
+                  <button
+                    key={tool.key}
+                    type="button"
+                    onClick={() => showPlaceholderToolMessage(tool.label)}
+                    className="nodrag inline-flex items-center gap-1 rounded-lg px-2 py-1 text-[11px] text-textMuted hover:bg-surfaceHighlight hover:text-textMain transition-colors"
+                    title={`${tool.label}（占位）`}
+                  >
+                    <Icon size={12} />
+                    <span>{tool.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
         )}
 
@@ -482,6 +633,11 @@ export default function ImageOutputNode(props: NodeProps) {
                       onClick={() => { setCtxMenu(null); setCropMode(true); }}
                       className="w-full px-3 py-1.5 text-[12px] text-left text-textMain hover:bg-surfaceHighlight transition-colors flex items-center gap-2">
                       <Crop size={13} /> 截图 (框选裁切)
+                    </button>
+                    <button type="button"
+                      onClick={() => { setCtxMenu(null); setGridMenuOpen(false); setGridSplitSize(2); }}
+                      className="w-full px-3 py-1.5 text-[12px] text-left text-textMain hover:bg-surfaceHighlight transition-colors flex items-center gap-2">
+                      <Grid2x2 size={13} /> 宫格切分
                     </button>
                     <button type="button"
                       onClick={() => { setCtxMenu(null); setPreviewOpen(true); }}
@@ -675,6 +831,18 @@ export default function ImageOutputNode(props: NodeProps) {
           fullUrl={fullImageUrl || data.lastImage!}
           onConfirm={handleCropConfirm}
           onCancel={() => setCropMode(false)}
+        />
+      )}
+
+      {gridSplitSize && hasImage && (
+        <ImageGridSplitPicker
+          fullUrl={fullImageUrl || data.lastImage!}
+          gridSize={gridSplitSize}
+          onCancel={() => {
+            setGridSplitSize(null);
+            setToolbarPinned(false);
+          }}
+          onConfirm={handleGridSplitConfirm}
         />
       )}
 

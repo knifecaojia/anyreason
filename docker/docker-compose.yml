@@ -23,6 +23,9 @@ services:
       timeout: 5s
       retries: 10
 
+  # MinIO — S3-compatible object storage (used when OBJECT_STORAGE_PROVIDER=minio, the default).
+  # To use Tencent COS instead, set OBJECT_STORAGE_PROVIDER=cos in .env and provide COS_* credentials.
+  # The MinIO container can be omitted when using COS.
   minio:
     image: minio/minio:latest
     container_name: anyreason-minio

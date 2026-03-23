@@ -1,19 +1,18 @@
 import base64
-import io
 import uuid
 import httpx
 from typing import Any, Dict
 from app.ai_gateway.providers.base_media import MediaProvider
 from app.schemas_media import MediaRequest, MediaResponse
 from app.core.exceptions import AppError
-from app.storage.minio_client import get_minio_client
+from app.storage import get_storage_provider
 from app.config import settings
 
 class GeminiMediaProvider(MediaProvider):
     def __init__(self, api_key: str, base_url: str = "https://generativelanguage.googleapis.com/v1beta"):
         self.api_key = api_key
         self.base_url = base_url.rstrip("/")
-        self.minio = get_minio_client()
+        self._storage = get_storage_provider()
         self.bucket_name = settings.MINIO_BUCKET_VFS
 
     async def generate(self, request: MediaRequest) -> MediaResponse:
@@ -72,19 +71,17 @@ class GeminiMediaProvider(MediaProvider):
             object_name = f"generated/gemini/{uuid.uuid4()}.{file_ext}"
             
             try:
-                self.minio.put_object(
+                self._storage.put_bytes(
                     self.bucket_name,
                     object_name,
-                    io.BytesIO(image_bytes),
-                    len(image_bytes),
+                    image_bytes,
                     content_type=mime_type
                 )
             except Exception as e:
-                 raise AppError(msg=f"Failed to upload Gemini image to MinIO: {str(e)}", code=500)
+                 raise AppError(msg=f"Failed to upload Gemini image: {str(e)}", code=500)
             
             # Construct URL
-            from app.storage.minio_client import build_minio_url
-            image_url = build_minio_url(self.bucket_name, object_name)
+            image_url = self._storage.build_url(self.bucket_name, object_name)
 
             return MediaResponse(
                 url=image_url,

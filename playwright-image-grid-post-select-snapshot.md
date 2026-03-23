@@ -1,0 +1,383 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e3]:
+    - banner [ref=e4]:
+      - generic [ref=e5]:
+        - button "首页" [ref=e6] [cursor=pointer]:
+          - generic [ref=e7]: 首页
+        - button "返回画布列表 (ESC)" [ref=e8] [cursor=pointer]:
+          - img [ref=e9]
+        - button "111" [ref=e101] [cursor=pointer]:
+          - generic [ref=e12]: "111"
+          - img [ref=e13]
+      - generic [ref=e548]:
+        - img [ref=e549]
+        - text: 已保存
+    - generic [ref=e16]:
+      - generic [ref=e18]:
+        - application [ref=e19]:
+          - generic [ref=e21]:
+            - generic:
+              - generic:
+                - img:
+                  - group "Edge from 1774248923728-f408b4bf704718 to 1774234159579-7e322444e0b268" [ref=e116] [cursor=pointer]
+                - img:
+                  - group "Edge from 1774234159579-7e322444e0b268 to 1774249157564-8134839319741" [ref=e120] [cursor=pointer]
+                - img:
+                  - group "Edge from 1774249273145-f9dfb148d1a8f8 to 1774234173500-e2096ef1f25958" [ref=e124] [cursor=pointer]
+                - img:
+                  - group "Edge from 1774234173500-e2096ef1f25958 to 1774249611660-b28badcdfcda7" [ref=e128] [cursor=pointer]
+              - generic:
+                - group [ref=e132]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e135]:
+                    - generic [ref=e136]:
+                      - button "截图 (框选裁切)" [ref=e137] [cursor=pointer]:
+                        - img [ref=e138]
+                      - button "宫格切分" [ref=e142] [cursor=pointer]:
+                        - img [ref=e143]
+                      - button "裁切 / 多宫格编辑" [ref=e145] [cursor=pointer]:
+                        - img [ref=e146]
+                      - link "下载" [ref=e150] [cursor=pointer]:
+                        - /url: /api/vfs/nodes/29913979-7b02-4161-8113-4967e1378d76/download
+                        - img [ref=e151]
+                      - button "高清" [ref=e155] [cursor=pointer]:
+                        - img [ref=e156]
+                        - generic [ref=e158]: 高清
+                      - button "扩图" [ref=e159] [cursor=pointer]:
+                        - img [ref=e160]
+                        - generic [ref=e165]: 扩图
+                      - button "多角度" [ref=e166] [cursor=pointer]:
+                        - img [ref=e167]
+                        - generic [ref=e171]: 多角度
+                      - button "打光" [ref=e172] [cursor=pointer]:
+                        - img [ref=e173]
+                        - generic [ref=e179]: 打光
+                      - button "局部重绘" [ref=e180] [cursor=pointer]:
+                        - img [ref=e181]
+                        - generic [ref=e184]: 局部重绘
+                      - button "擦除" [ref=e185] [cursor=pointer]:
+                        - img [ref=e186]
+                        - generic [ref=e189]: 擦除
+                      - button "抠图" [ref=e190] [cursor=pointer]:
+                        - img [ref=e191]
+                        - generic [ref=e197]: 抠图
+                      - button "▶ 重新生成" [disabled] [ref=e199]
+                    - generic [ref=e201]:
+                      - generic [ref=e202]:
+                        - generic [ref=e203]: 图片
+                        - generic [ref=e204]:
+                          - generic [ref=e205]: 512x286
+                          - button "上传图片" [ref=e206] [cursor=pointer]:
+                            - img [ref=e207]
+                      - img "Generated" [ref=e211]
+                      - generic [ref=e213]:
+                        - generic [ref=e214]: aliyun/qwen-image-max
+                        - generic [ref=e215]: ·
+                        - generic [ref=e216]: 1:1 512x286
+                - group [ref=e217]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e220]:
+                    - generic [ref=e221]:
+                      - generic [ref=e222]:
+                        - generic [ref=e223]: 💬
+                        - text: 提示词
+                      - generic [ref=e224]:
+                        - button "提示词模板" [ref=e225] [cursor=pointer]:
+                          - img [ref=e226]
+                        - generic [ref=e228]: 0字
+                    - textbox "输入提示词内容，将直接传递给下游节点..." [ref=e229]
+                - group [ref=e230]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e235]:
+                    - generic [ref=e236]:
+                      - generic [ref=e237]: 图片
+                      - generic [ref=e238]:
+                        - generic [ref=e239]: 1664x928
+                        - button "上传图片" [ref=e240] [cursor=pointer]:
+                          - img [ref=e241]
+                        - button "多宫格编辑" [ref=e244] [cursor=pointer]:
+                          - img [ref=e245]
+                    - textbox "输入提示词..." [ref=e250]
+                    - generic [ref=e252]:
+                      - button "aliyun/qwen-image-max" [ref=e254] [cursor=pointer]:
+                        - generic [ref=e255]: aliyun/qwen-image-max
+                        - img [ref=e256]
+                      - button "1:1 · 1664x928" [ref=e259] [cursor=pointer]:
+                        - generic [ref=e260]: 1:1 · 1664x928
+                        - img [ref=e261]
+                      - button "▶" [disabled] [ref=e264]
+                - group [ref=e265]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e270]:
+                    - generic [ref=e271]:
+                      - generic [ref=e272]: 图片
+                      - generic [ref=e273]:
+                        - generic [ref=e274]: 1664x928
+                        - button "上传图片" [ref=e275] [cursor=pointer]:
+                          - img [ref=e276]
+                        - button "多宫格编辑" [ref=e279] [cursor=pointer]:
+                          - img [ref=e280]
+                    - textbox "输入提示词..." [ref=e285]
+                    - generic [ref=e287]:
+                      - button "aliyun/qwen-image-max" [ref=e289] [cursor=pointer]:
+                        - generic [ref=e290]: aliyun/qwen-image-max
+                        - img [ref=e291]
+                      - button "1:1 · 1664x928" [ref=e294] [cursor=pointer]:
+                        - generic [ref=e295]: 1:1 · 1664x928
+                        - img [ref=e296]
+                      - button "▶" [disabled] [ref=e299]
+                - group [ref=e300]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e305]:
+                    - generic [ref=e306]:
+                      - generic [ref=e307]: 图片
+                      - generic [ref=e308]:
+                        - generic [ref=e309]: 1664x928
+                        - button "上传图片" [ref=e310] [cursor=pointer]:
+                          - img [ref=e311]
+                        - button "多宫格编辑" [ref=e314] [cursor=pointer]:
+                          - img [ref=e315]
+                    - generic [ref=e319]:
+                      - textbox "输入提示词..." [ref=e320]
+                      - generic [ref=e322]:
+                        - img "生成图" [ref=e323]
+                        - generic [ref=e324]: "@1"
+                        - generic [ref=e325]: 生成图
+                    - generic [ref=e327]:
+                      - button "aliyun/qwen-image-max" [ref=e329] [cursor=pointer]:
+                        - generic [ref=e330]: aliyun/qwen-image-max
+                        - img [ref=e331]
+                      - button "1:1 · 1664x928" [ref=e334] [cursor=pointer]:
+                        - generic [ref=e335]: 1:1 · 1664x928
+                        - img [ref=e336]
+                      - generic [ref=e338]:
+                        - generic "1 张参考图" [ref=e339]:
+                          - img [ref=e340]
+                          - text: "1"
+                        - button "▶" [disabled] [ref=e344]
+                - group [ref=e345]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e350]:
+                    - generic [ref=e351]:
+                      - generic [ref=e352]: 图片
+                      - generic [ref=e353]:
+                        - generic [ref=e354]: 1664x928
+                        - button "上传图片" [ref=e355] [cursor=pointer]:
+                          - img [ref=e356]
+                        - button "多宫格编辑" [ref=e359] [cursor=pointer]:
+                          - img [ref=e360]
+                    - textbox "输入提示词..." [ref=e365]
+                    - generic [ref=e367]:
+                      - button "aliyun/qwen-image-max" [ref=e369] [cursor=pointer]:
+                        - generic [ref=e370]: aliyun/qwen-image-max
+                        - img [ref=e371]
+                      - button "1:1 · 1664x928" [ref=e374] [cursor=pointer]:
+                        - generic [ref=e375]: 1:1 · 1664x928
+                        - img [ref=e376]
+                      - button "▶" [disabled] [ref=e379]
+                - group [ref=e380]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e385]:
+                    - generic [ref=e386]:
+                      - generic [ref=e387]: 图片
+                      - generic [ref=e388]:
+                        - generic [ref=e389]: 1664x928
+                        - button "上传图片" [ref=e390] [cursor=pointer]:
+                          - img [ref=e391]
+                        - button "多宫格编辑" [ref=e394] [cursor=pointer]:
+                          - img [ref=e395]
+                    - textbox "输入提示词..." [ref=e400]
+                    - generic [ref=e402]:
+                      - button "aliyun/qwen-image-max" [ref=e404] [cursor=pointer]:
+                        - generic [ref=e405]: aliyun/qwen-image-max
+                        - img [ref=e406]
+                      - button "1:1 · 1664x928" [ref=e409] [cursor=pointer]:
+                        - generic [ref=e410]: 1:1 · 1664x928
+                        - img [ref=e411]
+                      - button "▶" [disabled] [ref=e414]
+                - group [ref=e415]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e418]:
+                    - generic [ref=e419]:
+                      - generic [ref=e420]:
+                        - generic [ref=e421]: 💬
+                        - text: 提示词
+                      - generic [ref=e422]:
+                        - button "提示词模板" [ref=e423] [cursor=pointer]:
+                          - img [ref=e424]
+                        - generic [ref=e426]: 0字
+                    - textbox "输入提示词内容，将直接传递给下游节点..." [ref=e427]
+                - group [ref=e428]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e431]:
+                    - generic [ref=e432]:
+                      - generic [ref=e433]:
+                        - generic [ref=e434]: 💬
+                        - text: 提示词
+                      - generic [ref=e435]:
+                        - button "提示词模板" [ref=e436] [cursor=pointer]:
+                          - img [ref=e437]
+                        - generic [ref=e439]: 0字
+                    - textbox "输入提示词内容，将直接传递给下游节点..." [ref=e440]
+                - group [ref=e441]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e446]:
+                    - generic [ref=e447]:
+                      - generic [ref=e448]: 图片
+                      - generic [ref=e449]:
+                        - generic [ref=e450]: 1664x928
+                        - button "上传图片" [ref=e451] [cursor=pointer]:
+                          - img [ref=e452]
+                        - button "多宫格编辑" [ref=e455] [cursor=pointer]:
+                          - img [ref=e456]
+                    - textbox "输入提示词..." [ref=e461]
+                    - generic [ref=e463]:
+                      - button "aliyun/qwen-image-max" [ref=e465] [cursor=pointer]:
+                        - generic [ref=e466]: aliyun/qwen-image-max
+                        - img [ref=e467]
+                      - button "1:1 · 1664x928" [ref=e470] [cursor=pointer]:
+                        - generic [ref=e471]: 1:1 · 1664x928
+                        - img [ref=e472]
+                      - button "▶" [disabled] [ref=e475]
+                - group [ref=e551]:
+                  - generic:
+                    - generic: +
+                  - generic:
+                    - generic: +
+                  - generic [ref=e554]:
+                    - generic [ref=e555]:
+                      - button "截图 (框选裁切)" [ref=e556] [cursor=pointer]:
+                        - img [ref=e557]
+                      - button "宫格切分" [ref=e561] [cursor=pointer]:
+                        - img [ref=e562]
+                      - button "裁切 / 多宫格编辑" [ref=e564] [cursor=pointer]:
+                        - img [ref=e565]
+                      - link "下载" [ref=e569] [cursor=pointer]:
+                        - /url: /api/vfs/nodes/1d9ae183-359e-4fd7-9576-8f4ab93b11ec/download
+                        - img [ref=e570]
+                      - button "高清" [ref=e574] [cursor=pointer]:
+                        - img [ref=e575]
+                        - generic [ref=e577]: 高清
+                      - button "扩图" [ref=e578] [cursor=pointer]:
+                        - img [ref=e579]
+                        - generic [ref=e584]: 扩图
+                      - button "多角度" [ref=e585] [cursor=pointer]:
+                        - img [ref=e586]
+                        - generic [ref=e590]: 多角度
+                      - button "打光" [ref=e591] [cursor=pointer]:
+                        - img [ref=e592]
+                        - generic [ref=e598]: 打光
+                      - button "局部重绘" [ref=e599] [cursor=pointer]:
+                        - img [ref=e600]
+                        - generic [ref=e603]: 局部重绘
+                      - button "擦除" [ref=e604] [cursor=pointer]:
+                        - img [ref=e605]
+                        - generic [ref=e608]: 擦除
+                      - button "抠图" [ref=e609] [cursor=pointer]:
+                        - img [ref=e610]
+                        - generic [ref=e616]: 抠图
+                      - button "▶ 重新生成" [disabled] [ref=e618]
+                    - generic [ref=e620]:
+                      - generic [ref=e621]:
+                        - generic [ref=e622]: 图片
+                        - generic [ref=e623]:
+                          - generic [ref=e624]: 512x286
+                          - button "上传图片" [ref=e625] [cursor=pointer]:
+                            - img [ref=e626]
+                      - img "Generated" [ref=e630]
+                      - generic [ref=e632]:
+                        - generic [ref=e633]: aliyun/qwen-image-max
+                        - generic [ref=e634]: ·
+                        - generic [ref=e635]: 1:1 512x286
+          - generic "Control Panel" [ref=e22]:
+            - button "Zoom In" [ref=e23] [cursor=pointer]:
+              - img [ref=e24]
+            - button "Zoom Out" [ref=e26] [cursor=pointer]:
+              - img [ref=e27]
+            - button "Fit View" [ref=e29] [cursor=pointer]:
+              - img [ref=e30]
+            - button "Toggle Interactivity" [ref=e32] [cursor=pointer]:
+              - img [ref=e33]
+          - link "React Flow attribution" [ref=e36] [cursor=pointer]:
+            - /url: https://reactflow.dev
+            - text: React Flow
+        - generic [ref=e38]:
+          - button "展开节点库" [ref=e39] [cursor=pointer]:
+            - img [ref=e40]
+          - generic "文本笔记" [ref=e43]:
+            - img [ref=e44]
+          - generic "提示词" [ref=e47]:
+            - img [ref=e48]
+          - generic "提示词" [ref=e50]:
+            - img [ref=e51]
+          - generic "文本生成" [ref=e53]:
+            - img [ref=e54]
+          - generic "图片节点" [ref=e56]:
+            - img [ref=e57]
+          - generic "视频节点" [ref=e61]:
+            - img [ref=e62]
+        - generic [ref=e64]:
+          - button "已保存" [ref=e476] [cursor=pointer]:
+            - img [ref=e636]
+            - generic [ref=e70]: 已保存
+          - button "导入" [ref=e72] [cursor=pointer]:
+            - img [ref=e73]
+            - generic [ref=e76]: 导入
+          - button "导出" [ref=e77] [cursor=pointer]:
+            - img [ref=e78]
+            - generic [ref=e81]: 导出
+      - generic [ref=e82]:
+        - generic [ref=e83]:
+          - generic [ref=e84]:
+            - button "剧本" [ref=e85] [cursor=pointer]
+            - button "故事板" [ref=e86] [cursor=pointer]
+            - button "资产库" [ref=e87] [cursor=pointer]
+            - button "画布详情" [ref=e88] [cursor=pointer]
+          - button "▸" [ref=e89] [cursor=pointer]
+        - generic [ref=e91]:
+          - generic [ref=e92]:
+            - generic [ref=e93]: 剧本
+            - combobox [ref=e94]:
+              - option "选择剧本" [selected]
+              - option "1"
+          - generic [ref=e95]:
+            - generic [ref=e96]: 分集
+            - combobox [disabled] [ref=e97]:
+              - option "选择分集" [selected]
+          - generic [ref=e98]:
+            - generic [ref=e99]: 镜头列表
+            - generic [ref=e100]: 请选择剧本和分集
+  - region "Notifications alt+T"
+  - button "Open Next.js Dev Tools" [ref=e107] [cursor=pointer]:
+    - img [ref=e108]
+  - alert [ref=e111]

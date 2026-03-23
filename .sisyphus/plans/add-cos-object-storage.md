@@ -173,7 +173,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
 
 ## TODOs
 
-- [ ] 1. Storage touchpoint inventory and contract lock
+- [x] 1. Storage touchpoint inventory and contract lock
 
   **What to do**:
   - Enumerate every current backend call site that directly depends on `get_minio_client()` or MinIO URL helpers.
@@ -234,7 +234,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-1-storage-touchpoints-negative.txt
   ```
 
-- [ ] 2. Provider config contract and env matrix
+- [x] 2. Provider config contract and env matrix
 
   **What to do**:
   - Define the provider selection setting and provider-specific env schema.
@@ -297,7 +297,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-2-config-matrix-negative.txt
   ```
 
-- [ ] 3. URL/helper behavior inventory and guardrails
+- [x] 3. URL/helper behavior inventory and guardrails
 
   **What to do**:
   - Identify every path that depends on MinIO-specific URL construction or URL parsing.
@@ -350,7 +350,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-3-url-helper-negative.txt
   ```
 
-- [ ] 4. Test coverage map for storage consumers
+- [x] 4. Test coverage map for storage consumers
 
   **What to do**:
   - Map existing automated coverage that exercises storage-backed flows.
@@ -403,7 +403,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-4-storage-test-map-negative.txt
   ```
 
-- [ ] 5. Deployment/doc impact inventory
+- [x] 5. Deployment/doc impact inventory
 
   **What to do**:
   - Inventory README, docker docs, and deploy docs that mention MinIO assumptions.
@@ -438,7 +438,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
   **QA Scenarios**:
   ```
 
-- [ ] 6. Unified storage adapter interface and factory
+- [x] 6. Unified storage adapter interface and factory
 
   **What to do**:
   - Define the single abstraction layer that all business code will consume.
@@ -490,7 +490,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-6-adapter-contract-negative.txt
   ```
 
-- [ ] 7. MinIO adapter migration behind interface
+- [x] 7. MinIO adapter migration behind interface
 
   **What to do**:
   - Re-home current MinIO behavior behind the shared storage contract.
@@ -541,7 +541,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-7-minio-adapter-negative.txt
   ```
 
-- [ ] 8. COS adapter design and config mapping
+- [x] 8. COS adapter design and config mapping
 
   **What to do**:
   - Add a Tencent COS implementation of the shared contract using COS-native configuration and endpoint semantics.
@@ -603,7 +603,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-8-cos-adapter-negative.txt
   ```
 
-- [ ] 9. Shared error/stream/result contract
+- [x] 9. Shared error/stream/result contract
 
   **What to do**:
   - Normalize the result and error shapes returned from provider implementations.
@@ -655,7 +655,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-9-result-contract-negative.txt
   ```
 
-- [ ] 10. Bucket/bootstrap policy split by provider
+- [x] 10. Bucket/bootstrap policy split by provider
 
   **What to do**:
   - Define and implement provider-aware behavior for bucket existence checks and provisioning.
@@ -708,7 +708,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-10-bootstrap-cos-negative.txt
   ```
 
-- [ ] 11. VFS service refactor
+- [x] 11. VFS service refactor
 
   **What to do**:
   - Refactor VFS storage operations to use the shared storage adapter.
@@ -760,7 +760,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-11-vfs-negative.txt
   ```
 
-- [ ] 12. Script service and script read/download refactor
+- [x] 12. Script service and script read/download refactor
 
   **What to do**:
   - Refactor script creation storage writes and route-level script/panorama download reads onto the shared adapter.
@@ -831,7 +831,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-5-doc-impact-negative.txt
   ```
 
-- [ ] 13. Asset, script-structure, and canvas-export read-path refactor
+- [x] 13. Asset, script-structure, and canvas-export read-path refactor
 
   **What to do**:
   - Refactor remaining storage-read consumers onto the shared adapter.
@@ -884,7 +884,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-13-consumer-negative.txt
   ```
 
-- [ ] 14. Gemini media provider refactor
+- [x] 14. Gemini media provider refactor
 
   **What to do**:
   - Refactor generated-media upload logic to use the shared storage adapter.
@@ -935,7 +935,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-14-gemini-negative.txt
   ```
 
-- [ ] 15. URL parsing/public URL compatibility decisions in consumers
+- [x] 15. URL parsing/public URL compatibility decisions in consumers
 
   **What to do**:
   - Remove or isolate remaining consumer dependence on MinIO-style URL parsing.
@@ -987,7 +987,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-15-url-compatibility-negative.txt
   ```
 
-- [ ] 16. MinIO regression tests and fixture updates
+- [x] 16. MinIO regression tests and fixture updates
 
   **What to do**:
   - Update existing tests so MinIO remains the regression baseline under the new adapter.
@@ -1038,7 +1038,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-16-minio-regression-negative.txt
   ```
 
-- [ ] 17. COS adapter tests and provider-switch tests
+- [x] 17. COS adapter tests and provider-switch tests
 
   **What to do**:
   - Add adapter-level and configuration-level tests covering COS positive paths and provider selection behavior.
@@ -1091,7 +1091,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-17-cos-provider-tests-negative.txt
   ```
 
-- [ ] 18. Env templates and compose/deploy docs update
+- [x] 18. Env templates and compose/deploy docs update
 
   **What to do**:
   - Update env examples, compose comments/templates, and deployment docs to document provider selection and required provider-specific settings.
@@ -1145,7 +1145,7 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
     Evidence: .sisyphus/evidence/task-18-docs-config-negative.txt
   ```
 
-- [ ] 19. Rollout, operations guidance, and non-goal documentation
+- [x] 19. Rollout, operations guidance, and non-goal documentation
 
   **What to do**:
   - Document rollout guidance, fallback expectations, and explicit non-goals for phase 1.
@@ -1202,16 +1202,15 @@ Wave FINAL (After ALL tasks — 4 parallel reviews):
 
 ## Final Verification Wave
 
-- [ ] F1. **Plan Compliance Audit** — `oracle`
-  Verify that configurable provider support exists, MinIO remains supported, COS path is wired, DB schema remained unchanged, and all documented non-goals stayed untouched. Confirm evidence files exist.
+- [x] F1. **Plan Compliance Audit** — `oracle` — APPROVE (all 6 claims verified with source evidence)
 
-- [ ] F2. **Code Quality Review** — `unspecified-high`
+- [x] F2. **Code Quality Review** — `unspecified-high` — APPROVE (7 non-blocking warnings)
   Run backend type/lint/test commands used by the repo, review changed files for provider branching leakage, dead code, MinIO-only assumptions left in business layers, and undocumented config changes.
 
-- [ ] F3. **Real Manual QA** — `unspecified-high`
+- [x] F3. **Real Manual QA** — `unspecified-high` — APPROVE (8/9 scenarios pass)
   Execute the documented happy-path and negative-path scenarios for MinIO and COS configurations, including upload, download/read, thumbnail/media flows, and provider misconfiguration handling. Save evidence to `.sisyphus/evidence/final-qa/`.
 
-- [ ] F4. **Scope Fidelity Check** — `deep`
+- [x] F4. **Scope Fidelity Check** — `deep` — APPROVE (all 5 guardrails verified)
   Confirm implementation stayed within abstraction/config/tests/docs scope, did not rename DB fields, did not include historical data migration, and did not add unrelated storage capabilities.
 
 ---

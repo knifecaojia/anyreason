@@ -18,6 +18,8 @@ const DEFAULT_COLOR = '#94a3b8'; // neutral gray (slate-400)
 
 export default function TypedEdge({
   id,
+  source,
+  target,
   sourceX,
   sourceY,
   targetX,
@@ -34,7 +36,9 @@ export default function TypedEdge({
   const color = portType ? PORT_COLORS[portType] : DEFAULT_COLOR;
   const strokeWidth = selected ? 2.5 : 1.5;
 
-  const { deleteElements } = useReactFlow();
+  const rf = useReactFlow() as any;
+  const deleteElements = rf.deleteElements as (params: { edges: { id: string }[] }) => void;
+  const getNodes = rf.getNodes as () => any[];
 
   const [edgePath] = getBezierPath({
     sourceX,
@@ -45,8 +49,42 @@ export default function TypedEdge({
     targetPosition,
   });
 
-  const handleDoubleClick = () => {
+  const handleDoubleClick = async () => {
+    const nodes = getNodes();
+    const sourceNode = nodes.find((node) => node.id === source);
+    const targetNode = nodes.find((node) => node.id === target);
+
+    if (sourceNode?.type === 'assetNode' && targetNode?.type === 'storyboardNode') {
+      const assetId = sourceNode.data?.assetId as string | undefined;
+      const storyboardId = targetNode.data?.sourceStoryboardId as string | undefined;
+
+      if (assetId && storyboardId) {
+        try {
+          const res = await fetch(`/api/storyboards/${encodeURIComponent(storyboardId)}/asset-bindings`, {
+            cache: 'no-store',
+          });
+          if (res.ok) {
+            const json = await res.json() as { data?: { bindings?: Array<{ id: string; asset_entity_id: string }> } };
+            const binding = json.data?.bindings?.find((item) => item.asset_entity_id === assetId);
+            if (binding?.id) {
+              await fetch(`/api/asset-bindings/${encodeURIComponent(binding.id)}`, {
+                method: 'DELETE',
+              });
+            }
+          }
+        } catch {
+          // Best effort only: local edge deletion should still succeed.
+        }
+      }
+    }
+
     deleteElements({ edges: [{ id }] });
+  };
+
+  const handleClick = (event: React.MouseEvent<SVGPathElement>) => {
+    if (event.detail >= 2) {
+      void handleDoubleClick();
+    }
   };
 
   return (
@@ -88,7 +126,10 @@ export default function TypedEdge({
         stroke="transparent"
         strokeWidth={20}
         style={{ cursor: 'pointer' }}
-        onDoubleClick={handleDoubleClick}
+        onClick={handleClick}
+        onDoubleClick={() => {
+          void handleDoubleClick();
+        }}
       />
 
       {/* Inline keyframes for the flow animation */}

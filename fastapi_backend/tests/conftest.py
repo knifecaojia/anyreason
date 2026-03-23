@@ -41,8 +41,15 @@ TEST_ENUM_DROP_DDL = [
 
 
 class _FakeObject:
-    def __init__(self, payload: bytes):
+    """Mimics the MinIO GetObject response object.
+
+    Supports both the old ``.stream()`` / ``.release_conn()`` contract and
+    the ``.headers`` attribute expected by :pymeth:`StorageProvider.download_by_url`.
+    """
+
+    def __init__(self, payload: bytes, content_type: str | None = None):
         self._payload = payload
+        self.headers: dict[str, str] = {"Content-Type": content_type or "application/octet-stream"}
 
     def stream(self, _chunk_size: int):
         yield self._payload
@@ -57,10 +64,82 @@ class _FakeObject:
         return None
 
 
-class _FakeMinio:
+class _FakeStorageProvider:
+    """In-memory ``StorageProvider`` implementation for tests.
+
+    Conforms to the :class:`StorageProvider` protocol so that any production
+    code calling ``get_storage_provider()`` works seamlessly under test.
+    """
+
     def __init__(self):
         self._buckets: set[str] = set()
         self._objects: dict[tuple[str, str], bytes] = {}
+        self._content_types: dict[tuple[str, str], str | None] = {}
+
+    # -- StorageProvider interface -------------------------------------------
+
+    def ensure_bucket(self, bucket: str) -> None:
+        self._buckets.add(bucket)
+
+    def put_bytes(
+        self,
+        bucket: str,
+        object_name: str,
+        data: bytes,
+        content_type: str | None = None,
+    ):
+        from minio.helpers import ObjectWriteResult
+
+        self._buckets.add(bucket)
+        self._objects[(bucket, object_name)] = data
+        self._content_types[(bucket, object_name)] = content_type
+        # Return a minimal ObjectWriteResult so callers that inspect it don't break
+        return ObjectWriteResult(
+            bucket_name=bucket,
+            object_name=object_name,
+            version_id=None,
+            etag="fake",
+            http_headers={},
+            last_modified=None,
+            location=f"http://localhost/{bucket}/{object_name}",
+        )
+
+    def get_object(self, bucket: str, object_name: str):
+        if (bucket, object_name) not in self._objects:
+            from app.storage.storage_provider import ObjectNotFoundError
+
+            raise ObjectNotFoundError(
+                f"Object not found: bucket={bucket!r}, object_name={object_name!r}"
+            )
+        return _FakeObject(
+            self._objects[(bucket, object_name)],
+            content_type=self._content_types.get((bucket, object_name)),
+        )
+
+    def delete_object(self, bucket: str, object_name: str) -> None:
+        self._objects.pop((bucket, object_name), None)
+        self._content_types.pop((bucket, object_name), None)
+
+    def build_url(self, bucket: str, object_name: str) -> str:
+        return f"http://localhost/{bucket}/{object_name}"
+
+    def download_by_url(self, url: str) -> tuple[bytes, str | None] | None:
+        if not url.startswith("http://localhost/"):
+            return None
+        remainder = url[len("http://localhost/"):]
+        slash = remainder.find("/")
+        if slash <= 0:
+            return None
+        bucket = remainder[:slash]
+        key = remainder[slash + 1:]
+        if (bucket, key) not in self._objects:
+            return None
+        return (
+            self._objects[(bucket, key)],
+            self._content_types.get((bucket, key)),
+        )
+
+    # -- Backward-compatible aliases (legacy MinIO-style callers) ------------
 
     def bucket_exists(self, bucket: str) -> bool:
         return bucket in self._buckets
@@ -69,27 +148,43 @@ class _FakeMinio:
         self._buckets.add(bucket)
 
     def put_object(self, *, bucket_name: str, object_name: str, data, length: int, content_type: str):
-        _ = content_type
         self._buckets.add(bucket_name)
         self._objects[(bucket_name, object_name)] = data.read(length)
-
-    def get_object(self, bucket: str | None = None, key: str | None = None, *, bucket_name: str | None = None, object_name: str | None = None):
-        b = bucket_name or bucket
-        k = object_name or key
-        if b is None or k is None:
-            raise KeyError("bucket and key cannot be None")
-        return _FakeObject(self._objects[(b, k)])
+        self._content_types[(bucket_name, object_name)] = content_type
 
     def remove_object(self, *, bucket_name: str, object_name: str):
         self._objects.pop((bucket_name, object_name), None)
+        self._content_types.pop((bucket_name, object_name), None)
+
+
+# Keep the old name as an alias so any test file that still imports
+# ``_FakeMinio`` (directly or via conftest) continues to work.
+_FakeMinio = _FakeStorageProvider
 
 
 @pytest.fixture(autouse=True)
 def mock_minio(monkeypatch):
-    fake = _FakeMinio()
-    from app.storage import minio_client as minio_client_module
+    import sys
 
-    monkeypatch.setattr(minio_client_module, "get_minio_client", lambda: fake)
+    from app.storage import storage_provider as _sp_module
+
+    fake = _FakeStorageProvider()
+
+    # Patch at the definition site so that any new imports pick it up.
+    monkeypatch.setattr(_sp_module, "get_storage_provider", lambda: fake)
+
+    # Also patch ``app.storage`` (the public re-export site) and every module
+    # that already imported ``get_storage_provider`` via ``from app.storage import …``.
+    # This is necessary because ``from X import Y`` copies the reference, so
+    # patching ``X.Y`` alone does not affect existing bindings in other modules.
+    import app.storage as _storage_pkg
+
+    monkeypatch.setattr(_storage_pkg, "get_storage_provider", lambda: fake)
+
+    for _name, _mod in list(sys.modules.items()):
+        if _name.startswith("app.") and hasattr(_mod, "get_storage_provider"):
+            monkeypatch.setattr(_mod, "get_storage_provider", lambda: fake)
+
     return fake
 
 

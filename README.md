@@ -7,7 +7,7 @@
 - 前端：Next.js + shadcn/ui + Tailwind（含登录页与 Dashboard 占位页）
 - 后端：FastAPI（含账号体系/鉴权基础能力）
 - 契约：通过 OpenAPI 生成前端 typed client（`nextjs-frontend/app/openapi-client`）
-- 本地基础设施：Postgres + MinIO +（可选）Redis（见 `docker/`）
+- 本地基础设施：Postgres + MinIO +（可选）Redis（见 `docker/`）；对象存储支持 MinIO（默认）和腾讯云 COS
 
 ## 一键启动（推荐）
 

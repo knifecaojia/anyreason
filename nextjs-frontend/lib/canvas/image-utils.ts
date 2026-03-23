@@ -8,7 +8,7 @@ import type { Node, Edge } from '@xyflow/react';
 
 // Node types that produce text output
 const TEXT_SOURCE_TYPES = new Set([
-  'textNoteNode', 'scriptNode', 'textGenNode', 'storyboardNode', 'promptNode',
+  'textNoteNode', 'scriptNode', 'textGenNode', 'storyboardNode', 'promptNode', 'generatorNode',
 ]);
 
 // Node types that produce image references

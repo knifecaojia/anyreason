@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     AUTO_DB_INIT_ON_STARTUP: bool = True
     AUTO_DB_SEED_ON_STARTUP: bool = True
 
+    # Object storage provider selector: "minio" (default) or "cos"
+    OBJECT_STORAGE_PROVIDER: str = "minio"
+
     # MinIO (S3 compatible object storage)
     MINIO_ENDPOINT: str = "localhost:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
@@ -71,6 +74,13 @@ class Settings(BaseSettings):
     MINIO_SECURE: bool = False
     MINIO_BUCKET_SCRIPTS: str = "anyreason-scripts"
     MINIO_BUCKET_VFS: str = "anyreason-vfs"
+
+    # Tencent COS (cloud object storage)
+    COS_SECRET_ID: str = ""
+    COS_SECRET_KEY: str = ""
+    COS_REGION: str = ""  # e.g. "ap-shanghai"
+    COS_BUCKET: str = ""  # full bucket name including APPID, e.g. "anyreason-1411329984"
+    COS_DOMAIN: str = ""  # optional custom domain for public URLs, e.g. "https://anyreason-1411329984.cos.ap-shanghai.myqcloud.com"
 
     # Task Worker
     TASK_WORKER_CONCURRENCY: int = 10

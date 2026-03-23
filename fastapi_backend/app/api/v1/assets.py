@@ -16,7 +16,7 @@ from app.schemas import AssetRead, AssetResourceCreateRequest, AssetUpdate, Asse
 from app.schemas_response import ResponseBase
 from app.services.asset_service import asset_service
 from app.services.storage.vfs_service import vfs_service
-from app.storage.minio_client import get_minio_client
+from app.storage import get_storage_provider
 from app.users import current_user_via_any
 from app.vfs_layout import ASSETS_FOLDER_NAME, ASSET_TYPE_FOLDER_NAMES, asset_doc_filename
 from app.vfs_renderers.asset_doc_renderer import render_asset_doc_md
@@ -227,10 +227,10 @@ async def download_asset_resource(
     if not resource:
         raise AppError(msg="Resource not found or not authorized", code=404, status_code=404)
 
-    client = get_minio_client()
+    provider = get_storage_provider()
     try:
         obj = await run_in_threadpool(
-            lambda: client.get_object(resource.minio_bucket, resource.minio_key)
+            provider.get_object, resource.minio_bucket, resource.minio_key,
         )
     except Exception:
         raise AppError(msg="对象存储读取失败", code=500, status_code=500)
@@ -247,6 +247,11 @@ async def download_asset_resource(
         try:
             for chunk in obj.stream(32 * 1024):
                 yield chunk
+        except (AttributeError, TypeError):
+            data = obj.read()
+            chunk_size = 32 * 1024
+            for i in range(0, len(data), chunk_size):
+                yield data[i:i + chunk_size]
         finally:
             obj.close()
             obj.release_conn()
