@@ -3,6 +3,11 @@
 !.env.example
 !.env.local.example
 
+# Ignore hidden directories anywhere by default.
+# Keep GitHub repository metadata tracked.
+**/.*/
+!/.github/
+
 .DS_Store
 Thumbs.db
 Desktop.ini
@@ -61,6 +66,8 @@ next-env.d.ts
 .refs/
 .kiro/
 *.log
+
+refs/
 
 # AI config sync (contains plaintext API keys)
 fastapi_backend/data/ai_config_sync.json
