@@ -12,7 +12,6 @@ import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow-compat';
 import type { VideoOutputNodeData } from '@/lib/canvas/types';
-import { useHandlerContextMenu } from '@/lib/canvas/canvas-context';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import { useAIModelList } from '@/hooks/useAIModelList';
 import { ChevronDown, Loader2, Square, Download, ImageIcon } from 'lucide-react';
@@ -79,8 +78,6 @@ export default function VideoOutputNode(props: NodeProps) {
   dataRef.current = data;
   const nodeIdRef = useRef(props.id);
   nodeIdRef.current = props.id;
-  const onHandlerContextMenu = useHandlerContextMenu();
-
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showSizePicker, setShowSizePicker] = useState(false);
   const { models: videoModels, selectedConfigId, selectModel } = useAIModelList('video', data.bindingKey ?? 'video-default', data.modelConfigId);
@@ -94,62 +91,6 @@ export default function VideoOutputNode(props: NodeProps) {
   const inputMode = data.inputMode ?? caps?.input_modes?.[0] ?? 'text_to_video';
   const isProcessing = !!data.isProcessing;
   const hasVideo = !!data.lastVideo;
-
-  const handleInputContextMenu = useCallback((e: React.MouseEvent) => {
-    if (!onHandlerContextMenu) return;
-    e.preventDefault();
-    e.stopPropagation();
-    onHandlerContextMenu(e, props.id, 'in', 'input');
-  }, [onHandlerContextMenu, props.id]);
-
-  const handleOutputContextMenu = useCallback((e: React.MouseEvent) => {
-    if (!onHandlerContextMenu) return;
-    e.preventDefault();
-    e.stopPropagation();
-    onHandlerContextMenu(e, props.id, 'out', 'output');
-  }, [onHandlerContextMenu, props.id]);
-
-  const forwardHandlePointerDown = useCallback((handleId: 'in' | 'out') => (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button === 2) return;
-    const overlay = e.currentTarget;
-    overlay.style.pointerEvents = 'none';
-
-    const restore = () => {
-      overlay.style.pointerEvents = 'auto';
-      window.removeEventListener('mouseup', restore, true);
-      window.removeEventListener('dragend', restore, true);
-    };
-
-    window.addEventListener('mouseup', restore, true);
-    window.addEventListener('dragend', restore, true);
-
-    const target = document.querySelector(`[data-nodeid="${props.id}"][data-handleid="${handleId}"]`) as HTMLElement | null;
-    if (!target) return;
-
-    const base = {
-      bubbles: true,
-      cancelable: true,
-      clientX: e.clientX,
-      clientY: e.clientY,
-      button: e.button,
-      buttons: e.buttons,
-      ctrlKey: e.ctrlKey,
-      shiftKey: e.shiftKey,
-      altKey: e.altKey,
-      metaKey: e.metaKey,
-    };
-
-    if (typeof PointerEvent !== 'undefined') {
-      target.dispatchEvent(new PointerEvent('pointerdown', {
-        ...base,
-        pointerId: 1,
-        pointerType: 'mouse',
-        isPrimary: true,
-      }));
-    }
-
-    target.dispatchEvent(new MouseEvent('mousedown', base));
-  }, [props.id]);
 
   // Collect upstream data: text from text nodes, images from asset nodes (single `in` handle)
   const upstream = useMemo(
@@ -302,29 +243,15 @@ export default function VideoOutputNode(props: NodeProps) {
       {/* Single input handle — accepts text + image connections */}
       <Handle id="in" type="target" position={Position.Left}
         className="node-handle-in"
-        style={HANDLE_STYLE}
-        onContextMenu={handleInputContextMenu}>
+        style={HANDLE_STYLE}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
-      <div
-        className="absolute rounded-full cursor-context-menu"
-        style={{ left: -14, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, zIndex: 40 }}
-        onMouseDown={forwardHandlePointerDown('in')}
-        onContextMenu={handleInputContextMenu}
-      />
       {/* Output handle */}
       <Handle id="out" type="source" position={Position.Right}
         className="node-handle-out"
-        style={HANDLE_STYLE}
-        onContextMenu={handleOutputContextMenu}>
+        style={HANDLE_STYLE}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
-      <div
-        className="absolute rounded-full cursor-context-menu"
-        style={{ right: -14, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, zIndex: 40 }}
-        onMouseDown={forwardHandlePointerDown('out')}
-        onContextMenu={handleOutputContextMenu}
-      />
 
       {/* Invisible outer wrapper — allows toolbar to float outside visible card */}
       <div className="group relative" style={{ width: props.width || 400 }}>

@@ -9,6 +9,7 @@ from uuid import UUID
 from sqlalchemy import select
 
 from app.ai_gateway.openai_compat_patch import ensure_openai_compat_patched
+from app.core.exceptions import AppError
 from app.database import async_session_maker
 from app.models import AIModelConfig, Task
 from app.tasks.handlers.registry import TASK_HANDLER_REGISTRY
@@ -403,7 +404,14 @@ async def process_two_phase_task(
                     logger.error("[process-task] failed to release slot on cancel task=%s error=%s", task_id, release_err)
             return
         tb = traceback.format_exc()
-        logger.error("[process-task] submit failed task=%s error=%s\n%s", task_id, e, tb[-3000:])
+        if isinstance(e, AppError):
+            logger.error("[process-task] submit failed task=%s app_error=%s data=%s", task_id, e.msg, e.data)
+            error_msg = e.msg
+            error_details = {"exception_type": "AppError", "app_error_data": e.data, "traceback": tb[-20000:], "phase": "submit"}
+        else:
+            logger.error("[process-task] submit failed task=%s error=%s\n%s", task_id, e, tb[-3000:])
+            error_msg = str(e)
+            error_details = {"exception_type": type(e).__name__, "traceback": tb[-20000:], "phase": "submit"}
         # Call on_fail for cleanup
         try:
             await handler.on_fail(db=db, task=task, error=str(e))
@@ -420,7 +428,7 @@ async def process_two_phase_task(
             except Exception as release_err:
                 logger.error("[process-task] failed to release slot on fail task=%s error=%s", task_id, release_err)
         
-        await reporter.fail(error=str(e), details={"exception_type": type(e).__name__, "traceback": tb[-20000:], "phase": "submit"})
+        await reporter.fail(error=error_msg, details=error_details)
         return
 
 
@@ -452,6 +460,22 @@ async def process_legacy_task(
         await reporter.fail(
             error=f"任务执行超时（{timeout}秒）",
             details={"timeout_seconds": timeout},
+        )
+        return
+    except AppError as e:
+        status_now = (await db.execute(select(Task.status).where(Task.id == task.id))).scalar_one_or_none()
+        if status_now == "canceled":
+            logger.info("[process-task] task canceled during execution task=%s", task.id)
+            return
+        tb = traceback.format_exc()
+        logger.error("[process-task] handler failed task=%s app_error=%s data=%s", task.id, e.msg, e.data)
+        try:
+            await handler.on_fail(db=db, task=task, error=str(e))
+        except Exception as cleanup_err:
+            logger.error("[process-task] on_fail error during run task=%s error=%s", task.id, cleanup_err)
+        await reporter.fail(
+            error=e.msg,
+            details={"exception_type": "AppError", "app_error_data": e.data, "traceback": tb[-20000:]},
         )
         return
     except Exception as e:

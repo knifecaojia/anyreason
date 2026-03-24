@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import signal
 import sys
 from datetime import datetime, timezone
 from uuid import UUID
@@ -102,6 +103,21 @@ async def _worker_loop() -> None:
             _log(f"failed to connect to redis: {e}. Retrying in 5s...")
             await asyncio.sleep(5)
 
+    # Graceful shutdown: cancel all active tasks and close connections
+    shutdown_event = asyncio.Event()
+
+    def _handle_signal() -> None:
+        _log("shutdown signal received, draining active tasks...")
+        shutdown_event.set()
+
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, _handle_signal)
+        except NotImplementedError:
+            # Windows does not support add_signal_handler; fall back to SIGINT only
+            signal.signal(sig, lambda *_: _handle_signal())
+
     # Semaphore to enforce concurrency limit - THIS is what caps parallelism
     semaphore = asyncio.Semaphore(WORKER_CONCURRENCY)
     active_tasks: set[asyncio.Task] = set()
@@ -129,7 +145,7 @@ async def _worker_loop() -> None:
         async with semaphore:  # Blocks here until a slot is available
             await process_single_task(item)
 
-    while True:
+    while not shutdown_event.is_set():
         # Wait for execution capacity before dequeuing more work.
         # This prevents draining Redis faster than we can process tasks.
         has_capacity = await wait_for_execution_capacity(
@@ -162,20 +178,23 @@ async def _worker_loop() -> None:
         if len(active_tasks) >= WORKER_CONCURRENCY * 2:
             _cleanup_completed_tasks(active_tasks)
 
+    # ---- graceful shutdown ----
+    _log(f"shutting down, waiting for {len(active_tasks)} active tasks to finish...")
+    if active_tasks:
+        await asyncio.wait(active_tasks, timeout=30)
+        for t in active_tasks:
+            if not t.done():
+                t.cancel()
+        # Suppress CancelledError
+        await asyncio.gather(*active_tasks, return_exceptions=True)
+    await close_redis()
+    _log("shutdown complete.")
+
 
 def _run_worker() -> None:
     # 子进程（reload fork）也需要初始化日志
     setup_logging()
-    try:
-        asyncio.run(_worker_loop())
-    finally:
-        # 确保在退出时关闭连接池
-        try:
-            loop = asyncio.new_event_loop()
-            loop.run_until_complete(close_redis())
-            loop.close()
-        except Exception:
-            pass
+    asyncio.run(_worker_loop())
 
 
 def main() -> None:

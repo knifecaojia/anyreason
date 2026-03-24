@@ -21,7 +21,8 @@ import { syncAfterSave, startupSyncValidation, uploadCanvasThumbnail } from "@/l
 import { ArrowLeft, Check, Loader2, AlertCircle, Pencil } from "lucide-react";
 
 import HandlerContextMenu from "@/components/canvas/HandlerContextMenu";
-import { CanvasProvider } from "@/lib/canvas/canvas-context";
+import { CanvasProvider, useCanvasContext, type HandlerContextMenuState } from "@/lib/canvas/canvas-context";
+import { detectHandlerHotspot } from "@/lib/canvas/handler-hotspot";
 
 // ===== Shared types =====
 
@@ -357,7 +358,7 @@ function ReferenceDataBrowser({
 
 // ===== Main Editor =====
 
-function StudioCanvasEditor() {
+function StudioCanvasEditor({ showHandlerContextMenu }: { showHandlerContextMenu: (state: HandlerContextMenuState) => void }) {
   const params = useParams();
   const router = useRouter();
   const canvasId = params.canvasId as string;
@@ -1177,16 +1178,66 @@ function StudioCanvasEditor() {
       },
     ];
 
-    // Show context menu using the canvas context
-    // We'll use a simple approach - create a custom event or use the context directly
-    // For now, let's dispatch a custom event that HandlerContextMenu can listen to
-    window.dispatchEvent(new CustomEvent('show-handler-context-menu', {
-      detail: { x: event.clientX, y: event.clientY, items }
-    }));
-  }, [nodes, edges, rfAddNodes, pushUndo, setEdges]);
+    showHandlerContextMenu({
+      x: event.clientX,
+      y: event.clientY,
+      items,
+    });
+  }, [nodes, edges, rfAddNodes, pushUndo, setEdges, showHandlerContextMenu]);
+
+  useEffect(() => {
+    const wrapper = wrapperRef.current;
+    if (!wrapper) return;
+
+    const handleCanvasContextMenu = (event: MouseEvent) => {
+      if (!(event.target instanceof Element)) return;
+      if (event.target.closest('.handler-context-menu')) return;
+
+      let bestMatch: { nodeId: string; handleId: 'in' | 'out'; direction: 'input' | 'output'; dist2: number } | null = null;
+      const nodeElements = Array.from(wrapper.querySelectorAll('.react-flow__node'));
+
+      for (const nodeEl of nodeElements) {
+        if (!(nodeEl instanceof HTMLElement)) continue;
+        const nodeId = nodeEl.getAttribute('data-id');
+        if (!nodeId) continue;
+        const node = nodes.find((item) => item.id === nodeId);
+        if (!node) continue;
+        const reg = getNodeType(node.type);
+        const hasInput = !!reg?.ports?.some((port) => port.direction === 'input');
+        const hasOutput = !!reg?.ports?.some((port) => port.direction === 'output');
+        const hit = detectHandlerHotspot(nodeEl, event.clientX, event.clientY, { hasInput, hasOutput });
+        if (!hit) continue;
+
+        const rect = nodeEl.getBoundingClientRect();
+        const targetX = hit.handleId === 'in' ? rect.left : rect.right;
+        const targetY = rect.top + rect.height / 2;
+        const dx = event.clientX - targetX;
+        const dy = event.clientY - targetY;
+        const dist2 = dx * dx + dy * dy;
+
+        if (!bestMatch || dist2 < bestMatch.dist2) {
+          bestMatch = { nodeId, handleId: hit.handleId, direction: hit.direction, dist2 };
+        }
+      }
+
+      if (!bestMatch) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      handleHandlerContextMenu(
+        { clientX: event.clientX, clientY: event.clientY },
+        bestMatch.nodeId,
+        bestMatch.handleId,
+        bestMatch.direction,
+      );
+    };
+
+    wrapper.addEventListener('contextmenu', handleCanvasContextMenu, true);
+    return () => wrapper.removeEventListener('contextmenu', handleCanvasContextMenu, true);
+  }, [handleHandlerContextMenu, nodes]);
 
   return (
-    <CanvasProvider onHandlerContextMenu={handleHandlerContextMenu}>
+    <>
       <div className="flex flex-col h-screen w-screen">
         <ImmersiveToolbar canvasName={canvasName} onNameChange={handleCanvasNameChange} saveStatus={saveStatus} />
 
@@ -1390,8 +1441,8 @@ function StudioCanvasEditor() {
         </ReferenceDataBrowser>
       </div>
     </div>
-    <HandlerContextMenu />
-  </CanvasProvider>
+      <HandlerContextMenu />
+    </>
   );
 }
 
@@ -1402,7 +1453,14 @@ function StudioCanvasEditor() {
 export default function CanvasEditorPage() {
   return (
     <ReactFlowProvider>
-      <StudioCanvasEditor />
+      <CanvasProvider onHandlerContextMenu={() => {}}>
+        <CanvasContextConsumer />
+      </CanvasProvider>
     </ReactFlowProvider>
   );
+}
+
+function CanvasContextConsumer() {
+  const { showContextMenu } = useCanvasContext();
+  return <StudioCanvasEditor showHandlerContextMenu={showContextMenu} />;
 }

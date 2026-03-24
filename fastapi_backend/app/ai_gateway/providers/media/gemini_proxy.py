@@ -7,6 +7,7 @@ GeminiProxyProvider - 通过第三方中转站调用 Gemini 图片生成能力�
 
 import base64
 import io
+import json
 import logging
 import uuid
 
@@ -38,6 +39,37 @@ class GeminiProxyProvider(MediaProvider):
     # public entry
     # ------------------------------------------------------------------
     MAX_RETRIES = 2  # 最多重试 2 次（共 3 次尝试）
+
+    @staticmethod
+    def _build_response_diagnostics(*, url: str, resp: httpx.Response, failure_stage: str) -> dict:
+        content_type = resp.headers.get("content-type", "")
+        body_text = resp.text or ""
+        body_preview = body_text[:2000] if body_text else "(empty)"
+        return {
+            "request_url": url,
+            "status_code": resp.status_code,
+            "content_type": content_type,
+            "body_preview": body_preview,
+            "body_length": len(body_text),
+            "failure_stage": failure_stage,
+        }
+
+    @staticmethod
+    def _parse_sse_payload(body_text: str) -> list[dict]:
+        events: list[dict] = []
+        for line in body_text.splitlines():
+            if not line.startswith("data:"):
+                continue
+            payload = line[len("data:"):].strip()
+            if not payload or payload == "[DONE]":
+                continue
+            try:
+                parsed = json.loads(payload)
+            except json.JSONDecodeError:
+                continue
+            if isinstance(parsed, dict):
+                events.append(parsed)
+        return events
 
     async def generate(self, request: MediaRequest) -> MediaResponse:
         # 允许通过 param_json 或 model_capabilities 中的 api_mode 覆盖默认 mode
@@ -154,6 +186,8 @@ class GeminiProxyProvider(MediaProvider):
 
         return MediaResponse(
             url=image_url,
+            duration=None,
+            cost=None,
             usage_id=str(uuid.uuid4()),
             meta=data,
         )
@@ -211,13 +245,88 @@ class GeminiProxyProvider(MediaProvider):
                 url, json=payload, headers=headers, timeout=httpx.Timeout(90.0, connect=15.0)
             )
             if resp.status_code != 200:
+                diagnostics = self._build_response_diagnostics(
+                    url=url,
+                    resp=resp,
+                    failure_stage="http_status",
+                )
+                logger.error(
+                    "[gemini_proxy] openai_compat upstream error status=%s content_type=%s url=%s preview=%s",
+                    diagnostics["status_code"],
+                    diagnostics["content_type"] or "(missing)",
+                    diagnostics["request_url"],
+                    diagnostics["body_preview"],
+                )
                 raise AppError(
                     msg=f"Gemini Proxy (openai_compat) error: {resp.status_code}",
-                    data={"raw": resp.text},
+                    data=diagnostics,
                     code=502,
                     status_code=502,
                 )
-            data = resp.json()
+            content_type = resp.headers.get("content-type", "")
+            if "text/event-stream" in content_type.lower():
+                diagnostics = self._build_response_diagnostics(
+                    url=url,
+                    resp=resp,
+                    failure_stage="sse_error",
+                )
+                events = self._parse_sse_payload(resp.text or "")
+                for event in events:
+                    error_obj = event.get("error")
+                    if isinstance(error_obj, dict):
+                        diagnostics["sse_error"] = error_obj
+                        upstream_msg = error_obj.get("message") or "Unknown SSE upstream error"
+                        logger.error(
+                            "[gemini_proxy] openai_compat SSE upstream error status=%s content_type=%s url=%s upstream_msg=%s preview=%s",
+                            diagnostics["status_code"],
+                            diagnostics["content_type"] or "(missing)",
+                            diagnostics["request_url"],
+                            upstream_msg,
+                            diagnostics["body_preview"],
+                        )
+                        raise AppError(
+                            msg=f"Gemini Proxy (openai_compat) upstream SSE error: {upstream_msg}",
+                            data=diagnostics,
+                            code=502,
+                            status_code=502,
+                        )
+                diagnostics["sse_events_count"] = len(events)
+                logger.error(
+                    "[gemini_proxy] openai_compat SSE response unsupported status=%s content_type=%s url=%s events=%s preview=%s",
+                    diagnostics["status_code"],
+                    diagnostics["content_type"] or "(missing)",
+                    diagnostics["request_url"],
+                    len(events),
+                    diagnostics["body_preview"],
+                )
+                raise AppError(
+                    msg="Gemini Proxy (openai_compat): unsupported SSE response from upstream",
+                    data=diagnostics,
+                    code=502,
+                    status_code=502,
+                )
+            try:
+                data = resp.json()
+            except (json.JSONDecodeError, ValueError) as e:
+                diagnostics = self._build_response_diagnostics(
+                    url=url,
+                    resp=resp,
+                    failure_stage="json_decode",
+                )
+                logger.error(
+                    "[gemini_proxy] openai_compat non-JSON response status=%s content_type=%s url=%s preview=%s error=%s",
+                    diagnostics["status_code"],
+                    diagnostics["content_type"] or "(missing)",
+                    diagnostics["request_url"],
+                    diagnostics["body_preview"],
+                    e,
+                )
+                raise AppError(
+                    msg="Gemini Proxy (openai_compat): non-JSON response from upstream",
+                    data=diagnostics,
+                    code=502,
+                    status_code=502,
+                ) from e
 
         logger.info("[gemini_proxy] openai_compat raw response keys=%s, choices_count=%d",
                      list(data.keys()), len(data.get("choices", [])))
@@ -241,6 +350,8 @@ class GeminiProxyProvider(MediaProvider):
 
         return MediaResponse(
             url=image_url,
+            duration=None,
+            cost=None,
             usage_id=data.get("id", str(uuid.uuid4())),
             meta=data,
         )

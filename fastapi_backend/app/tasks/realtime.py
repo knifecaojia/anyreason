@@ -85,3 +85,7 @@ async def redis_event_forwarder(*, manager: TaskWebSocketManager, stop_event: as
                 await pubsub.close()
             except Exception:
                 pass
+            try:
+                await r.aclose()
+            except Exception:
+                pass

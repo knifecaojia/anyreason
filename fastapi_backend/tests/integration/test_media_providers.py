@@ -4,6 +4,7 @@ from app.ai_gateway.providers.media.volcengine import VolcengineMediaProvider
 from app.ai_gateway.providers.media.aliyun import AliyunMediaProvider
 from app.ai_gateway.providers.media.vidu import ViduMediaProvider
 from app.ai_gateway.providers.media.gemini import GeminiMediaProvider
+from app.ai_gateway.providers.media.gemini_proxy import GeminiProxyProvider
 from app.schemas_media import MediaRequest
 from app.core.exceptions import AppError
 
@@ -165,3 +166,63 @@ async def test_gemini_provider():
 
             assert "generated/gemini/" in res.url
             mock_storage.put_bytes.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_openai_compat_non_json_response_surfaces_diagnostics():
+    provider = GeminiProxyProvider(api_key="test_key", base_url="https://proxy.example.com")
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = "<html>bad gateway</html>"
+    mock_resp.headers = {"content-type": "text/html; charset=utf-8", "x-request-id": "req-123"}
+    mock_resp.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+
+    with patch("httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        MockClient.return_value.__aenter__.return_value = mock_client_instance
+        mock_client_instance.post.return_value = mock_resp
+
+        req = MediaRequest(model_key="gemini-2.0-flash-exp-image-generation", prompt="test prompt")
+        with pytest.raises(AppError) as exc_info:
+            await provider.generate(req)
+
+    assert exc_info.value.status_code == 502
+    assert "non-json response" in exc_info.value.msg.lower()
+    assert exc_info.value.data["failure_stage"] == "json_decode"
+    assert exc_info.value.data["status_code"] == 200
+    assert exc_info.value.data["content_type"] == "text/html; charset=utf-8"
+    assert exc_info.value.data["request_url"] == "https://proxy.example.com/v1/chat/completions"
+    assert exc_info.value.data["body_preview"] == "<html>bad gateway</html>"
+
+
+@pytest.mark.asyncio
+async def test_gemini_proxy_openai_compat_sse_error_stream_surfaces_upstream_message():
+    provider = GeminiProxyProvider(api_key="test_key", base_url="https://new.12ai.org")
+
+    sse_body = (
+        'data: {"error":{"message":"Image rate limit exceeded","type":"server_error","code":"upstream_error"}}\n\n'
+        'data: {"id":"","object":"chat.completion.chunk","choices":[]}\n\n'
+        'data: [DONE]\n\n'
+    )
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.text = sse_body
+    mock_resp.headers = {"content-type": "text/event-stream"}
+    mock_resp.json.side_effect = ValueError("Expecting value: line 1 column 1 (char 0)")
+
+    with patch("httpx.AsyncClient") as MockClient:
+        mock_client_instance = AsyncMock()
+        MockClient.return_value.__aenter__.return_value = mock_client_instance
+        mock_client_instance.post.return_value = mock_resp
+
+        req = MediaRequest(model_key="gemini-2.0-flash-exp-image-generation", prompt="test prompt")
+        with pytest.raises(AppError) as exc_info:
+            await provider.generate(req)
+
+    assert exc_info.value.status_code == 502
+    assert "image rate limit exceeded" in exc_info.value.msg.lower()
+    assert exc_info.value.data["failure_stage"] == "sse_error"
+    assert exc_info.value.data["content_type"] == "text/event-stream"
+    assert exc_info.value.data["request_url"] == "https://new.12ai.org/v1/chat/completions"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from functools import lru_cache
 
 from redis.asyncio import ConnectionPool
 from redis.asyncio import Redis
@@ -30,17 +29,13 @@ def get_connection_pool() -> ConnectionPool:
     return _pool
 
 
-# @lru_cache(maxsize=1)
 def get_redis() -> Redis:
     """
     获取 Redis 客户端实例。
     复用全局连接池，确保连接数可控。
     """
-    return Redis.from_url(
-        settings.REDIS_URL,
-        decode_responses=True,
-        password=settings.REDIS_PASSWORD if hasattr(settings, "REDIS_PASSWORD") else "redis", # 显式传递密码
-    )
+    pool = get_connection_pool()
+    return Redis(connection_pool=pool)
 
 
 async def close_redis() -> None:
@@ -50,5 +45,5 @@ async def close_redis() -> None:
     global _pool
     if _pool is not None:
         logger.info("Closing Redis connection pool...")
-        await _pool.disconnect()
+        await _pool.aclose()
         _pool = None

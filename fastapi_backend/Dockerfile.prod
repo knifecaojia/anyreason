@@ -7,12 +7,8 @@ WORKDIR /app
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ca-certificates \
-    && rm -rf /var/lib/apt/lists/*
-
-ADD https://astral.sh/uv/install.sh /uv-installer.sh
-RUN sh /uv-installer.sh && rm /uv-installer.sh
-
-ENV PATH="/root/.local/bin/:$PATH"
+    && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir uv
 
 COPY pyproject.toml uv.lock ./
 
@@ -27,7 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --shell /bin/bash appuser
 
-COPY --from=builder /root/.local/bin/uv /usr/local/bin/uv
+COPY --from=builder /usr/local/bin/uv /usr/local/bin/uv
 COPY --from=builder /app/.venv /app/.venv
 
 RUN chown -R appuser:appuser /app/.venv

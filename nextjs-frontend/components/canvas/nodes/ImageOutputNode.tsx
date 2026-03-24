@@ -13,7 +13,6 @@ import { createPortal } from 'react-dom';
 import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow-compat';
 import type { ImageOutputNodeData } from '@/lib/canvas/types';
-import { useHandlerContextMenu } from '@/lib/canvas/canvas-context';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import { useAIModelList } from '@/hooks/useAIModelList';
 import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon, Upload, Crop, Layers, Grid2x2, Sparkles, Expand, SunMedium, Wand2, Eraser, Scissors } from 'lucide-react';
@@ -92,8 +91,6 @@ export default function ImageOutputNode(props: NodeProps) {
   dataRef.current = data;
   const nodeIdRef = useRef(props.id);
   nodeIdRef.current = props.id;
-  const onHandlerContextMenu = useHandlerContextMenu();
-
   const rfAddNodes = rf.addNodes as (nodes: any[]) => void;
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showSizePicker, setShowSizePicker] = useState(false);
@@ -209,46 +206,6 @@ export default function ImageOutputNode(props: NodeProps) {
       error: `${label} 功能即将上线`,
     });
   }, [props.id, updateNodeData]);
-
-  const handleInputContextMenu = useCallback((e: React.MouseEvent) => {
-    if (!onHandlerContextMenu) return;
-    e.preventDefault();
-    e.stopPropagation();
-    onHandlerContextMenu(e, props.id, 'in', 'input');
-  }, [onHandlerContextMenu, props.id]);
-
-  const handleOutputContextMenu = useCallback((e: React.MouseEvent) => {
-    if (!onHandlerContextMenu) return;
-    e.preventDefault();
-    e.stopPropagation();
-    onHandlerContextMenu(e, props.id, 'out', 'output');
-  }, [onHandlerContextMenu, props.id]);
-
-  useEffect(() => {
-    if (!onHandlerContextMenu) return;
-
-    const inputHandle = document.querySelector(`[data-nodeid="${props.id}"][data-handleid="in"]`);
-    const outputHandle = document.querySelector(`[data-nodeid="${props.id}"][data-handleid="out"]`);
-
-    const bindMenu = (node: Element | null, handleId: 'in' | 'out', direction: 'input' | 'output') => {
-      if (!(node instanceof HTMLElement)) return () => {};
-      const listener = (event: MouseEvent) => {
-        event.preventDefault();
-        event.stopPropagation();
-        onHandlerContextMenu(event as unknown as React.MouseEvent, props.id, handleId, direction);
-      };
-      node.addEventListener('contextmenu', listener);
-      return () => node.removeEventListener('contextmenu', listener);
-    };
-
-    const cleanupInput = bindMenu(inputHandle, 'in', 'input');
-    const cleanupOutput = bindMenu(outputHandle, 'out', 'output');
-
-    return () => {
-      cleanupInput();
-      cleanupOutput();
-    };
-  }, [onHandlerContextMenu, props.id]);
 
   // Dynamic resolution mode: 'tier' (Volcengine), 'fixed' (Aliyun pixel sizes), 'default' (standard/hd/2k/4k)
   const resolutionMode: 'tier' | 'fixed' | 'default' = caps?.resolution_tiers
@@ -494,15 +451,13 @@ export default function ImageOutputNode(props: NodeProps) {
       {/* Single input handle — accepts text + image connections */}
       <Handle id="in" type="target" position={Position.Left}
         className="node-handle-in"
-        style={HANDLE_STYLE}
-        onContextMenu={handleInputContextMenu}>
+        style={HANDLE_STYLE}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
       {/* Output handle */}
       <Handle id="out" type="source" position={Position.Right}
         className="node-handle-out"
-        style={HANDLE_STYLE}
-        onContextMenu={handleOutputContextMenu}>
+        style={HANDLE_STYLE}>
         <span className="pointer-events-none select-none leading-none">+</span>
       </Handle>
 

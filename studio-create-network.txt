@@ -1,3 +1,0 @@
-[GET] https://101.34.74.166/api/canvases?page=1&size=100 => [200] OK
-[POST] https://101.34.74.166/api/canvases => [500] Internal Server Error
-[POST] https://101.34.74.166/api/canvases => [500] Internal Server Error
