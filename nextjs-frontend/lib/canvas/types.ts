@@ -189,6 +189,9 @@ export interface VideoOutputNodeData extends BaseNodeData {
   referenceImage?: string; // 参考图 URL（图生视频）— 兼容旧数据
   error?: string;
   promptSource?: 'manual' | 'upstream' | null;
+  actualAspectRatio?: string; // 视频实际宽高比（如 '1920:1080'）
+  videoWidth?: number; // 视频实际宽度
+  videoHeight?: number; // 视频实际高度
 }
 
 /** 分组节点 */

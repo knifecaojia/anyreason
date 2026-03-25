@@ -400,7 +400,7 @@ function StudioCanvasEditor({ showHandlerContextMenu }: { showHandlerContextMenu
 
   const { mode: perfMode, setMode: setPerfMode, getNodeRenderLevel, suggestedMode } = usePerformanceMode(nodes.length);
   const [layoutMode, setLayoutMode] = useState<"card" | "timeline">("card");
-  const { push: pushUndo, undo, redo, canUndo, canRedo } = useUndoRedo(setNodes as any, setEdges as any);
+  const { push: pushUndo, undo, redo, canUndo, canRedo } = useUndoRedo(setNodes as any, setEdges as any, rf.getNodes as () => any[], rf.getEdges as () => any[]);
   const clipboardRef = useRef<{ nodes: any[]; edges: any[] } | null>(null);
   const saveCountRef = useRef(0);
   const [draggingNodeBounds, setDraggingNodeBounds] = useState<DraggingNodeBounds | null>(null);
@@ -565,12 +565,26 @@ function StudioCanvasEditor({ showHandlerContextMenu }: { showHandlerContextMenu
     console.log('[DEBUG] nodes count:', nodes.length, 'types:', nodes.map((n: any) => n.type).join(','));
   }, [nodes]);
 
-  // Auto-save debounce
+  // Auto-save: every 30 seconds if there are changes
+  const hasUnsavedChangesRef = useRef(false);
+  
+  // Mark as dirty when nodes/edges/viewport change
   useEffect(() => {
-    if (!canvasId) return;
-    const t = window.setTimeout(() => { void saveToVfs(); }, 800);
-    return () => window.clearTimeout(t);
-  }, [canvasId, edges, nodes, saveToVfs, viewport]);
+    if (!canvasId || !isLoaded) return;
+    hasUnsavedChangesRef.current = true;
+  }, [canvasId, isLoaded, edges, nodes, viewport]);
+
+  // 30-second interval save
+  useEffect(() => {
+    if (!canvasId || !isLoaded) return;
+    const interval = window.setInterval(() => {
+      if (hasUnsavedChangesRef.current) {
+        hasUnsavedChangesRef.current = false;
+        void saveToVfs();
+      }
+    }, 30000);
+    return () => window.clearInterval(interval);
+  }, [canvasId, isLoaded, saveToVfs]);
 
   // ESC to go back
   useEffect(() => {
@@ -1287,6 +1301,10 @@ function StudioCanvasEditor({ showHandlerContextMenu }: { showHandlerContextMenu
               onImportWorkflow={handleImportWorkflow}
               onSave={saveToVfs}
               saveStatus={saveStatus}
+              onUndo={undo}
+              onRedo={redo}
+              canUndo={canUndo}
+              canRedo={canRedo}
             />
           </div>
 

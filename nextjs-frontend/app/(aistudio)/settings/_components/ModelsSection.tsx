@@ -8,6 +8,20 @@ import type { AICategory, AIModelConfig, AIModelBinding, AIModelKeyInfo } from "
 
 import { ModelTestModal } from "./ModelTestModal";
 
+
+function formatCapabilitySummary(modelCapabilities: Record<string, any> | undefined): string[] {
+  if (!modelCapabilities) return [];
+  const parts: string[] = [];
+  const inputModes = Array.isArray(modelCapabilities.input_modes) ? modelCapabilities.input_modes : [];
+  if (inputModes.length) parts.push(`输入: ${inputModes.join(' / ')}`);
+  const durationOptions = Array.isArray(modelCapabilities.duration_options) ? modelCapabilities.duration_options : [];
+  if (durationOptions.length) parts.push(`时长: ${durationOptions.join(' / ')}s`);
+  if (modelCapabilities.supports_audio === true) parts.push('支持音频');
+  if (modelCapabilities.supports_reference_image === true) parts.push('支持参考图');
+  if (modelCapabilities.supports_edit === true) parts.push('支持编辑');
+  return parts;
+}
+
 export function ModelsSection(props: {
   activeModelTab: AICategory;
   setActiveModelTab: (value: AICategory) => void;
@@ -78,6 +92,8 @@ export function ModelsSection(props: {
   catalogConfigSubmitting: boolean;
   catalogDraft: any;
   setCatalogDraft: (updater: any) => void;
+  getProviderOptions: (category: AICategory, currentProvider?: string | null) => string[];
+  getProviderLabel: (provider: string) => string;
   catalogApiKeyVisible: boolean;
   setCatalogApiKeyVisible: (updater: any) => void;
   getApiKeyUrl: (manufacturer: string) => string;
@@ -154,6 +170,8 @@ export function ModelsSection(props: {
     catalogConfigSubmitting,
     catalogDraft,
     setCatalogDraft,
+    getProviderOptions,
+    getProviderLabel,
     catalogApiKeyVisible,
     setCatalogApiKeyVisible,
     getApiKeyUrl,
@@ -390,6 +408,7 @@ export function ModelsSection(props: {
                   />
                 </th>
                 <th className="px-4 py-3">厂商</th>
+                <th className="px-4 py-3">Provider</th>
                 <th className="px-4 py-3">模型</th>
                 <th className="px-4 py-3">Base URL</th>
                 <th className="px-4 py-3">Key</th>
@@ -400,14 +419,14 @@ export function ModelsSection(props: {
             <tbody className="divide-y divide-border">
               {aiConfigLoading && (
                 <tr>
-                  <td className="px-4 py-6 text-textMuted" colSpan={7}>
+                  <td className="px-4 py-6 text-textMuted" colSpan={8}>
                     加载中...
                   </td>
                 </tr>
               )}
               {!aiConfigLoading && aiModelConfigs.length === 0 && (
                 <tr>
-                  <td className="px-4 py-6 text-textMuted" colSpan={7}>
+                  <td className="px-4 py-6 text-textMuted" colSpan={8}>
                     暂无配置。
                   </td>
                 </tr>
@@ -424,6 +443,7 @@ export function ModelsSection(props: {
                       />
                     </td>
                     <td className="px-4 py-3 font-medium text-textMain">{c.manufacturer}</td>
+                    <td className="px-4 py-3 text-xs text-textMuted font-mono">{getProviderLabel(c.provider || c.manufacturer)}</td>
                     <td className="px-4 py-3 text-xs text-textMain font-mono">{c.model}</td>
                     <td className="px-4 py-3 text-xs text-textMuted font-mono truncate max-w-[18rem]">{c.base_url || "-"}</td>
                     <td className="px-4 py-3 text-xs text-textMuted">
@@ -501,6 +521,7 @@ export function ModelsSection(props: {
             <thead className="bg-surfaceHighlight/50 border-b border-border text-textMuted font-medium">
               <tr>
                 <th className="px-4 py-3">key</th>
+                <th className="px-4 py-3">Provider</th>
                 <th className="px-4 py-3">模型</th>
                 <th className="px-4 py-3 text-right">操作</th>
               </tr>
@@ -760,6 +781,25 @@ export function ModelsSection(props: {
                   readOnly
                   className="w-full bg-surfaceHighlight border border-border rounded-lg p-3 text-sm outline-none text-textMain font-mono"
                 />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-textMuted font-bold">Provider</label>
+                <select
+                  value={catalogDraft.provider}
+                  onChange={(e) => setCatalogDraft((p: any) => ({ ...p, provider: e.target.value }))}
+                  className="w-full bg-surfaceHighlight border border-border rounded-lg p-3 text-sm outline-none focus:border-primary text-textMain"
+                  disabled={catalogConfigSubmitting}
+                >
+                  {getProviderOptions(catalogSelected.category as AICategory, catalogDraft.provider).map((provider) => (
+                    <option key={provider} value={provider}>
+                      {getProviderLabel(provider)}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-[11px] text-textMuted">
+                  默认使用厂商推荐 Provider，也可手动覆盖为兼容的实现。
+                </p>
               </div>
 
               <div className="space-y-2">

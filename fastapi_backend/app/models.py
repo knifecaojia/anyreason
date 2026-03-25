@@ -178,6 +178,7 @@ class AIModelConfig(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     category = Column(String(16), nullable=False)
     manufacturer = Column(String(64), nullable=False)
+    provider = Column(String(64), nullable=True)
     model = Column(String(128), nullable=False)
     base_url = Column(Text, nullable=True)
     encrypted_api_key = Column(LargeBinary, nullable=True)

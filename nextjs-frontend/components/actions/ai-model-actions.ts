@@ -61,6 +61,7 @@ export type AIModelConfig = {
   id: string;
   category: AICategory;
   manufacturer: string;
+  provider?: string | null;
   model: string;
   base_url?: string | null;
   enabled: boolean;
@@ -102,6 +103,7 @@ export async function aiAdminListModelConfigs(category?: AICategory) {
 export async function aiAdminCreateModelConfig(input: {
   category: AICategory;
   manufacturer: string;
+  provider?: string | null;
   model: string;
   base_url?: string | null;
   api_key?: string | null;
@@ -109,6 +111,7 @@ export async function aiAdminCreateModelConfig(input: {
   api_keys_info?: AIModelKeyInfo[] | null;
   enabled?: boolean;
   sort_order?: number;
+  credits_cost?: number;
 }) {
   return authedFetch<ApiResponse<AIModelConfig>>({
     method: "POST",
@@ -122,6 +125,7 @@ export async function aiAdminUpdateModelConfig(
   input: Partial<{
     category: AICategory;
     manufacturer: string;
+    provider: string | null;
     model: string;
     base_url: string | null;
     api_key: string | null;
@@ -129,6 +133,7 @@ export async function aiAdminUpdateModelConfig(
     api_keys_info: AIModelKeyInfo[] | null;
     enabled: boolean;
     sort_order: number;
+    credits_cost: number;
   }>,
 ) {
   return authedFetch<ApiResponse<AIModelConfig>>({

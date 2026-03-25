@@ -89,6 +89,7 @@ def _cfg_read(row) -> AIModelConfigRead:
         id=row.id,
         category=row.category,
         manufacturer=row.manufacturer,
+        provider=getattr(row, "provider", None),
         model=row.model,
         base_url=row.base_url,
         enabled=bool(row.enabled),
@@ -442,6 +443,7 @@ async def admin_create_model_config(
         db=db,
         category=body.category,
         manufacturer=body.manufacturer,
+        provider=body.provider,
         model=body.model,
         base_url=body.base_url,
         api_key=body.api_key,
@@ -457,7 +459,7 @@ async def admin_create_model_config(
         action="ai.model_config.create",
         resource_type="ai_model_config",
         resource_id=row.id,
-        meta={"category": row.category, "manufacturer": row.manufacturer, "model": row.model, "enabled": bool(row.enabled)},
+        meta={"category": row.category, "manufacturer": row.manufacturer, "provider": getattr(row, "provider", None), "model": row.model, "enabled": bool(row.enabled)},
     )
     return ResponseBase(code=200, msg="OK", data=_cfg_read(row))
 
@@ -482,7 +484,7 @@ async def admin_update_model_config(
         action="ai.model_config.update",
         resource_type="ai_model_config",
         resource_id=row.id,
-        meta={"category": row.category, "manufacturer": row.manufacturer, "model": row.model, "enabled": bool(row.enabled)},
+        meta={"category": row.category, "manufacturer": row.manufacturer, "provider": getattr(row, "provider", None), "model": row.model, "enabled": bool(row.enabled)},
     )
     return ResponseBase(code=200, msg="OK", data=_cfg_read(row))
 

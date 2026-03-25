@@ -1,3 +1,5 @@
+import asyncio
+
 from sqlalchemy import select
 from app.database import async_session_maker
 from app.models import AIModelConfig, AIModelBinding, AIManufacturer, AIModel
@@ -56,6 +58,18 @@ MANUFACTURER_LIST = [
         "name": "Other",
         "category": "text",
         "default_base_url": None,
+    },
+    {
+        "code": "12ai",
+        "name": "12AI Gateway",
+        "category": "image",
+        "default_base_url": "https://cdn.12ai.org",
+    },
+    {
+        "code": "12ai",
+        "name": "12AI Gateway",
+        "category": "video",
+        "default_base_url": "https://cdn.12ai.org",
     },
 ]
 
@@ -529,6 +543,51 @@ MODEL_LIST = [
         "tool": True,
         "category": "text",
     },
+    {
+        "manufacturer_code": "12ai",
+        "code": "nanobanana",
+        "name": "Nano Banana",
+        "responseFormat": "schema",
+        "model_capabilities": {
+            "input_modes": ["text_to_image", "image_to_image"],
+            "supports_reference_image": True,
+            "supports_edit": True,
+        },
+        "image": True,
+        "think": False,
+        "tool": False,
+        "category": "image",
+    },
+    {
+        "manufacturer_code": "12ai",
+        "code": "sora-2",
+        "name": "Sora 2",
+        "responseFormat": "schema",
+        "model_capabilities": {
+            "input_modes": ["text_to_video", "image_to_video"],
+            "duration_options": [5, 10, 15],
+            "supports_audio": False,
+        },
+        "image": False,
+        "think": False,
+        "tool": False,
+        "category": "video",
+    },
+    {
+        "manufacturer_code": "12ai",
+        "code": "veo-3.1",
+        "name": "Veo 3.1",
+        "responseFormat": "schema",
+        "model_capabilities": {
+            "input_modes": ["text_to_video", "image_to_video"],
+            "duration_options": [5, 8],
+            "supports_audio": True,
+        },
+        "image": False,
+        "think": False,
+        "tool": False,
+        "category": "video",
+    },
 ]
 
 
@@ -584,6 +643,7 @@ async def seed_models():
                 code=m_data["code"],
                 name=m_data["name"],
                 response_format=m_data["responseFormat"],
+                model_capabilities=m_data.get("model_capabilities") or {},
                 supports_image=m_data["image"],
                 supports_think=m_data["think"],
                 supports_tool=m_data["tool"],

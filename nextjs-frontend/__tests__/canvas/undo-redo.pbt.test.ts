@@ -39,27 +39,26 @@ describe('Feature: infinite-canvas-storyboard-fusion, Property 17: Undo/redo rou
    */
   it('push then undo returns the pushed state', () => {
     fc.assert(
-      fc.property(arbCanvasState, arbCanvasState, (initial, pushed) => {
+      fc.property(arbCanvasState, (state) => {
         const mgr = new UndoRedoManager();
-        mgr.push(initial);
-        mgr.push(pushed);
-
-        const undone = mgr.undo();
-        expect(undone).toBe(pushed);
+        mgr.push(state);
+        const currentState = makeState(['current']);
+        const undone = mgr.undo(currentState);
+        expect(undone).toBe(state);
       }),
       { numRuns: 100 },
     );
   });
 
   /**
-   * Property 17b: undo→redo returns the undone state (round-trip)
+   * Property 17b: undo→redo returns the current state (round-trip)
    *
    * For any sequence of pushed states, performing undo then redo should
-   * return the same state that undo returned (round-trip consistency).
+   * return the state that was passed to undo (round-trip consistency).
    *
    * **Validates: Requirements 5.7**
    */
-  it('undo then redo returns the undone state (round-trip)', () => {
+  it('undo then redo returns the current state passed to undo (round-trip)', () => {
     fc.assert(
       fc.property(
         fc.array(arbCanvasState, { minLength: 2, maxLength: 10 }),
@@ -69,13 +68,15 @@ describe('Feature: infinite-canvas-storyboard-fusion, Property 17: Undo/redo rou
             mgr.push(s);
           }
 
-          // Undo the last state
-          const undone = mgr.undo();
+          // Undo the last state, passing current state
+          const currentStateBeforeUndo = makeState(['current-before-undo']);
+          const undone = mgr.undo(currentStateBeforeUndo);
           expect(undone).not.toBeNull();
 
-          // Redo should return the same state
-          const redone = mgr.redo();
-          expect(redone).toBe(undone);
+          // Redo should return the state that was passed to undo
+          const currentStateBeforeRedo = makeState(['current-before-redo']);
+          const redone = mgr.redo(currentStateBeforeRedo);
+          expect(redone).toBe(currentStateBeforeUndo);
         },
       ),
       { numRuns: 100 },
@@ -103,11 +104,10 @@ describe('Feature: infinite-canvas-storyboard-fusion, Property 17: Undo/redo rou
           // Count how many undos we can perform
           let undoCount = 0;
           while (mgr.canUndo) {
-            mgr.undo();
+            mgr.undo(makeState([`current-${undoCount}`]));
             undoCount++;
           }
 
-          expect(undoCount).toBeLessThanOrEqual(50);
           expect(undoCount).toBe(50);
         },
       ),

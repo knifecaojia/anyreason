@@ -159,7 +159,9 @@ class VolcengineVideoProvider(MediaProvider):
                 status, result = await self._query_task(client, task_id)
 
                 if status == "SUCCEEDED":
-                    video_url = result.get("video_url", "")
+                    # video_url is in content.video_url
+                    content = result.get("content", {})
+                    video_url = content.get("video_url", "") if isinstance(content, dict) else ""
                     return MediaResponse(
                         url=video_url,
                         duration=result.get("duration"),
@@ -177,23 +179,54 @@ class VolcengineVideoProvider(MediaProvider):
         raise AppError(msg="Volcengine video task timeout", code=504, status_code=504)
 
     async def _submit_task(self, request: MediaRequest) -> str:
-        url = f"{self.base_url}/video/generations"
+        url = f"{self.base_url}/contents/generations/tasks"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.api_key}",
         }
+
+        # Build content array for official API format
+        # Prompt params like --ratio, --dur, --fps are appended to text
+        text_parts = [request.prompt]
+        param_json = dict(request.param_json or {})
+
+        # Extract video params and convert to CLI-style flags
+        if "duration" in param_json:
+            text_parts.append(f"--dur {param_json.pop('duration')}")
+        if "aspect_ratio" in param_json:
+            ratio = param_json.pop("aspect_ratio")
+            text_parts.append(f"--ratio {ratio}")
+        if "fps" in param_json:
+            text_parts.append(f"--fps {param_json.pop('fps')}")
+
+        # Build content array: start with text prompt
+        content = [{"type": "text", "text": " ".join(text_parts)}]
+
+        # Handle image inputs for image2video mode
+        image_data_urls = param_json.pop("image_data_urls", None)
+        if image_data_urls:
+            for img in image_data_urls:
+                if isinstance(img, str) and img.strip():
+                    content.append({"type": "image_url", "image_url": {"url": img}})
+
+        # Build final payload
         payload: dict = {
             "model": request.model_key,
-            "prompt": request.prompt,
+            "content": content,
         }
-        payload.update(request.param_json)
+        # Add remaining params (like mode, etc.)
+        payload.update(param_json)
 
         async with httpx.AsyncClient() as client:
             resp = await client.post(url, json=payload, headers=headers, timeout=120.0)
             if resp.status_code != 200:
+                try:
+                    error_body = resp.json()
+                except Exception:
+                    error_body = resp.text[:2000]
                 raise AppError(
-                    msg=f"Volcengine video submit error: {resp.status_code}",
-                    data={"raw": resp.text},
+                    msg=f"Volcengine video submit error: {resp.status_code} - {error_body}",
+                    data={"status_code": resp.status_code, "response": error_body, "request_payload": payload},
                     code=502,
                     status_code=502,
                 )
@@ -204,14 +237,26 @@ class VolcengineVideoProvider(MediaProvider):
             return task_id
 
     async def _query_task(self, client: httpx.AsyncClient, task_id: str) -> tuple[str, dict]:
-        url = f"{self.base_url}/video/generations/{task_id}"
+        url = f"{self.base_url}/contents/generations/tasks/{task_id}"
         headers = {"Authorization": f"Bearer {self.api_key}"}
         resp = await client.get(url, headers=headers, timeout=10.0)
         if resp.status_code != 200:
             return "PENDING", {}
         data = resp.json()
-        status = data.get("status", "PENDING")
-        return status, data
+        # Map API status to our expected values
+        # API returns: queued, running, cancelled, succeeded, failed
+        status = data.get("status", "queued").lower()
+        if status == "queued":
+            return "PENDING", data
+        if status == "running":
+            return "RUNNING", data
+        if status == "cancelled":
+            return "CANCELED", data
+        if status == "failed":
+            return "FAILED", data
+        if status == "succeeded":
+            return "SUCCEEDED", data
+        return status.upper(), data
 
     # ------------------------------------------------------------------
     # Two-phase async interface
@@ -232,7 +277,7 @@ class VolcengineVideoProvider(MediaProvider):
     async def query_status(self, ref: ExternalTaskRef) -> ExternalTaskStatus:
         base_url = ref.meta.get("base_url", self.base_url)
         api_key = ref.meta.get("api_key", self.api_key)
-        url = f"{base_url}/video/generations/{ref.external_task_id}"
+        url = f"{base_url}/contents/generations/tasks/{ref.external_task_id}"
         headers = {"Authorization": f"Bearer {api_key}"}
 
         async with httpx.AsyncClient() as client:
@@ -248,9 +293,11 @@ class VolcengineVideoProvider(MediaProvider):
                 return ExternalTaskStatus(state="running")  # transient, will retry
             data = resp.json()
 
-        status = data.get("status", "PENDING")
-        if status == "SUCCEEDED":
-            video_url = data.get("video_url", "")
+        status = data.get("status", "queued").lower()
+        if status == "succeeded":
+            # video_url is in content.video_url
+            content = data.get("content", {})
+            video_url = content.get("video_url", "") if isinstance(content, dict) else ""
             return ExternalTaskStatus(
                 state="succeeded",
                 progress=100,
@@ -261,9 +308,9 @@ class VolcengineVideoProvider(MediaProvider):
                     meta=data,
                 ),
             )
-        if status in ("FAILED", "CANCELED"):
+        if status in ("failed", "cancelled"):
             return ExternalTaskStatus(
                 state="failed",
-                error=f"Volcengine video task {status}: {data.get('message', '')}",
+                error=f"Volcengine video task {status}: {data.get('error', {}).get('message', data.get('message', ''))}",
             )
         return ExternalTaskStatus(state="running")

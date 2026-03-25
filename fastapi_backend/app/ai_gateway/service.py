@@ -145,6 +145,7 @@ class AIGatewayService:
         cfg_category: str = cfg_row.category  # type: ignore[assignment]
         cfg_enabled: bool = cfg_row.enabled  # type: ignore[assignment]
         cfg_manufacturer: str | None = cfg_row.manufacturer  # type: ignore[assignment]
+        cfg_provider: str | None = getattr(cfg_row, "provider", None)  # type: ignore[assignment]
         cfg_model: str | None = cfg_row.model  # type: ignore[assignment]
         cfg_base_url: str | None = cfg_row.base_url  # type: ignore[assignment]
         cfg_plaintext_api_key: str | None = cfg_row.plaintext_api_key  # type: ignore[assignment]
@@ -182,6 +183,7 @@ class AIGatewayService:
                 ResolvedModelConfig(
                     category=category,
                     manufacturer=cast(str, cfg_manufacturer),
+                    provider=(cfg_provider or None),
                     model=cast(str, cfg_model),
                     base_url=cfg_base_url,  # type: ignore
                     api_key=resolved_api_key,
@@ -212,6 +214,7 @@ class AIGatewayService:
                 ResolvedModelConfig(
                     category=category,
                     manufacturer=cast(str, cfg_manufacturer),
+                    provider=(cfg_provider or None),
                     model=cast(str, cfg_model),
                     base_url=cfg_base_url,  # type: ignore
                     api_key=api_key or "",  # placeholder, will be replaced when slot acquired
@@ -226,6 +229,7 @@ class AIGatewayService:
             ResolvedModelConfig(
                 category=category,
                 manufacturer=cast(str, cfg_manufacturer),
+                provider=(cfg_provider or None),
                 model=cast(str, cfg_model),
                 base_url=cfg_base_url,  # type: ignore
                 api_key=chosen["api_key"],
@@ -312,7 +316,7 @@ class AIGatewayService:
         started = time.perf_counter()
         raw: dict[str, Any] | None = None
         try:
-            provider = provider_factory.get_text_provider(manufacturer=cfg.manufacturer)
+            provider = provider_factory.get_text_provider(manufacturer=cfg.provider or cfg.manufacturer)
             merged_messages = _merge_attachments(messages, attachments)
             raw = await provider.chat_completions(cfg=cfg, messages=merged_messages, timeout_seconds=60.0)
             return raw
@@ -513,11 +517,12 @@ class AIGatewayService:
                 )
             )).scalar_one_or_none()
 
+            provider_key = (cfg.provider or cfg.manufacturer or "").strip()
             provider = media_provider_factory.get_provider(
-                manufacturer=cfg.manufacturer,
+                manufacturer=provider_key,
                 api_key=cfg.api_key,
                 base_url=cfg.base_url,
-                provider_class=mfr_row,
+                provider_class=cfg.provider or mfr_row,
             )
             
             request = MediaRequest(
@@ -668,6 +673,7 @@ class AIGatewayService:
             cfg = ResolvedModelConfig(
                 category=cfg.category,
                 manufacturer=cfg.manufacturer,
+                provider=cfg.provider,
                 model=cfg.model,
                 base_url=cfg.base_url,
                 api_key=acquired_api_key,
@@ -752,11 +758,12 @@ class AIGatewayService:
                 )
             )).scalar_one_or_none()
 
+            provider_key = (cfg.provider or cfg.manufacturer or "").strip()
             provider = media_provider_factory.get_provider(
-                manufacturer=cfg.manufacturer,
+                manufacturer=provider_key,
                 api_key=cfg.api_key,
                 base_url=cfg.base_url,
-                provider_class=mfr_row,
+                provider_class=cfg.provider or mfr_row,
             )
 
             if not provider.supports_async:

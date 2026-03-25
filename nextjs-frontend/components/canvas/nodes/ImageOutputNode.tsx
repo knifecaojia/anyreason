@@ -12,16 +12,18 @@ import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow-compat';
+// @ts-ignore — useStore/useEdges/useNodes are exported at runtime but missing from types
+import { useStore } from '@xyflow/react';
 import type { ImageOutputNodeData } from '@/lib/canvas/types';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import { useAIModelList } from '@/hooks/useAIModelList';
 import { ChevronDown, Loader2, Square, Pencil, Download, ImageIcon, Upload, Crop, Layers, Grid2x2, Sparkles, Expand, SunMedium, Wand2, Eraser, Scissors } from 'lucide-react';
 import { collectUpstreamData, fetchRefImagesAsBase64 } from '@/lib/canvas/image-utils';
+import { deriveImageCapabilityState } from '@/lib/canvas/image-model-capabilities';
 import ImageCropOverlay from './ImageCropOverlay';
 import ImageGridEditorModal from './ImageGridEditorModal';
 import ImageGridSplitPicker from './ImageGridSplitPicker';
 
-const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4'] as const;
 const RESOLUTIONS = [
   { label: '标准', value: 'standard' },
   { label: 'HD', value: 'hd' },
@@ -107,11 +109,14 @@ export default function ImageOutputNode(props: NodeProps) {
   const { models: imageModels, selectedConfigId, selectModel } = useAIModelList('image', data.bindingKey ?? 'image-default', data.modelConfigId);
   const selectedModel = imageModels.find((m) => m.configId === selectedConfigId);
   const caps = selectedModel?.capabilities;
-  const supportsRatio = !caps || !!caps.aspect_ratios?.length;
-  const supportsResolution = !caps || !!caps.resolutions?.length || !!caps.resolution_tiers;
   const modelDisplayName = selectedModel?.displayName ?? data.model ?? '模型';
   const ratio = data.aspectRatio ?? '1:1';
   const resolution = data.resolution ?? 'standard';
+  const capabilityState = deriveImageCapabilityState(caps, ratio, resolution);
+  const effectiveRatio = capabilityState.effectiveRatio;
+  const effectiveResolution = capabilityState.effectiveResolution;
+  const supportsRatio = capabilityState.effectiveRatios.length > 0;
+  const supportsResolution = capabilityState.effectiveResOptions.length > 0;
   const isProcessing = !!data.isProcessing;
   const hasImage = !!data.lastImage;
   const fullImageUrl = data.lastImageFull || data.lastImage || '';
@@ -207,16 +212,10 @@ export default function ImageOutputNode(props: NodeProps) {
     });
   }, [props.id, updateNodeData]);
 
-  // Dynamic resolution mode: 'tier' (Volcengine), 'fixed' (Aliyun pixel sizes), 'default' (standard/hd/2k/4k)
-  const resolutionMode: 'tier' | 'fixed' | 'default' = caps?.resolution_tiers
-    ? 'tier'
-    : (caps?.resolutions?.length ? 'fixed' : 'default');
-  const effectiveResOptions: { label: string; value: string }[] =
-    resolutionMode === 'tier'
-      ? (caps!.resolution_tiers as string[]).map((t: string) => ({ label: t, value: t }))
-      : resolutionMode === 'fixed'
-        ? (caps!.resolutions as string[]).map((r: string) => ({ label: r.replace('*', 'x'), value: r }))
-        : [...RESOLUTIONS];
+  const resolutionMode = capabilityState.resolutionMode;
+  const effectiveResOptions: { label: string; value: string }[] = capabilityState.effectiveResOptions.length
+    ? capabilityState.effectiveResOptions
+    : [...RESOLUTIONS];
 
   // Resolve display size string
   const sizeStr = resolutionMode === 'fixed'
@@ -224,25 +223,28 @@ export default function ImageOutputNode(props: NodeProps) {
     : resolutionMode === 'tier'
       ? resolution
       : resolveSize(resolution, ratio).replace('*', 'x');
-  const displaySizeStr = imgDims ? `${imgDims.w}x${imgDims.h}` : sizeStr;
+  const displaySizeStr = imgDims ? `${imgDims.w}x${imgDims.h}` : '获取中…';
 
   // Auto-reset resolution when model changes and current value is not in new options
   const prevModelRef = useRef(selectedConfigId);
   useEffect(() => {
     if (prevModelRef.current === selectedConfigId) return;
     prevModelRef.current = selectedConfigId;
-    const validValues = effectiveResOptions.map(o => o.value);
-    if (!validValues.includes(resolution)) {
-      updateNodeData(props.id, { ...data, resolution: validValues[0] || 'standard' });
+    const patch: Record<string, unknown> = {};
+    if (effectiveRatio !== ratio) patch.aspectRatio = effectiveRatio;
+    if (effectiveResolution !== resolution) patch.resolution = effectiveResolution;
+    if (Object.keys(patch).length > 0) {
+      updateNodeData(props.id, { ...data, ...patch });
     }
-  }, [selectedConfigId, effectiveResOptions, resolution, updateNodeData, props.id, data]);
+  }, [selectedConfigId, effectiveRatio, effectiveResolution, ratio, resolution, updateNodeData, props.id, data]);
 
   // Collect upstream data: text from text nodes, images from asset nodes (single `in` handle)
+  // Use useStore to subscribe to edges/nodes changes and force re-render when graph changes
+  const edges = useStore((state: any) => state.edges);
+  const nodes = useStore((state: any) => state.nodes);
   const upstream = useMemo(
-    () => collectUpstreamData(props.id, getNodes(), getEdges()),
-    // Re-compute on every render since nodes/edges are mutable refs
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.id, getNodes, getEdges, data],
+    () => collectUpstreamData(props.id, nodes, edges),
+    [props.id, nodes, edges],
   );
 
   // Cleanup polling on unmount
@@ -330,21 +332,24 @@ export default function ImageOutputNode(props: NodeProps) {
       updateNodeData(props.id, { ...dataRef.current, error: '请输入提示词或连接文本节点' });
       return;
     }
-    const finalPrompt = `${promptText}, aspect ratio ${ratio}`;
+    const finalPrompt = `${promptText}, aspect ratio ${effectiveRatio}`;
     updateNodeData(props.id, { ...data, isProcessing: true, progress: 0, error: undefined, lastImage: undefined });
     try {
       const inputJson: Record<string, unknown> = {
         prompt: finalPrompt,
         model_config_id: selectedConfigId || undefined,
         binding_key: data.bindingKey || 'image-default',
-        aspect_ratio: ratio,
+        aspect_ratio: effectiveRatio,
       };
       if (resolutionMode === 'tier') {
-        inputJson.resolution_tier = resolution;
+        inputJson.resolution_tier = effectiveResolution;
+        if (capabilityState.effectivePixelResolution) {
+          inputJson.resolution = capabilityState.effectivePixelResolution;
+        }
       } else if (resolutionMode === 'fixed') {
-        inputJson.resolution = resolution;
+        inputJson.resolution = effectiveResolution;
       } else {
-        inputJson.resolution = resolveSize(resolution, ratio);
+        inputJson.resolution = resolveSize(effectiveResolution, effectiveRatio);
       }
 
       // Collect upstream reference images → base64 data URIs (preserves @N order)
@@ -364,7 +369,7 @@ export default function ImageOutputNode(props: NodeProps) {
     } catch (err: any) {
       updateNodeData(props.id, { ...dataRef.current, isProcessing: false, error: String(err?.message || err) });
     }
-  }, [isProcessing, props.id, ratio, resolution, resolutionMode, selectedConfigId, startPolling, updateNodeData, getNodes, getEdges]);
+  }, [isProcessing, props.id, effectiveRatio, effectiveResolution, resolutionMode, capabilityState.effectivePixelResolution, selectedConfigId, startPolling, updateNodeData, getNodes, getEdges]);
 
   const handleStop = useCallback(() => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -711,18 +716,18 @@ export default function ImageOutputNode(props: NodeProps) {
                   <div className="relative shrink-0">
                     <button type="button" onClick={() => { setShowSizePicker(!showSizePicker); setShowModelMenu(false); }}
                       className="nodrag text-textMuted hover:text-textMain flex items-center gap-0.5 transition-colors">
-                      <span className="text-[10px]">{ratio} · {effectiveResOptions.find(r => r.value === resolution)?.label ?? '标准'}</span>
+                      <span className="text-[10px]">{effectiveRatio} · {effectiveResOptions.find(r => r.value === effectiveResolution)?.label ?? '标准'}</span>
                       <ChevronDown size={10} />
                     </button>
                     {showSizePicker && (
                       <div className="nodrag absolute top-full right-0 mt-1 bg-background border border-border/40 rounded-xl p-2.5 z-50 min-w-[200px] shadow-xl">
                         <div className="text-[10px] text-textMuted/60 mb-1">宽高比</div>
                         <div className="flex flex-wrap gap-1 mb-2">
-                          {(caps?.aspect_ratios?.length ? caps.aspect_ratios : ASPECT_RATIOS).map((r: string) => (
+                          {capabilityState.effectiveRatios.map((r: string) => (
                             <button key={r} type="button"
                               onClick={() => updateNodeData(props.id, { ...data, aspectRatio: r })}
                               className={`px-2 py-0.5 rounded-md text-[10px] transition-colors ${
-                                ratio === r ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
+                                effectiveRatio === r ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                               }`}>{r}</button>
                           ))}
                         </div>
@@ -734,7 +739,7 @@ export default function ImageOutputNode(props: NodeProps) {
                                 <button key={r.value} type="button"
                                   onClick={() => updateNodeData(props.id, { ...data, resolution: r.value })}
                                   className={`px-2 py-0.5 rounded-md text-[10px] transition-colors ${
-                                    resolution === r.value ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
+                                    effectiveResolution === r.value ? 'bg-accent/20 text-accent font-medium' : 'bg-canvasNode/50 text-textMuted hover:text-textMain'
                                   }`}>{r.label}</button>
                               ))}
                             </div>

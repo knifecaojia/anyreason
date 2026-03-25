@@ -87,6 +87,13 @@ import {
   type AICatalogItem,
 } from "@/components/actions/ai-catalog-actions";
 import { MentionPopup } from "@/components/settings/MentionPopup";
+import {
+  getDefaultProvider,
+  getProviderLabel,
+  getProviderOptions,
+  getProviderOptionsWithCurrent,
+} from "@/lib/settings/model-provider-options";
+
 import { useTasks } from "@/components/tasks/TaskProvider";
 import {
   getCaretAbsoluteCoordinates,
@@ -284,12 +291,14 @@ export default function Page() {
   const [modelForm, setModelForm] = useState({
     category: "text" as AICategory,
     manufacturer: "",
+    provider: "",
     model: "",
     base_url: "",
     api_key: "",
     api_keys_info: [] as AIModelKeyInfo[],
     enabled: true,
     sort_order: 0,
+    credits_cost: 0,
   });
   const [bindingForm, setBindingForm] = useState({ key: "", ai_model_config_id: "" });
   const [aiConfigSubmitting, setAiConfigSubmitting] = useState(false);
@@ -300,12 +309,14 @@ export default function Page() {
   const [catalogConfigSubmitting, setCatalogConfigSubmitting] = useState(false);
   const [catalogConfigError, setCatalogConfigError] = useState<string | null>(null);
   const [catalogSelected, setCatalogSelected] = useState<AICatalogItem | null>(null);
-  const [catalogDraft, setCatalogDraft] = useState<{ base_url: string; api_key: string; api_keys_info: AIModelKeyInfo[]; enabled: boolean; sort_order: number }>({
+  const [catalogDraft, setCatalogDraft] = useState<{ provider: string; base_url: string; api_key: string; api_keys_info: AIModelKeyInfo[]; enabled: boolean; sort_order: number; credits_cost: number }>({
+    provider: "",
     base_url: "",
     api_key: "",
     api_keys_info: [],
     enabled: true,
     sort_order: 0,
+    credits_cost: 0,
   });
   const [catalogApiKeyVisible, setCatalogApiKeyVisible] = useState(false);
 
@@ -1806,6 +1817,7 @@ export default function Page() {
     if (m.includes("openai")) return "https://platform.openai.com/api-keys";
     if (m.includes("anthropic")) return "https://console.anthropic.com/settings/keys";
     if (m.includes("gemini") || m.includes("google")) return "https://aistudio.google.com/app/apikey";
+    if (m.includes("12ai")) return "https://doc.12ai.org/api/";
     return "";
   };
 
@@ -1814,6 +1826,7 @@ export default function Page() {
     if (category !== "text") {
       if (m === "openai") return "https://api.openai.com/v1";
       if (m === "doubao") return "https://ark.cn-beijing.volces.com/api/v3";
+      if (m === "12ai" || m === "twelveai") return "https://cdn.12ai.org";
       return "";
     }
     if (m === "openai") return "https://api.openai.com/v1";
@@ -1822,6 +1835,7 @@ export default function Page() {
     if (m === "zhipu") return "https://open.bigmodel.cn/api/paas/v4/";
     if (m === "doubao") return "https://ark.cn-beijing.volces.com/api/v3";
     if (m === "xai") return "https://api.x.ai/v1";
+    if (m === "12ai" || m === "twelveai") return "https://cdn.12ai.org";
     return "";
   };
 
@@ -1832,15 +1846,17 @@ export default function Page() {
     setCatalogConfigError(null);
     setCatalogApiKeyVisible(false);
     setCatalogSelected(item);
-    setCatalogDraft({
-      base_url: existingBaseUrl || defaultBaseUrl,
-      api_key: cfg?.plaintext_api_key || "",
-      api_keys_info: cfg?.api_keys_info || [],
-      enabled: cfg?.enabled ?? true,
-      sort_order: Number(cfg?.sort_order ?? 0),
-    });
-    setCatalogConfigOpen(true);
-  };
+      setCatalogDraft({
+        provider: cfg?.provider || getDefaultProvider(item.manufacturer_code, item.category as AICategory),
+        base_url: existingBaseUrl || defaultBaseUrl,
+        api_key: cfg?.plaintext_api_key || "",
+        api_keys_info: cfg?.api_keys_info || [],
+        enabled: cfg?.enabled ?? true,
+        sort_order: Number(cfg?.sort_order ?? 0),
+        credits_cost: Number(cfg?.credits_cost ?? 0),
+      });
+      setCatalogConfigOpen(true);
+    };
 
   const closeCatalogConfig = () => {
     if (catalogConfigSubmitting) return;
@@ -1858,24 +1874,28 @@ export default function Page() {
       const existingCfg = configByKey.get(`${catalogSelected.category}::${catalogSelected.manufacturer_code}::${catalogSelected.model_code}`);
       if (existingCfg?.id) {
         await aiAdminUpdateModelConfig(existingCfg.id, {
+          provider: catalogDraft.provider || existingCfg.provider || catalogSelected.manufacturer_code,
           base_url: catalogDraft.base_url.trim() ? catalogDraft.base_url.trim() : null,
           plaintext_api_key: catalogDraft.api_key.trim() ? catalogDraft.api_key.trim() : null,
           api_keys_info: catalogDraft.api_keys_info,
           enabled: !!catalogDraft.enabled,
-          sort_order: Number(catalogDraft.sort_order || 0),
-        });
-      } else {
-        await aiAdminCreateModelConfig({
+            sort_order: Number(catalogDraft.sort_order || 0),
+            credits_cost: Number(catalogDraft.credits_cost || 0),
+          });
+        } else {
+          await aiAdminCreateModelConfig({
           category: catalogSelected.category as AICategory,
           manufacturer: catalogSelected.manufacturer_code,
+          provider: catalogDraft.provider || existingCfg?.provider || catalogSelected.manufacturer_code,
           model: catalogSelected.model_code,
           base_url: catalogDraft.base_url.trim() ? catalogDraft.base_url.trim() : null,
           plaintext_api_key: catalogDraft.api_key.trim() ? catalogDraft.api_key.trim() : null,
-          api_keys_info: catalogDraft.api_keys_info,
-          enabled: !!catalogDraft.enabled,
-          sort_order: Number(catalogDraft.sort_order || 0),
-        });
-      }
+            api_keys_info: catalogDraft.api_keys_info,
+            enabled: !!catalogDraft.enabled,
+            sort_order: Number(catalogDraft.sort_order || 0),
+            credits_cost: Number(catalogDraft.credits_cost || 0),
+          });
+        }
       await refreshAIModelConfig();
       setCatalogConfigOpen(false);
     } catch (err: unknown) {
@@ -1897,12 +1917,14 @@ export default function Page() {
       await aiAdminCreateModelConfig({
         category: modelForm.category,
         manufacturer: modelForm.manufacturer.trim(),
+        provider: modelForm.provider.trim() || modelForm.manufacturer.trim(),
         model: modelForm.model.trim(),
         base_url: modelForm.base_url.trim() || null,
         plaintext_api_key: modelForm.api_key.trim() || null,
         api_keys_info: modelForm.api_keys_info,
         enabled: !!modelForm.enabled,
         sort_order: Number(modelForm.sort_order || 0),
+        credits_cost: Number(modelForm.credits_cost || 0),
       });
       setCreateModelOpen(false);
       await refreshAIModelConfig();
@@ -2210,6 +2232,8 @@ export default function Page() {
             catalogConfigSubmitting={catalogConfigSubmitting}
             catalogDraft={catalogDraft}
             setCatalogDraft={setCatalogDraft}
+            getProviderOptions={getProviderOptionsWithCurrent}
+            getProviderLabel={getProviderLabel}
             catalogApiKeyVisible={catalogApiKeyVisible}
             setCatalogApiKeyVisible={setCatalogApiKeyVisible}
             getApiKeyUrl={getApiKeyUrl}

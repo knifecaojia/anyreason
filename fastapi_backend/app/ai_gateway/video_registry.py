@@ -183,17 +183,101 @@ KLING_V1_5 = VideoModelSpec(
     max_frames=0,
 )
 
-# ===== Volcengine models (capability declaration only, provider unchanged) =====
+# ===== Volcengine models =====
+# 火山引擎 Seedance 视频生成模型
+# 官方文档: https://www.volcengine.com/docs/82379/1520757
 
-VOLCENGINE_SEEDANCE = VideoModelSpec(
-    code="seedance-2.0-lite",
-    display_name="Seedance 2.0 Lite",
+VOLCENGINE_COMMON_RATIOS = ["21:9", "16:9", "4:3", "1:1", "3:4", "9:16"]
+VOLCENGINE_COMMON_RESOLUTIONS = ["480p", "720p", "1080p"]
+
+# Seedance 1.5 pro - 最新高级版本，支持有声视频和样片模式
+VOLCENGINE_SEEDANCE_1_5_PRO = VideoModelSpec(
+    code="doubao-seedance-1-5-pro-251215",
+    display_name="Seedance 1.5 Pro",
+    manufacturer="volcengine_video",
+    modes=[VideoMode.TEXT2VIDEO, VideoMode.IMAGE2VIDEO, VideoMode.START_END],
+    durations=[],
+    duration_range=(4, 12),
+    aspect_ratios=list(VOLCENGINE_COMMON_RATIOS),
+    resolutions=list(VOLCENGINE_COMMON_RESOLUTIONS),
+    max_ref_images=2,  # 首尾帧模式支持2张图片
+    max_frames=0,
+    supports_enhance=True,
+    supports_off_peak=False,
+    style_options=None,
+    extra={"supports_audio": True, "supports_sample_mode": True, "supports_last_frame": True},
+)
+
+# Seedance 1.0 pro - 高级版本
+VOLCENGINE_SEEDANCE_1_0_PRO = VideoModelSpec(
+    code="doubao-seedance-1-0-pro-250528",
+    display_name="Seedance 1.0 Pro",
+    manufacturer="volcengine_video",
+    modes=[VideoMode.TEXT2VIDEO, VideoMode.IMAGE2VIDEO, VideoMode.START_END],
+    durations=[],
+    duration_range=(2, 12),
+    aspect_ratios=list(VOLCENGINE_COMMON_RATIOS),
+    resolutions=list(VOLCENGINE_COMMON_RESOLUTIONS),
+    max_ref_images=2,
+    max_frames=0,
+    supports_enhance=True,
+    supports_off_peak=False,
+    style_options=None,
+    extra={"supports_last_frame": True},
+)
+
+# Seedance 1.0 pro fast - 快速版本
+VOLCENGINE_SEEDANCE_1_0_PRO_FAST = VideoModelSpec(
+    code="doubao-seedance-1-0-pro-fast-251015",
+    display_name="Seedance 1.0 Pro Fast",
     manufacturer="volcengine_video",
     modes=[VideoMode.TEXT2VIDEO, VideoMode.IMAGE2VIDEO],
-    durations=[5],
-    aspect_ratios=["16:9", "9:16", "1:1"],
+    durations=[],
+    duration_range=(2, 12),
+    aspect_ratios=list(VOLCENGINE_COMMON_RATIOS),
+    resolutions=list(VOLCENGINE_COMMON_RESOLUTIONS),
+    max_ref_images=1,
+    max_frames=0,
+    supports_enhance=False,
+    supports_off_peak=False,
+    style_options=None,
+    extra={"supports_last_frame": True},
+)
+
+# Seedance 1.0 lite i2v - 轻量图生视频版本
+VOLCENGINE_SEEDANCE_1_0_LITE_I2V = VideoModelSpec(
+    code="doubao-seedance-1-0-lite-i2v-250428",
+    display_name="Seedance 1.0 Lite I2V",
+    manufacturer="volcengine_video",
+    modes=[VideoMode.IMAGE2VIDEO, VideoMode.START_END],
+    durations=[],
+    duration_range=(2, 12),
+    aspect_ratios=list(VOLCENGINE_COMMON_RATIOS),
+    resolutions=list(VOLCENGINE_COMMON_RESOLUTIONS),
+    max_ref_images=2,
+    max_frames=0,
+    supports_enhance=False,
+    supports_off_peak=False,
+    style_options=None,
+    extra={"supports_last_frame": True},
+)
+
+# Seedance 1.0 lite t2v - 轻量文生视频版本
+VOLCENGINE_SEEDANCE_1_0_LITE_T2V = VideoModelSpec(
+    code="doubao-seedance-1-0-lite-t2v-250428",
+    display_name="Seedance 1.0 Lite T2V",
+    manufacturer="volcengine_video",
+    modes=[VideoMode.TEXT2VIDEO],
+    durations=[],
+    duration_range=(2, 12),
+    aspect_ratios=list(VOLCENGINE_COMMON_RATIOS),
+    resolutions=list(VOLCENGINE_COMMON_RESOLUTIONS),
     max_ref_images=0,
     max_frames=0,
+    supports_enhance=False,
+    supports_off_peak=False,
+    style_options=None,
+    extra={},
 )
 
 
@@ -219,8 +303,12 @@ _register(
     # Kling
     KLING_V1,
     KLING_V1_5,
-    # Volcengine
-    VOLCENGINE_SEEDANCE,
+    # Volcengine Seedance
+    VOLCENGINE_SEEDANCE_1_5_PRO,
+    VOLCENGINE_SEEDANCE_1_0_PRO,
+    VOLCENGINE_SEEDANCE_1_0_PRO_FAST,
+    VOLCENGINE_SEEDANCE_1_0_LITE_I2V,
+    VOLCENGINE_SEEDANCE_1_0_LITE_T2V,
 )
 
 
@@ -277,6 +365,20 @@ def to_model_capabilities(spec: VideoModelSpec) -> dict[str, Any]:
     if spec.supports_off_peak:
         caps["supports_off_peak"] = True
     caps["supports_negative_prompt"] = True
+
+    # Handle extra fields (fps, supports_lip_sync, etc.)
+    if spec.extra:
+        if "fps" in spec.extra:
+            caps["fps_options"] = list(spec.extra["fps"])
+        if spec.extra.get("supports_lip_sync"):
+            caps["supports_lip_sync"] = True
+        if spec.extra.get("supports_audio"):
+            caps["supports_audio"] = True
+        if spec.extra.get("supports_sample_mode"):
+            caps["supports_sample_mode"] = True
+        if spec.extra.get("supports_last_frame"):
+            caps["supports_last_frame"] = True
+
     return caps
 
 
@@ -296,6 +398,7 @@ def spec_to_api_dict(spec: VideoModelSpec) -> dict[str, Any]:
         "supports_enhance": spec.supports_enhance,
         "supports_off_peak": spec.supports_off_peak,
         "style_options": list(spec.style_options) if spec.style_options else None,
+        "extra": spec.extra if spec.extra else None,
         "model_capabilities": to_model_capabilities(spec),
     }
     return d

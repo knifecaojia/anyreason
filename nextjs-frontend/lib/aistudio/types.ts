@@ -60,6 +60,7 @@ export interface ModelCapabilities {
   // 新增字段
   resolution_tiers?: Record<string, string[]> | string[];
   duration_options?: number[];
+  fps_options?: number[];
   pixel_range?: { min: number; max: number };
   aspect_ratio_range?: { min: number; max: number };
   max_output_images?: number;
@@ -71,6 +72,10 @@ export interface ModelCapabilities {
   guidance_scale_range?: { min: number; max: number; default?: number };
   max_reference_images?: number;
   max_frames?: number;
+  supports_lip_sync?: boolean;
+  supports_audio?: boolean;
+  supports_sample_mode?: boolean;
+  supports_last_frame?: boolean;
   special_features?: string[];
   [key: string]: any;
 }

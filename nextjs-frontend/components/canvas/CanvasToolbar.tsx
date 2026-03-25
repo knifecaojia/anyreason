@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Upload, Save, Loader2, Check, AlertCircle } from 'lucide-react';
+import { Download, Upload, Save, Loader2, Check, AlertCircle, Undo2, Redo2 } from 'lucide-react';
 
 // ===== Props =====
 
@@ -9,6 +9,10 @@ export interface CanvasToolbarProps {
   onImportWorkflow: () => void;
   onSave: () => void;
   saveStatus: 'idle' | 'saving' | 'saved' | 'error';
+  onUndo?: () => void;
+  onRedo?: () => void;
+  canUndo?: boolean;
+  canRedo?: boolean;
 }
 
 // ===== Sub-components =====
@@ -96,9 +100,33 @@ export default function CanvasToolbar({
   onImportWorkflow,
   onSave,
   saveStatus,
+  onUndo,
+  onRedo,
+  canUndo = false,
+  canRedo = false,
 }: CanvasToolbarProps) {
   return (
     <div className="absolute top-4 left-1/2 -translate-x-1/2 flex items-center gap-0.5 px-2 py-1 bg-surface/90 backdrop-blur border border-border rounded-xl shadow-xl z-10">
+      {/* ── Undo / Redo ── */}
+      <TBtn
+        onClick={onUndo}
+        disabled={!canUndo}
+        title="撤销 (Ctrl+Z)"
+        icon={Undo2}
+        label=""
+        className={`p-1.5 ${canUndo ? 'text-textMuted hover:text-textMain hover:bg-surfaceHighlight' : 'text-textMuted/40'}`}
+      />
+      <TBtn
+        onClick={onRedo}
+        disabled={!canRedo}
+        title="重做 (Ctrl+Y)"
+        icon={Redo2}
+        label=""
+        className={`p-1.5 ${canRedo ? 'text-textMuted hover:text-textMain hover:bg-surfaceHighlight' : 'text-textMuted/40'}`}
+      />
+
+      <Divider />
+
       {/* ── Save ── */}
       <SaveButton onSave={onSave} saveStatus={saveStatus} />
 

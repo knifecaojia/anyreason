@@ -11,6 +11,8 @@
 import { useCallback, useEffect, useRef, useState, useMemo } from 'react';
 import type { NodeProps } from '@/lib/canvas/xyflow-compat';
 import { useReactFlow, Handle, Position, NodeResizer } from '@/lib/canvas/xyflow-compat';
+// @ts-ignore — useStore/useEdges/useNodes are exported at runtime but missing from types
+import { useStore } from '@xyflow/react';
 import type { VideoOutputNodeData } from '@/lib/canvas/types';
 import { useNodeIconMode } from '@/hooks/useNodeIconMode';
 import { useAIModelList } from '@/hooks/useAIModelList';
@@ -93,10 +95,12 @@ export default function VideoOutputNode(props: NodeProps) {
   const hasVideo = !!data.lastVideo;
 
   // Collect upstream data: text from text nodes, images from asset nodes (single `in` handle)
+  // Use useStore to subscribe to edges/nodes changes and force re-render when graph changes
+  const edges = useStore((state: any) => state.edges);
+  const nodes = useStore((state: any) => state.nodes);
   const upstream = useMemo(
-    () => collectUpstreamData(props.id, getNodes(), getEdges()),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [props.id, getNodes, getEdges, data],
+    () => collectUpstreamData(props.id, nodes, edges),
+    [props.id, nodes, edges],
   );
 
   // Cleanup polling on unmount
@@ -290,13 +294,32 @@ export default function VideoOutputNode(props: NodeProps) {
           /* ===== POST-GEN: video fills entire card ===== */
           ) : hasVideo ? (
             <>
-              <video src={data.lastVideo} className="w-full h-full object-cover" controls muted />
+              <video 
+                src={data.lastVideo} 
+                className="w-full h-full object-contain" 
+                controls 
+                muted 
+                onLoadedMetadata={(e) => {
+                  const video = e.currentTarget;
+                  const vw = video.videoWidth;
+                  const vh = video.videoHeight;
+                  if (vw && vh && !data.actualAspectRatio) {
+                    const actualRatio = `${vw}:${vh}`;
+                    updateNodeData(props.id, {
+                      ...dataRef.current,
+                      actualAspectRatio: actualRatio,
+                      videoWidth: vw,
+                      videoHeight: vh,
+                    });
+                  }
+                }}
+              />
               {/* Bottom pill bar — hover overlay */}
               <div className="absolute bottom-0 left-0 right-0 flex items-center justify-center px-2 pb-2 pt-6 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                 <div className="flex items-center gap-2 bg-surface/80 backdrop-blur rounded-full px-3 py-1 border border-border/30 text-[11px]">
                   <span className="text-textMuted truncate max-w-[120px]">{modelDisplayName}</span>
                   <span className="text-textMuted/20">·</span>
-                  <span className="text-textMuted">{inputMode !== 'text_to_video' ? (INPUT_MODE_LABELS[inputMode] || inputMode) + ' · ' : ''}{ratio} {duration}s</span>
+                  <span className="text-textMuted">{inputMode !== 'text_to_video' ? (INPUT_MODE_LABELS[inputMode] || inputMode) + ' · ' : ''}{data.actualAspectRatio || ratio} {duration}s</span>
                   {upstream.refImages.length > 0 && (
                     <>
                       <span className="text-textMuted/20">·</span>

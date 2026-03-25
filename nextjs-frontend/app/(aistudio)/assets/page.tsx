@@ -44,8 +44,10 @@ import { StudioContextSelector } from "@/components/aistudio/StudioContextSelect
 import { AssetPanel, type StoryboardItem } from "@/components/assets/AssetPanel";
 import { MaterialsGrid } from "@/components/assets/MaterialsGrid";
 import { CapabilityParams } from "@/components/aistudio/CapabilityParams";
+import { AssetCreateDialog } from "@/components/scripts/AssetCreateDialog";
 import { mapAssetsFromApi } from "@/lib/utils/assets";
 import { stripMarkdownMetadata } from "@/lib/utils/markdown";
+import { createAssetFromImage } from "@/lib/utils/createAssetFromImage";
 
 type VfsNode = {
   id: string;
@@ -66,6 +68,13 @@ type GeneratedImage = {
   prompt: string;
   createdAt: number;
   nodeId?: string;
+};
+
+type AssetCreateFormData = {
+  name: string;
+  type: string;
+  category?: string;
+  content_md?: string;
 };
 
 type ScriptItem = {
@@ -120,6 +129,28 @@ async function createAssetResource(assetId: string, payload: { file_node_ids: st
     } catch {}
     throw new Error(`${res.status}: ${errMsg}`);
   }
+  return await res.json();
+}
+
+async function createAsset(payload: { project_id: string; script_id: string; name: string; type: "character" | "scene" | "prop" | "vfx"; category?: string; source: string; content_md?: string }): Promise<any> {
+  const res = await fetch("/api/assets", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
+  const json = await res.json();
+  if (!json?.data?.id) throw new Error("创建资产失败");
+  return json.data;
+}
+
+async function bindEpisodeAsset(episodeId: string, payload: { asset_entity_id: string; asset_variant_id?: string }): Promise<any> {
+  const res = await fetch(`/api/episodes/${encodeURIComponent(episodeId)}/asset-bindings`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) throw new Error(await res.text());
   return await res.json();
 }
 
@@ -245,6 +276,8 @@ export default function Page() {
   const [generationHistory, setGenerationHistory] = useState<GeneratedImage[]>([]);
   const [selectedImages, setSelectedImages] = useState<Set<string>>(new Set());
   const [coverImageId, setCoverImageId] = useState<string | null>(null);
+  const [createFromImageOpen, setCreateFromImageOpen] = useState(false);
+  const [pendingCreateImage, setPendingCreateImage] = useState<GeneratedImage | null>(null);
   
   // Model Config
   const [aiModelConfigs, setAiModelConfigs] = useState<AIModelConfig[]>([]);
@@ -457,6 +490,46 @@ export default function Page() {
       console.error('Delete error:', e);
       toast.error('删除失败: ' + (e instanceof Error ? e.message : String(e)));
     }
+  };
+
+  const handleOpenCreateFromImage = (img: GeneratedImage) => {
+    setPendingCreateImage(img);
+    setCreateFromImageOpen(true);
+  };
+
+  const handleCreateFromImageSubmit = async (data: AssetCreateFormData) => {
+    const fileNodeId = pendingCreateImage?.nodeId || pendingCreateImage?.id;
+    if (!studioSelectedProjectId) throw new Error("请先选择剧本");
+    if (!fileNodeId) throw new Error("未找到图片文件");
+
+    const result = await createAssetFromImage(
+      {
+        scriptId: studioSelectedProjectId,
+        episodeId: studioSelectedEpisodeId,
+        fileNodeId,
+        name: data.name,
+        type: data.type as "character" | "scene" | "prop" | "vfx",
+        category: data.category,
+        contentMd: data.content_md,
+      },
+      {
+        createAsset,
+        createAssetResource,
+        bindEpisodeAsset,
+      },
+    );
+
+    setStudioSelectedAssetId(result.assetId);
+    setCreateFromImageOpen(false);
+    setPendingCreateImage(null);
+    toast.success(studioSelectedEpisodeId ? "已创建资产并绑定到剧集" : "已创建资产");
+
+    fetch(`/api/assets?project_id=${studioSelectedProjectId}`)
+      .then((res) => res.json())
+      .then((json) => {
+        if (Array.isArray(json.data)) setStudioAssets(mapAssetsFromApi(json.data));
+      })
+      .catch(console.error);
   };
 
   const handleRemoveAttachment = (id: string) => {
@@ -1349,6 +1422,13 @@ export default function Page() {
                                                 onClick={(e) => { e.stopPropagation(); setLightboxUrl(img.url); }}>
                                             <Search size={16} />
                                         </button>
+                                        <button
+                                            className="p-2 bg-primary/80 rounded-full hover:bg-primary text-white backdrop-blur-sm"
+                                            onClick={(e) => { e.stopPropagation(); handleOpenCreateFromImage(img); }}
+                                            title="新建为资产"
+                                        >
+                                            <Plus size={16} />
+                                        </button>
                                         <button 
                                             className="p-2 bg-red-500/80 rounded-full hover:bg-red-600 text-white backdrop-blur-sm"
                                             onClick={(e) => { e.stopPropagation(); handleDeleteAssetImage(img); }}
@@ -1434,6 +1514,15 @@ export default function Page() {
           </div>
         </div>
       )}
+
+      <AssetCreateDialog
+        open={createFromImageOpen}
+        onClose={() => {
+          setCreateFromImageOpen(false);
+          setPendingCreateImage(null);
+        }}
+        onSubmit={handleCreateFromImageSubmit}
+      />
     </div>
   );
 }

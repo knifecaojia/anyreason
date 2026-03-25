@@ -8,8 +8,8 @@ from uuid import UUID
 class ResolvedModelConfig:
     category: str
     manufacturer: str
+    provider: str | None
     model: str
     api_key: str
     base_url: str | None = None
     config_id: UUID | None = None
-

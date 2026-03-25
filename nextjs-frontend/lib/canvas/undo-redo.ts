@@ -5,11 +5,9 @@ const MAX_HISTORY = 50;
 /**
  * Manages undo/redo history for canvas states.
  *
- * - push() records a new state, clears the redo stack, and trims to 50 entries.
- * - undo() pops the most recent state from the undo stack and pushes the
- *   supplied "current" state onto the redo stack.
- * - redo() pops from the redo stack and pushes the supplied "current" state
- *   onto the undo stack.
+ * - push(currentState) records the state BEFORE a change, clears redo stack.
+ * - undo(currentState) restores the previous state, saves currentState to redo.
+ * - redo(currentState) restores the next state, saves currentState to undo.
  */
 export class UndoRedoManager {
   private undoStack: CanvasState[] = [];
@@ -26,8 +24,8 @@ export class UndoRedoManager {
   }
 
   /**
-   * Record a canvas state. Clears the redo stack and trims the undo stack
-   * to a maximum of {@link MAX_HISTORY} entries.
+   * Record the state BEFORE a change happens.
+   * Clears the redo stack and trims the undo stack to MAX_HISTORY.
    */
   push(state: CanvasState): void {
     this.undoStack.push(state);
@@ -39,24 +37,24 @@ export class UndoRedoManager {
   }
 
   /**
-   * Pop the most recent state from the undo stack.
-   * Returns `null` when there is nothing to undo.
+   * Undo: save current state to redo stack, restore previous state.
+   * @param currentState - The state BEFORE undo (will be saved for redo)
+   * Returns the state to restore, or null if nothing to undo.
    */
-  undo(): CanvasState | null {
+  undo(currentState: CanvasState): CanvasState | null {
     if (this.undoStack.length === 0) return null;
-    const state = this.undoStack.pop()!;
-    this.redoStack.push(state);
-    return state;
+    this.redoStack.push(currentState);
+    return this.undoStack.pop()!;
   }
 
   /**
-   * Pop the most recent state from the redo stack.
-   * Returns `null` when there is nothing to redo.
+   * Redo: save current state to undo stack, restore next state.
+   * @param currentState - The state BEFORE redo (will be saved for undo)
+   * Returns the state to restore, or null if nothing to redo.
    */
-  redo(): CanvasState | null {
+  redo(currentState: CanvasState): CanvasState | null {
     if (this.redoStack.length === 0) return null;
-    const state = this.redoStack.pop()!;
-    this.undoStack.push(state);
-    return state;
+    this.undoStack.push(currentState);
+    return this.redoStack.pop()!;
   }
 }

@@ -283,6 +283,7 @@ async def get_catalog(
                 model_name=m.name,
                 category=manu.category,
                 response_format=m.response_format,
+                model_capabilities=m.model_capabilities or {},
                 supports_image=m.supports_image,
                 supports_think=m.supports_think,
                 supports_tool=m.supports_tool,

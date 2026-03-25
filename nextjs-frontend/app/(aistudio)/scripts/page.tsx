@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Clapperboard, Code, Edit3, Eye, FileText, Film, Image as ImageIcon, Loader2, Music, Package, Plus, Save, Settings, Sparkles, Trash2, Users, Video as VideoIcon, Wand2, X } from "lucide-react";
+import { Clapperboard, Code, Edit3, Eye, FileText, Film, Image as ImageIcon, Loader2, Music, Package, Plus, Save, Settings, Sparkles, Trash2, Users, Video as VideoIcon, Wand2, X, ChevronDown, ChevronRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { AssetCreateDialog } from "@/components/scripts/AssetCreateDialog";
@@ -320,6 +320,27 @@ async function listScriptAssets(scriptId: string): Promise<AssetEntity[]> {
         : []
     };
   });
+}
+
+async function fetchEpisodeAssetBindings(episodeIds: string[]): Promise<Set<string>> {
+  const boundIds = new Set<string>();
+  await Promise.all(
+    episodeIds.map(async (epId) => {
+      try {
+        const res = await fetch(`/api/episodes/${epId}/asset-bindings`, { cache: "no-store" });
+        if (res.ok) {
+          const json = await res.json();
+          const bindings = Array.isArray(json.data) ? json.data : [];
+          bindings.forEach((b: any) => {
+            if (b.asset_entity_id) boundIds.add(b.asset_entity_id);
+          });
+        }
+      } catch (e) {
+        console.error(`Failed to fetch bindings for episode ${epId}`, e);
+      }
+    })
+  );
+  return boundIds;
 }
 
 function AssetEntityCard({ asset, onClick, onOpenDoc, onDelete, onGenerate }: { asset: AssetEntity; onClick: () => void; onOpenDoc: () => void; onDelete?: () => void; onGenerate?: () => void }) {
@@ -781,6 +802,13 @@ export default function Page() {
   const [assetEntities, setAssetEntities] = useState<AssetEntity[]>([]);
   const [assetExpanded, setAssetExpanded] = useState<Record<string, boolean>>({});
   const [assetChildren, setAssetChildren] = useState<Record<string, VfsNode[]>>({});
+  const [boundAssetIds, setBoundAssetIds] = useState<Set<string>>(new Set());
+  const [bindingsLoading, setBindingsLoading] = useState(false);
+  const [unassignedExpanded, setUnassignedExpanded] = useState(true);
+
+  const unassignedAssets = useMemo(() => {
+    return assetEntities.filter((a) => !boundAssetIds.has(a.id));
+  }, [assetEntities, boundAssetIds]);
 
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerTitle, setViewerTitle] = useState("");
@@ -1080,6 +1108,25 @@ export default function Page() {
       }
     })();
   }, [activeEpisode?.id, scriptId]);
+
+  useEffect(() => {
+    if (!isWriteMode || !scriptId || episodes.length === 0) {
+      setBoundAssetIds(new Set());
+      return;
+    }
+    let cancelled = false;
+    setBindingsLoading(true);
+    void (async () => {
+      const ids = await fetchEpisodeAssetBindings(episodes.map((e) => e.id));
+      if (!cancelled) {
+        setBoundAssetIds(ids);
+        setBindingsLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isWriteMode, scriptId, episodes]);
 
   const pickScript = (id: string) => {
     const sp = new URLSearchParams(searchParams.toString());
@@ -2335,6 +2382,80 @@ export default function Page() {
                         </div>
                         )}
                       </div>
+
+                      {unassignedAssets.length > 0 && (
+                        <div className="rounded-xl border border-amber-500/30 bg-amber-500/5 overflow-hidden">
+                          <button
+                            type="button"
+                            onClick={() => setUnassignedExpanded(!unassignedExpanded)}
+                            className="w-full px-4 py-3 border-b border-border bg-surfaceHighlight/20 flex items-center justify-between hover:bg-surfaceHighlight/30 transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              {unassignedExpanded ? <ChevronDown size={16} className="text-textMuted" /> : <ChevronRight size={16} className="text-textMuted" />}
+                              <span className="font-bold text-sm text-textMain">未指定剧集的资产</span>
+                              <span className="px-2 py-0.5 rounded-full bg-amber-500/20 text-xs text-amber-500 font-mono">
+                                {unassignedAssets.length}
+                              </span>
+                            </div>
+                            <span className="text-xs text-textMuted">这些资产尚未绑定到任何剧集</span>
+                          </button>
+                          {unassignedExpanded && (
+                            <div className="p-4">
+                              {bindingsLoading ? (
+                                <div className="text-xs text-textMuted flex items-center gap-2">
+                                  <Loader2 size={14} className="animate-spin" /> 加载绑定信息...
+                                </div>
+                              ) : (
+                                <div className="space-y-8">
+                                  {Object.entries(
+                                    unassignedAssets.reduce((acc, entity) => {
+                                      const type = entity.type || "其他";
+                                      if (!acc[type]) acc[type] = [];
+                                      acc[type].push(entity);
+                                      return acc;
+                                    }, {} as Record<string, AssetEntity[]>)
+                                  )
+                                  .sort((a, b) => {
+                                    const ia = ASSET_TYPE_ORDER.indexOf(a[0]);
+                                    const ib = ASSET_TYPE_ORDER.indexOf(b[0]);
+                                    if (ia !== -1 && ib !== -1) return ia - ib;
+                                    if (ia !== -1) return -1;
+                                    if (ib !== -1) return 1;
+                                    return a[0].localeCompare(b[0]);
+                                  })
+                                  .map(([type, entities]) => (
+                                    <div key={type} className="space-y-4">
+                                      <div className="flex items-center gap-3 px-1">
+                                        <div className="h-5 w-1.5 bg-amber-500 rounded-full shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
+                                        <h3 className="font-bold text-base text-textMain capitalize tracking-wide">{ASSET_TYPE_LABELS[type] || type}</h3>
+                                        <span className="px-2 py-0.5 rounded-full bg-surfaceHighlight text-xs font-mono text-textMuted">{entities.length}</span>
+                                      </div>
+                                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-4">
+                                        {entities.map((entity) => (
+                                          <AssetEntityCard
+                                            key={entity.id}
+                                            asset={entity}
+                                            onClick={() => {
+                                              setAssetPreviewTarget(entity);
+                                              setAssetPreviewOpen(true);
+                                            }}
+                                            onOpenDoc={() => {
+                                              setAssetPreviewTarget(entity);
+                                              setAssetPreviewOpen(true);
+                                            }}
+                                            onDelete={() => void handleDeleteAssetEntity(entity)}
+                                            onGenerate={() => entity.doc_node_id && router.push(buildAssetCreateHref(entity.doc_node_id, scriptId, entity.id))}
+                                          />
+                                        ))}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
 
                       <div className="rounded-xl border border-border bg-background/20 overflow-hidden">
                         <div className="px-4 py-3 border-b border-border bg-surfaceHighlight/20 font-bold text-sm">资产结果</div>

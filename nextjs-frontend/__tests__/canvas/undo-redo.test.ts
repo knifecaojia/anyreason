@@ -22,12 +22,12 @@ describe('UndoRedoManager initial state', () => {
 
   test('undo returns null when stack is empty', () => {
     const mgr = new UndoRedoManager();
-    expect(mgr.undo()).toBeNull();
+    expect(mgr.undo(makeState(['current']))).toBeNull();
   });
 
   test('redo returns null when stack is empty', () => {
     const mgr = new UndoRedoManager();
-    expect(mgr.redo()).toBeNull();
+    expect(mgr.redo(makeState(['current']))).toBeNull();
   });
 });
 
@@ -45,7 +45,7 @@ describe('UndoRedoManager.push', () => {
     const mgr = new UndoRedoManager();
     mgr.push(makeState(['n1']));
     mgr.push(makeState(['n2']));
-    mgr.undo(); // redo stack now has one entry
+    mgr.undo(makeState(['n2'])); // redo stack now has one entry
     expect(mgr.canRedo).toBe(true);
 
     mgr.push(makeState(['n3'])); // should clear redo
@@ -60,7 +60,7 @@ describe('UndoRedoManager.push', () => {
     // After 60 pushes the stack should be capped at 50
     let count = 0;
     while (mgr.canUndo) {
-      mgr.undo();
+      mgr.undo(makeState([`current${count}`]));
       count++;
     }
     expect(count).toBe(50);
@@ -77,14 +77,14 @@ describe('UndoRedoManager.undo', () => {
     mgr.push(s1);
     mgr.push(s2);
 
-    const result = mgr.undo();
+    const result = mgr.undo(makeState(['n2']));
     expect(result).toBe(s2);
   });
 
-  test('undo moves state to redo stack', () => {
+  test('undo moves current state to redo stack', () => {
     const mgr = new UndoRedoManager();
     mgr.push(makeState(['n1']));
-    mgr.undo();
+    mgr.undo(makeState(['current']));
     expect(mgr.canUndo).toBe(false);
     expect(mgr.canRedo).toBe(true);
   });
@@ -98,10 +98,10 @@ describe('UndoRedoManager.undo', () => {
     mgr.push(s2);
     mgr.push(s3);
 
-    expect(mgr.undo()).toBe(s3);
-    expect(mgr.undo()).toBe(s2);
-    expect(mgr.undo()).toBe(s1);
-    expect(mgr.undo()).toBeNull();
+    expect(mgr.undo(makeState(['current']))).toBe(s3);
+    expect(mgr.undo(makeState(['current']))).toBe(s2);
+    expect(mgr.undo(makeState(['current']))).toBe(s1);
+    expect(mgr.undo(makeState(['current']))).toBeNull();
   });
 });
 
@@ -112,31 +112,36 @@ describe('UndoRedoManager.redo', () => {
     const mgr = new UndoRedoManager();
     const s1 = makeState(['n1']);
     mgr.push(s1);
-    mgr.undo();
+    const currentState = makeState(['current']);
+    mgr.undo(currentState);
 
-    const result = mgr.redo();
-    expect(result).toBe(s1);
+    const result = mgr.redo(makeState(['after-undo']));
+    expect(result).toBe(currentState);
   });
 
   test('redo moves state back to undo stack', () => {
     const mgr = new UndoRedoManager();
     mgr.push(makeState(['n1']));
-    mgr.undo();
-    mgr.redo();
+    mgr.undo(makeState(['current']));
+    mgr.redo(makeState(['after-undo']));
     expect(mgr.canUndo).toBe(true);
     expect(mgr.canRedo).toBe(false);
   });
 
-  test('undo then redo round-trip preserves state identity', () => {
+  test('undo then redo round-trip preserves current state', () => {
     const mgr = new UndoRedoManager();
     const s1 = makeState(['n1']);
     const s2 = makeState(['n2']);
     mgr.push(s1);
     mgr.push(s2);
 
-    const undone = mgr.undo();
-    const redone = mgr.redo();
-    expect(redone).toBe(undone);
+    const currentStateBeforeUndo = makeState(['current-before-undo']);
+    const undone = mgr.undo(currentStateBeforeUndo);
+    expect(undone).toBe(s2);
+
+    const currentStateBeforeRedo = makeState(['current-before-redo']);
+    const redone = mgr.redo(currentStateBeforeRedo);
+    expect(redone).toBe(currentStateBeforeUndo);
   });
 });
 
@@ -147,9 +152,9 @@ describe('UndoRedoManager edge cases', () => {
     const mgr = new UndoRedoManager();
     mgr.push(makeState(['n1']));
     mgr.push(makeState(['n2']));
-    mgr.undo();
+    mgr.undo(makeState(['n2']));
     mgr.push(makeState(['n3']));
-    expect(mgr.redo()).toBeNull();
+    expect(mgr.redo(makeState(['current']))).toBeNull();
   });
 
   test('interleaved push/undo/redo sequence', () => {
@@ -160,21 +165,21 @@ describe('UndoRedoManager edge cases', () => {
 
     mgr.push(s1);
     mgr.push(s2);
-    expect(mgr.undo()).toBe(s2); // undo stack: [s1], redo: [s2]
-    expect(mgr.undo()).toBe(s1); // undo stack: [], redo: [s2, s1]
-    expect(mgr.redo()).toBe(s1); // undo stack: [s1], redo: [s2]
-    mgr.push(s3);               // undo stack: [s1, s3], redo: []
+    expect(mgr.undo(makeState(['after-s2']))).toBe(s2); // undo stack: [s1], redo: [after-s2]
+    expect(mgr.undo(makeState(['after-s1']))).toBe(s1); // undo stack: [], redo: [after-s2, after-s1]
+    expect(mgr.redo(makeState(['after-undo-all']))).toBe(makeState(['after-s1'])); // redo returns the state saved during undo
+    mgr.push(s3);               // undo stack: [s3], redo: []
     expect(mgr.canRedo).toBe(false);
-    expect(mgr.undo()).toBe(s3);
-    expect(mgr.undo()).toBe(s1);
-    expect(mgr.undo()).toBeNull();
+    expect(mgr.undo(makeState(['after-s3']))).toBe(s3);
+    expect(mgr.undo(makeState(['after-s1-again']))).toBeNull(); // s1 was cleared
+    expect(mgr.undo(makeState(['empty']))).toBeNull();
   });
 
   test('states with edges are preserved through undo/redo', () => {
     const mgr = new UndoRedoManager();
     const s = makeState(['n1', 'n2'], ['e1']);
     mgr.push(s);
-    const undone = mgr.undo()!;
+    const undone = mgr.undo(makeState(['current']))!;
     expect(undone.edges).toHaveLength(1);
     expect(undone.edges[0].id).toBe('e1');
   });

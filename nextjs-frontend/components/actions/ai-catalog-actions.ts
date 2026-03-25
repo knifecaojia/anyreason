@@ -87,6 +87,7 @@ export type AICatalogItem = {
   model_name: string;
   category: string;
   response_format: string;
+  model_capabilities: Record<string, unknown>;
   supports_image: boolean;
   supports_think: boolean;
   supports_tool: boolean;

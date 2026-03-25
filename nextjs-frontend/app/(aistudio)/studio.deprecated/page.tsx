@@ -252,7 +252,7 @@ function StudioCanvasInner() {
   const [layoutMode, setLayoutMode] = useState<"card" | "timeline">("card");
 
   // Undo/redo integration
-  const { push: pushUndo, undo, redo, canUndo, canRedo } = useUndoRedo(setNodes as any, setEdges as any);
+  const { push: pushUndo, undo, redo, canUndo, canRedo } = useUndoRedo(setNodes as any, setEdges as any, () => nodes as any, () => edges as any);
 
   // Clipboard ref for copy/paste
   const clipboardRef = useRef<{ nodes: any[]; edges: any[] } | null>(null);

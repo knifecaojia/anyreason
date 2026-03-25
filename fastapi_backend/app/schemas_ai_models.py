@@ -22,6 +22,7 @@ class AIModelConfigRead(BaseModel):
     id: UUID
     category: AICategory
     manufacturer: str
+    provider: str | None = None
     model: str
     base_url: str | None = None
     enabled: bool
@@ -39,6 +40,7 @@ class AIModelConfigRead(BaseModel):
 class AdminAIModelConfigCreateRequest(BaseModel):
     category: AICategory
     manufacturer: str = Field(min_length=1, max_length=64)
+    provider: str | None = Field(default=None, min_length=1, max_length=64)
     model: str = Field(min_length=1, max_length=128)
     base_url: str | None = None
     api_key: str | None = None
@@ -52,6 +54,7 @@ class AdminAIModelConfigCreateRequest(BaseModel):
 class AdminAIModelConfigUpdateRequest(BaseModel):
     category: AICategory | None = None
     manufacturer: str | None = Field(default=None, min_length=1, max_length=64)
+    provider: str | None = Field(default=None, min_length=1, max_length=64)
     model: str | None = Field(default=None, min_length=1, max_length=128)
     base_url: str | None = None
     api_key: str | None = None

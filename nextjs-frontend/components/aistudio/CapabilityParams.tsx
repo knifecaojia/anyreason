@@ -186,6 +186,29 @@ export function CapabilityParams({
         </div>
       )}
 
+      {/* FPS 帧率 */}
+      {category === "video" && caps.fps_options && caps.fps_options.length > 0 && (
+        <div>
+          <div className="text-textMuted font-medium mb-1">帧率</div>
+          <div className="flex gap-1 flex-wrap">
+            {caps.fps_options.map((fps) => (
+              <button
+                key={fps}
+                type="button"
+                onClick={() => onChange("fps", fps)}
+                className={`px-2.5 py-1 rounded-md border transition-colors ${
+                  params.fps === fps
+                    ? "bg-primary/20 border-primary/40 text-primary font-bold"
+                    : "border-border bg-background/40 text-textMain hover:bg-surfaceHighlight"
+                }`}
+              >
+                {fps}fps
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* 输入模式 */}
       {category === "video" && caps.input_modes && caps.input_modes.length > 0 && (
         <div>

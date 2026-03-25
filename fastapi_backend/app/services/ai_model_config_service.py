@@ -16,6 +16,11 @@ def _normalize_str(v: str | None) -> str:
     return (v or "").strip()
 
 
+def _normalize_optional_str(v: str | None) -> str | None:
+    s = _normalize_str(v)
+    return s or None
+
+
 class AIModelConfigService:
     def _fernet(self):
         return build_fernet(seed=settings.ACCESS_SECRET_KEY.encode("utf-8"))
@@ -41,6 +46,7 @@ class AIModelConfigService:
         db: AsyncSession,
         category: str,
         manufacturer: str,
+        provider: str | None,
         model: str,
         base_url: str | None,
         api_key: str | None,
@@ -51,9 +57,10 @@ class AIModelConfigService:
         credits_cost: int = 0,
     ) -> AIModelConfig:
         manufacturer = _normalize_str(manufacturer)
+        provider = _normalize_optional_str(provider)
         model = _normalize_str(model)
-        base_url = _normalize_str(base_url) or None
-        api_key = _normalize_str(api_key) or None
+        base_url = _normalize_optional_str(base_url)
+        api_key = _normalize_optional_str(api_key)
         if not manufacturer:
             raise AppError(msg="manufacturer is required", code=400, status_code=400)
         if not model:
@@ -63,6 +70,7 @@ class AIModelConfigService:
         row = AIModelConfig(
             category=category,
             manufacturer=manufacturer,
+            provider=provider,
             model=model,
             base_url=base_url,
             plaintext_api_key=plaintext_api_key or api_key,
@@ -93,12 +101,14 @@ class AIModelConfigService:
 
         if "manufacturer" in patch and patch["manufacturer"] is not None:
             row.manufacturer = _normalize_str(patch["manufacturer"])
+        if "provider" in patch:
+            row.provider = _normalize_optional_str(patch["provider"])
         if "model" in patch and patch["model"] is not None:
             row.model = _normalize_str(patch["model"])
         if "category" in patch and patch["category"] is not None:
             row.category = patch["category"]
         if "base_url" in patch and patch["base_url"] is not None:
-            row.base_url = _normalize_str(patch["base_url"]) or None
+            row.base_url = _normalize_optional_str(patch["base_url"])
         if "enabled" in patch and patch["enabled"] is not None:
             row.enabled = bool(patch["enabled"])
         if "sort_order" in patch and patch["sort_order"] is not None:
@@ -198,4 +208,3 @@ class AIModelBindingService:
 
 ai_model_config_service = AIModelConfigService()
 ai_model_binding_service = AIModelBindingService()
-

@@ -23,20 +23,27 @@ export interface UseUndoRedoReturn {
  *
  * @param setNodes - ReactFlow setNodes updater
  * @param setEdges - ReactFlow setEdges updater
+ * @param getNodes - ReactFlow getNodes function
+ * @param getEdges - ReactFlow getEdges function
  */
 export function useUndoRedo(
   setNodes: (nodes: Node[]) => void,
   setEdges: (edges: Edge[]) => void,
+  getNodes: () => Node[],
+  getEdges: () => Edge[],
 ): UseUndoRedoReturn {
   const managerRef = useRef(new UndoRedoManager());
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
 
-  // Keep a ref to the latest setNodes/setEdges to avoid stale closures in the keydown handler
   const setNodesRef = useRef(setNodes);
   const setEdgesRef = useRef(setEdges);
+  const getNodesRef = useRef(getNodes);
+  const getEdgesRef = useRef(getEdges);
   setNodesRef.current = setNodes;
   setEdgesRef.current = setEdges;
+  getNodesRef.current = getNodes;
+  getEdgesRef.current = getEdges;
 
   const syncFlags = useCallback(() => {
     const mgr = managerRef.current;
@@ -53,7 +60,11 @@ export function useUndoRedo(
   );
 
   const undo = useCallback((): CanvasState | null => {
-    const state = managerRef.current.undo();
+    const currentState: CanvasState = {
+      nodes: getNodesRef.current(),
+      edges: getEdgesRef.current(),
+    };
+    const state = managerRef.current.undo(currentState);
     syncFlags();
     if (state) {
       setNodesRef.current(state.nodes);
@@ -63,7 +74,11 @@ export function useUndoRedo(
   }, [syncFlags]);
 
   const redo = useCallback((): CanvasState | null => {
-    const state = managerRef.current.redo();
+    const currentState: CanvasState = {
+      nodes: getNodesRef.current(),
+      edges: getEdgesRef.current(),
+    };
+    const state = managerRef.current.redo(currentState);
     syncFlags();
     if (state) {
       setNodesRef.current(state.nodes);
@@ -72,7 +87,7 @@ export function useUndoRedo(
     return state;
   }, [syncFlags]);
 
-  // Bind keyboard shortcuts: Ctrl+Z (undo), Ctrl+Shift+Z (redo)
+  // Bind keyboard shortcuts: Ctrl+Z (undo), Ctrl+Shift+Z / Ctrl+Y (redo)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const isCtrlOrMeta = e.ctrlKey || e.metaKey;
@@ -88,6 +103,10 @@ export function useUndoRedo(
           e.preventDefault();
           undo();
         }
+      } else if (e.key === 'y' || e.key === 'Y') {
+        // Ctrl+Y → redo
+        e.preventDefault();
+        redo();
       }
     };
 

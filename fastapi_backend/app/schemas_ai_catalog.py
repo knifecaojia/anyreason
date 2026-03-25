@@ -122,6 +122,7 @@ class AICatalogItem(BaseModel):
     model_name: str
     category: str
     response_format: str
+    model_capabilities: dict[str, Any] = Field(default_factory=dict)
     supports_image: bool
     supports_think: bool
     supports_tool: bool

@@ -10,6 +10,7 @@ from app.ai_gateway.providers.media.aliyun import AliyunMediaProvider
 from app.ai_gateway.providers.media.gemini import GeminiMediaProvider
 from app.ai_gateway.providers.media.gemini_proxy import GeminiProxyProvider
 from app.ai_gateway.providers.media.grokproxy import GrokProxyProvider
+from app.ai_gateway.providers.media.twelveai import TwelveAIMediaProvider
 from app.ai_gateway.providers.media.vidu import ViduMediaProvider
 from app.ai_gateway.providers.media.volcengine import (
     VolcengineMediaProvider,
@@ -30,6 +31,8 @@ class MediaProviderFactory:
         # 图片厂商 - 适配器
         "kling": KlingImageAdapter,
         "openai": OpenAIImageAdapter,
+        "twelveai": TwelveAIMediaProvider,
+        "twelveai_media": TwelveAIMediaProvider,
         # 视频厂商 - 新体系
         "volcengine_video": VolcengineVideoProvider,
         "vidu": ViduMediaProvider,
@@ -48,6 +51,8 @@ class MediaProviderFactory:
         "KlingImageProvider": KlingImageAdapter,
         "KlingVideoProvider": KlingVideoAdapter,
         "OpenAIImageProvider": OpenAIImageAdapter,
+        "TwelveAIMediaProvider": TwelveAIMediaProvider,
+        "twelveai_media": TwelveAIMediaProvider,
         "ViduMediaProvider": ViduMediaProvider,
         "GrokProxyProvider": GrokProxyProvider,
     }
